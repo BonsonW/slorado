@@ -41,16 +41,16 @@ SOFTWARE.
 
 
 static struct option long_options[] = {
-    {"threads", required_argument, 0, 't'},        //0 number of threads [8]
-    {"batchsize", required_argument, 0, 'K'},      //1 batchsize - number of reads loaded at once [512]
-    {"max-bytes", required_argument, 0, 'B'},      //2 batchsize - number of bytes loaded at once
-    {"verbose", required_argument, 0, 'v'},        //3 verbosity level [1]
-    {"help", no_argument, 0, 'h'},                 //4
-    {"version", no_argument, 0, 'V'},              //5
+    {"threads", required_argument, 0, 't'},         //0 number of threads [8]
+    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [512]
+    {"max-bytes", required_argument, 0, 'B'},       //2 batchsize - number of bytes loaded at once
+    {"verbose", required_argument, 0, 'v'},         //3 verbosity level [1]
+    {"help", no_argument, 0, 'h'},                  //4
+    {"version", no_argument, 0, 'V'},               //5
     {"output", required_argument, 0, 'o'},          //6 output to a file [stdout]
     {"debug-break", required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
     {"profile-cpu", required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
-    {"accel",required_argument, 0, 0},             //9 accelerator
+    {"accel",required_argument, 0, 0},              //9 accelerator
     {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
     {"device", required_argument, 0, 'x'},          //12 device [cuda:0]
@@ -62,24 +62,24 @@ static struct option long_options[] = {
 static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "usage: slorado basecaller [model] [data]\n");
     fprintf(fp_help, "positional arguments:\n");
-    fprintf(fp_help, "   model FILE                 the basecaller model to run.\n");
-    fprintf(fp_help, "   data FILE                  the data directory.\n");
+    fprintf(fp_help, "  model FILE                  the basecaller model to run.\n");
+    fprintf(fp_help, "  data FILE                   the data directory.\n");
     fprintf(fp_help, "\nbasic options:\n");
-    fprintf(fp_help, "   -t INT                     number of processing threads [%d]\n", opt.num_thread);
-    fprintf(fp_help, "   -K INT                     batch size (max number of reads loaded at once) [%d]\n", opt.batch_size); 
-    fprintf(fp_help, "   -B FLOAT[K/M/G]            max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
-    fprintf(fp_help, "   -o FILE                    output to file [stdout]\n");
-    fprintf(fp_help, "   -c INT                     chunk size [%d]\n", opt.chunk_size);
-    fprintf(fp_help, "   -p INT                     overlap [%d]\n", opt.overlap);
-    fprintf(fp_help, "   -x DEVICE                  specify device [%s]\n", opt.device);
-    fprintf(fp_help, "   -r INT                     number of runners [%d]\n", opt.num_runners);
-    fprintf(fp_help, "   -h                         shows help message and exits\n");   
-    fprintf(fp_help, "   --verbose INT              verbosity level [%d]\n",(int)get_log_level());
-    fprintf(fp_help, "   --version                  print version\n");
+    fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
+    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size); 
+    fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
+    fprintf(fp_help, "  -o FILE                     output to file [stdout]\n");
+    fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
+    fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
+    fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
+    fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
+    fprintf(fp_help, "  -h                          shows help message and exits\n");   
+    fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
+    fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\nadvanced options:\n");
-    fprintf(fp_help, "   --debug-break INT          break after processing the specified no. of batches\n");
-    fprintf(fp_help, "   --emit-fastq=yes|no        emits fastq output format\n");
-    fprintf(fp_help, "   --profile-cpu=yes|no       process section by section (used for profiling on CPU)\n");
+    fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
+    fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
+    fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 #ifdef HAVE_ACC
     fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
 #endif
