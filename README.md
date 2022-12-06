@@ -9,7 +9,7 @@ sudo apt-get install zlib1g-dev   #install zlib development libraries
 git clone --recursive https://github.com/hasindu2008/slow5-template-x
 cd slow5-template-x
 make
-./xyztool subtool1 test/example.blow5
+./slorado basecaller test/example.blow5
 ```
 
 The commands to install zlib development libraries on some popular distributions:

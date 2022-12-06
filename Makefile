@@ -9,11 +9,11 @@ LDFLAGS		+= -lzstd
 endif
 
 # change the tool name to what you want
-BINARY = xyztool
+BINARY = slorado
 
 OBJ = $(BUILD_DIR)/main.o \
-      $(BUILD_DIR)/xyztool.o \
-      $(BUILD_DIR)/subtool1_main.o \
+      $(BUILD_DIR)/slorado.o \
+      $(BUILD_DIR)/basecaller_main.o \
       $(BUILD_DIR)/thread.o \
 	  $(BUILD_DIR)/misc.o \
 	  $(BUILD_DIR)/error.o \
@@ -40,13 +40,13 @@ $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
 $(BUILD_DIR)/main.o: src/main.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/xyztool.o: src/xyztool.c src/misc.h src/error.h src/xyztool.h
+$(BUILD_DIR)/slorado.o: src/slorado.c src/misc.h src/error.h src/slorado.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/subtool1_main.o: src/subtool1_main.c src/error.h
+$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.c src/error.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/thread.o: src/thread.c src/xyztool.h
+$(BUILD_DIR)/thread.o: src/thread.c src/slorado.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/misc.o: src/misc.c src/misc.h

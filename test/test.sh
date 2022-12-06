@@ -22,7 +22,7 @@ ex() {
 }
 
 echo "Test 1"
-ex  ./xyztool subtool1 test/example.blow5 > test/tmp.txt  || die "Running the tool failed"
+ex  ./slorado basecaller test/example.blow5 > test/tmp.txt  || die "Running the tool failed"
 diff -q test/example.exp test/tmp.txt || die "diff failed"
 
 

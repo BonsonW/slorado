@@ -30,7 +30,7 @@ SOFTWARE.
 
 
 #include <pthread.h>
-#include "xyztool.h"
+#include "slorado.h"
 #include "error.h"
 #include "misc.h"
 

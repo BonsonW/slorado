@@ -1,6 +1,6 @@
 /**
- * @file xyztool.c
- * @brief common functions for xyztool
+ * @file slorado.c
+ * @brief common functions for slorado
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
 
 MIT License
@@ -28,20 +28,20 @@ SOFTWARE.
 
 ******************************************************************************/
 
-#ifndef XYZTOOL_H
-#define XYZTOOL_H
+#ifndef SLORADO_H
+#define SLORADO_H
 
 #include <stdint.h>
 #include <slow5/slow5.h>
 
-#define XYZTOOL_VERSION "0.1.0"
+#define SLORADO_VERSION "0.1.0"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *
  *******************************************************/
 
-#define XYZTOOL_PRF 0x001 //cpu-profile mode
-#define XYZTOOL_ACC 0x002 //accelerator enable
+#define SLORADO_PRF 0x001 //cpu-profile mode
+#define SLORADO_ACC 0x002 //accelerator enable
 
 #define WORK_STEAL 1 //simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 //stealing threshold

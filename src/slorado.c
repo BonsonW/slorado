@@ -1,6 +1,6 @@
 /**
- * @file xyztool.c
- * @brief common functions for xyztool
+ * @file slorado.c
+ * @brief common functions for slorado
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
 
 MIT License
@@ -35,7 +35,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 
-#include "xyztool.h"
+#include "slorado.h"
 #include "misc.h"
 #include "error.h"
 
@@ -70,7 +70,7 @@ core_t* init_core(char *slow5file, opt_t opt,double realtime0) {
     core->total_reads=0; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 
 #ifdef HAVE_ACC
-    if (core->opt.flag & XYZTOOL_ACC) {
+    if (core->opt.flag & SLORADO_ACC) {
         VERBOSE("%s","Initialising accelator");
     }
 #endif
@@ -83,7 +83,7 @@ core_t* init_core(char *slow5file, opt_t opt,double realtime0) {
 void free_core(core_t* core,opt_t opt) {
 
 #ifdef HAVE_ACC
-    if (core->opt.flag & XYZTOOL_ACC) {
+    if (core->opt.flag & SLORADO_ACC) {
         VERBOSE("%s","Freeing accelator");
     }
 #endif
@@ -195,13 +195,13 @@ void work_per_single_read(core_t* core,db_t* db, int32_t i){
 
 void mean_db(core_t* core, db_t* db) {
 #ifdef HAVE_ACC
-    if (core->opt.flag & XYZTOOL_ACC) {
+    if (core->opt.flag & SLORADO_ACC) {
         VERBOSE("%s","Aligning reads with accel");
         work_db(core,db,mean_single);
     }
 #endif
 
-    if (!(core->opt.flag & XYZTOOL_ACC)) {
+    if (!(core->opt.flag & SLORADO_ACC)) {
         //fprintf(stderr, "cpu\n");
         work_db(core,db,mean_single);
     }
@@ -211,7 +211,7 @@ void mean_db(core_t* core, db_t* db) {
 void process_db(core_t* core,db_t* db){
     double proc_start = realtime();
 
-    if(core->opt.flag & XYZTOOL_PRF || core->opt.flag & XYZTOOL_ACC){
+    if(core->opt.flag & SLORADO_PRF || core->opt.flag & SLORADO_ACC){
         double a = realtime();
         work_db(core,db,parse_single);
         double b = realtime();
@@ -284,7 +284,7 @@ void init_opt(opt_t* opt) {
     opt->debug_break=-1;
 
 #ifdef HAVE_ACC
-    opt->flag |= XYZTOOL_ACC;
+    opt->flag |= SLORADO_ACC;
 #endif
 
 }

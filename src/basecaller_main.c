@@ -1,5 +1,5 @@
 /**
- * @file subtool1_main.c
+ * @file basecaller_main.c
  * @brief entry point to subtool 1
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
 
@@ -28,7 +28,7 @@ SOFTWARE.
 
 ******************************************************************************/
 
-#include "xyztool.h"
+#include "slorado.h"
 #include "error.h"
 #include "misc.h"
 #include <assert.h>
@@ -55,7 +55,7 @@ static struct option long_options[] = {
 
 
 static inline void print_help_msg(FILE *fp_help, opt_t opt){
-    fprintf(fp_help,"Usage: xyztool subtool1 reads.blow5\n");
+    fprintf(fp_help,"Usage: slorado basecaller reads.blow5\n");
     fprintf(fp_help,"\nbasic options:\n");
     fprintf(fp_help,"   -t INT                     number of processing threads [%d]\n",opt.num_thread);
     fprintf(fp_help,"   -K INT                     batch size (max number of reads loaded at once) [%d]\n",opt.batch_size);
@@ -69,12 +69,12 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help,"   --debug-break INT          break after processing the specified no. of batches\n");
     fprintf(fp_help,"   --profile-cpu=yes|no       process section by section (used for profiling on CPU)\n");
 #ifdef HAVE_ACC
-    fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&XYZTOOL_ACC?"yes":"no"));
+    fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
 #endif
 
 }
 
-int subtool1_main(int argc, char* argv[]) {
+int basecaller_main(int argc, char* argv[]) {
 
     double realtime0 = realtime();
 
@@ -115,7 +115,7 @@ int subtool1_main(int argc, char* argv[]) {
             int v = atoi(optarg);
             set_log_level((enum log_level_opt)v);
         } else if (c=='V'){
-            fprintf(stdout,"xyztool %s\n",XYZTOOL_VERSION);
+            fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
         } else if (c=='h'){
             fp_help = stdout;
@@ -123,10 +123,10 @@ int subtool1_main(int argc, char* argv[]) {
         } else if(c == 0 && longindex == 7){ //debug break
             opt.debug_break = atoi(optarg);
         } else if(c == 0 && longindex == 8){ //sectional benchmark todo : warning for gpu mode
-            yes_or_no(&opt.flag, XYZTOOL_PRF, long_options[longindex].name, optarg, 1);
+            yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
         } else if(c == 0 && longindex == 9){ //accel
         #ifdef HAVE_ACC
-            yes_or_no(&opt.flag, XYZTOOL_ACC, long_options[longindex].name, optarg, 1);
+            yes_or_no(&opt.flag, SLORADO_ACC, long_options[longindex].name, optarg, 1);
         #else
             WARNING("%s", "--accel has no effect when compiled for the CPU");
         #endif
@@ -196,7 +196,7 @@ int subtool1_main(int argc, char* argv[]) {
 
     fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
     fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
-    if((core->opt.flag&XYZTOOL_PRF)|| core->opt.flag & XYZTOOL_ACC){
+    if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
             fprintf(stderr, "\n[%s]     - Calc time: %.3f sec",__func__, core->calc_time);
     }
