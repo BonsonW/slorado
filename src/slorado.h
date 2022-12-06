@@ -31,6 +31,7 @@ SOFTWARE.
 #ifndef SLORADO_H
 #define SLORADO_H
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <slow5/slow5.h>
 
@@ -57,7 +58,7 @@ typedef struct {
     int32_t num_thread;         //number of threads used: t
     int32_t debug_break;
 
-    char *device;               //specified  device: x
+    const char *device;         //specified device: x
     int32_t chunk_size;         //size of chunks: c
     int32_t overlap;            //overlap: p
     int32_t num_runners;       //number of runners: r
