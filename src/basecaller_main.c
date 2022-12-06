@@ -51,6 +51,11 @@ static struct option long_options[] = {
     {"debug-break",required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
     {"profile-cpu",required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
     {"accel",required_argument, 0, 0},             //9 accelerator
+    {"chunk-size",required_argument, 0, 'c'},      //10 chunk size [8000]
+    {"overlap",required_argument, 0, 'p'},         //11 overlap [150]
+    {"device",required_argument, 0, 'x'},          //12 device [cuda:0]
+    {"num-runners",required_argument, 0, 'r'},     //13 number of runners [1]
+    {"emit-fastq",required_argument, 0, 0},        //13 toggles emit fastq
     {0, 0, 0, 0}};
 
 
@@ -58,15 +63,19 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help,"Usage: slorado basecaller reads.blow5\n");
     fprintf(fp_help,"\nbasic options:\n");
     fprintf(fp_help,"   -t INT                     number of processing threads [%d]\n",opt.num_thread);
-    fprintf(fp_help,"   -K INT                     batch size (max number of reads loaded at once) [%d]\n",opt.batch_size);
+    fprintf(fp_help,"   -K INT                     batch size (max number of reads loaded at once) [%d]\n",opt.batch_size); 
     fprintf(fp_help,"   -B FLOAT[K/M/G]            max number of bytes loaded at once [%.1fM]\n",opt.batch_size_bytes/(float)(1000*1000));
-    fprintf(fp_help,"   -h                         help\n");
     fprintf(fp_help,"   -o FILE                    output to file [stdout]\n");
+    fprintf(fp_help,"   -c INT                     chunk size [8000]\n");
+    fprintf(fp_help,"   -p INT                     overlap [150]\n");
+    fprintf(fp_help,"   -x DEVICE                  specify device [\"cuda:0\"]\n");
+    fprintf(fp_help,"   -r INT                     number of runners [1]\n");
+    fprintf(fp_help,"   -h                         shows help message and exits\n");   
     fprintf(fp_help,"   --verbose INT              verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help,"   --version                  print version\n");
-
     fprintf(fp_help,"\nadvanced options:\n");
     fprintf(fp_help,"   --debug-break INT          break after processing the specified no. of batches\n");
+    fprintf(fp_help,"   --emit-fastq=yes|no        emits fastq\n");
     fprintf(fp_help,"   --profile-cpu=yes|no       process section by section (used for profiling on CPU)\n");
 #ifdef HAVE_ACC
     fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
@@ -111,20 +120,20 @@ int basecaller_main(int argc, char* argv[]) {
                 ERROR("Number of threads should larger than 0. You entered %d", opt.num_thread);
                 exit(EXIT_FAILURE);
             }
-        } else if (c=='v'){
+        } else if (c=='v') {
             int v = atoi(optarg);
             set_log_level((enum log_level_opt)v);
-        } else if (c=='V'){
+        } else if (c=='V') {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
         } else if (c=='h'){
             fp_help = stdout;
             fp_help = stdout;
-        } else if(c == 0 && longindex == 7){ //debug break
+        } else if(c == 0 && longindex == 7) { //debug break
             opt.debug_break = atoi(optarg);
-        } else if(c == 0 && longindex == 8){ //sectional benchmark todo : warning for gpu mode
+        } else if(c == 0 && longindex == 8) { //sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
-        } else if(c == 0 && longindex == 9){ //accel
+        } else if(c == 0 && longindex == 9) { //accel
         #ifdef HAVE_ACC
             yes_or_no(&opt.flag, SLORADO_ACC, long_options[longindex].name, optarg, 1);
         #else
