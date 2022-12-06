@@ -281,8 +281,13 @@ void init_opt(opt_t* opt) {
     opt->batch_size_bytes = 20*1000*1000;
     opt->num_thread = 8;
 
-    opt->debug_break=-1;
+    opt->debug_break = -1;
 
+    opt->device = "cuda:0";
+    opt->chunk_size = 8000;
+    opt->overlap = 150;
+    opt->num_runners = 1;
+    
 #ifdef HAVE_ACC
     opt->flag |= SLORADO_ACC;
 #endif

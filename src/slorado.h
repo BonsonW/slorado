@@ -42,6 +42,7 @@ SOFTWARE.
 
 #define SLORADO_PRF 0x001 //cpu-profile mode
 #define SLORADO_ACC 0x002 //accelerator enable
+#define SLORADO_EFQ 0x003 //emit fastq enable
 
 #define WORK_STEAL 1 //simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 //stealing threshold
@@ -53,9 +54,13 @@ typedef struct {
     int32_t batch_size;         //max reads loaded at once: K
     int64_t batch_size_bytes;   //max bytes loaded at once: B
 
-    int32_t num_thread; //t
+    int32_t num_thread;         //number of threads used: t
     int32_t debug_break;
 
+    char *device;               //specified  device: x
+    int32_t chunk_size;         //size of chunks: c
+    int32_t overlap;            //overlap: p
+    int32_t num_runners;       //number of runners: r
 } opt_t;
 
 
