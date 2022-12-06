@@ -6,8 +6,8 @@ This is a template repository is mostly for my own use, but also demonstrates th
 
 ```
 sudo apt-get install zlib1g-dev   #install zlib development libraries
-git clone --recursive https://github.com/hasindu2008/slow5-template-x
-cd slow5-template-x
+git clone --recursive https://github.com/BonsonW/slorado
+cd slorado
 make
 ./slorado basecaller test/example.blow5
 ```
