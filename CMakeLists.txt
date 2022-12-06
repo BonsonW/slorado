@@ -16,10 +16,10 @@ option(SLOW5_USE_ZSTD_CUSTOM "Use ZSTD custom" OFF) #OFF by default
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
-# set(CUDNN_LIBRARY_PATH ${CMAKE_SOURCE_DIR}/dorado/3rdparty/fake_cudnn)
-# set(CUDNN_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/dorado/3rdparty/fake_cudnn)
-# set(TORCH_LIB "${CMAKE_SOURCE_DIR}/dorado/3rdparty/libtorch")
-# #set(TORCH_LIB "${CMAKE_SOURCE_DIR}/dorado/3rdparty/torch-${TORCH_VERSION}-${CMAKE_SYSTEM_NAME}-cxx11_ABI/libtorch")
+set(CUDNN_LIBRARY_PATH ${CMAKE_SOURCE_DIR}/torch/fake_cudnn)
+set(CUDNN_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/torch/fake_cudnn)
+set(TORCH_LIB "${CMAKE_SOURCE_DIR}/torch/libtorch")
+# #set(TORCH_LIB "${CMAKE_SOURCE_DIR}/3rdparty/torch-${TORCH_VERSION}-${CMAKE_SYSTEM_NAME}-cxx11_ABI/libtorch")
 # list(APPEND CMAKE_PREFIX_PATH ${TORCH_LIB})
 # find_package(Torch REQUIRED)
 
@@ -46,7 +46,7 @@ set(LIB_SOURCE_FILES
 if(SLOW5_USE_ZSTD_CUSTOM)
     add_compile_options("-DSLOW5_USE_ZSTD")
     message(STATUS "Using ZSTD custom")
-    include_directories(dorado/3rdparty/zstd/lib)
+    include_directories(${CMAKE_SOURCE_DIR}/3rdparty/zstd/lib)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/slow5lib/include)
@@ -54,7 +54,7 @@ include_directories(${CMAKE_SOURCE_DIR}/slow5lib/src)
 add_subdirectory(${CMAKE_SOURCE_DIR}/slow5lib)
 
 if(SLOW5_USE_ZSTD_CUSTOM)
-    target_link_directories(slow5 PUBLIC dorado/3rdparty/zstd/lib/)
+    target_link_directories(slow5 PUBLIC ${CMAKE_SOURCE_DIR}/3rdparty/zstd/lib/)
 endif()
 
 # include_directories(dorado/3rdparty/tomlc99/)
@@ -73,9 +73,9 @@ add_library(slorado_lib ${CMAKE_SOURCE_DIR}/src/main.c)
 add_executable(slorado ${LIB_SOURCE_FILES})
 
 add_link_options("-lz")
-# target_link_libraries(dorado_lib ${TORCH_LIBRARIES})
-# message(STATUS "TORCH_LIBRARIES")
-# message("${TORCH_LIBRARIES}")
+message(STATUS "TORCH_LIBRARIES")
+message("${TORCH_LIBRARIES}")
+target_link_libraries(slorado_lib ${TORCH_LIBRARIES})
 # if(USE_GPU)
 #     target_link_libraries(dorado_lib koi)
 # endif()
