@@ -90,7 +90,7 @@ int basecaller_main(int argc, char* argv[]) {
 
     double realtime0 = realtime();
 
-    const char* optstring = "t:B:K:v:o:hV";
+    const char* optstring = "t:B:K:v:o:x:r:p:c:hV";
 
     int longindex = 0;
     int32_t c = -1;
