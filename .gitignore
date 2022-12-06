@@ -41,4 +41,8 @@ Thumbs.db
 /.vscode
 
 # binaries
-/xyztool
+/slorado
+
+#Allowed files
+!CMakeLists.txt
+
