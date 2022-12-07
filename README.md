@@ -9,7 +9,7 @@ sudo apt-get install zlib1g-dev   #install zlib development libraries
 git clone --recursive https://github.com/BonsonW/slorado
 cd slorado
 make
-./slorado basecaller test/example.blow5
+./slorado basecaller models/dna_r9.4.1_e8.1_hac@v3.3 test/example.blow5
 ```
 
 ```
@@ -21,7 +21,7 @@ bash scripts/install-torch10.sh
 cd build
 cmake ..
 make
-./slorado basecaller test/example.blow5
+./slorado basecaller ../models/dna_r9.4.1_e8.1_hac@v3.3 ../test/example.blow5
 ```
 
 The commands to install zlib development libraries on some popular distributions:
