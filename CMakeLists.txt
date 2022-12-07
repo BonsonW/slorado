@@ -17,8 +17,8 @@ option(SLOW5_USE_ZSTD_CUSTOM "Use ZSTD custom" OFF) #OFF by default
 include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/torch)
 
-set(CUDNN_LIBRARY_PATH ${CMAKE_SOURCE_DIR}/torch/fake_cudnn)
-set(CUDNN_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/torch/fake_cudnn)
+set(CUDNN_LIBRARY_PATH ${CMAKE_SOURCE_DIR}/fake_cudnn)
+set(CUDNN_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/fake_cudnn)
 set(TORCH_LIB "${CMAKE_SOURCE_DIR}/torch/libtorch")
 # #set(TORCH_LIB "${CMAKE_SOURCE_DIR}/3rdparty/torch-${TORCH_VERSION}-${CMAKE_SYSTEM_NAME}-cxx11_ABI/libtorch")
  list(APPEND CMAKE_PREFIX_PATH ${TORCH_LIB})
@@ -59,8 +59,6 @@ endif()
 
 # include_directories(dorado/3rdparty/tomlc99/)
 # list(APPEND LIB_SOURCE_FILES dorado/3rdparty/tomlc99/toml.c dorado/3rdparty/tomlc99/toml.h)
-
-#add_library(slorado_lib ${LIB_SOURCE_FILES})
 
 # if(USE_GPU)
 #     message(STATUS " Using prebuilt Koi from ${KOI_DIR}")
