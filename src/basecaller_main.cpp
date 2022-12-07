@@ -207,41 +207,6 @@ int basecaller_main(int argc, char* argv[]) {
 
     int32_t counter=0;
 
-    //initialise a databatch
-    db_t* db = init_db(core);
-
-    ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
-    while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
-
-        //load a databatch
-        status = load_db(core, db);
-
-        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
-                realtime() - realtime0, cputime() / (realtime() - realtime0),
-                status.num_reads,status.num_bytes/(1000.0*1000.0));
-
-        //process a databatch
-        process_db(core, db);
-
-        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) processed\n", __func__,
-                realtime() - realtime0, cputime() / (realtime() - realtime0),
-                status.num_reads,status.num_bytes/(1000.0*1000.0));
-
-        //output print
-        output_db(core, db);
-
-        //free temporary
-        free_db_tmp(db);
-
-        if(opt.debug_break==counter){
-            break;
-        }
-        counter++;
-    }
-
-    //free the databatch
-    free_db(db);
-
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
 
