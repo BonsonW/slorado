@@ -207,6 +207,18 @@ int basecaller_main(int argc, char* argv[]) {
 
     int32_t counter=0;
 
+
+    // load all records from a file into a list, then for each record:
+    // 
+    // intermmediate step record:
+    // std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
+    // std::vector<float> floatTmp(tmp.begin(), tmp.end());
+    //
+    // convert to tensor:
+    // auto options = torch::TensorOptions().dtype(torch::kFloat32);
+    // torch::Tensor signal = torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to(core->m_device_);
+    // int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
+
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
 
