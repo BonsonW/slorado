@@ -37,22 +37,22 @@ endif
 $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
 	$(CC) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/main.o: src/main.c
+$(BUILD_DIR)/main.o: src/main.cpp
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.c src/misc.h src/error.h src/slorado.h
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.c src/error.h
+$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/thread.o: src/thread.c src/slorado.h
+$(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/misc.o: src/misc.c src/misc.h
+$(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/error.o: src/error.c src/error.h
+$(BUILD_DIR)/error.o: src/error.cpp src/error.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # follow the main.o above and add more objects here if needed

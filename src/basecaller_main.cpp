@@ -38,7 +38,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
+#include <torch/torch.h>
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
@@ -87,6 +87,11 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 }
 
 int basecaller_main(int argc, char* argv[]) {
+
+    double array[] = { 1, 2, 3, 4, 5};
+    auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCUDA, 1);
+    torch::Tensor tharray = torch::from_blob(array, {5}, options);
+
 
     double realtime0 = realtime();
 

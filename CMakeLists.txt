@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.13)
 
 project(slorado)
-set(BASECALLER_SLOW5_VERSION "0.0.1a0")
+set(SLORADO_VERSION "0.0.1")
 set(TORCH_VERSION 1.10.2)
 #set(CMAKE_CXX_STANDARD 20)
 #set(CMAKE_CXX_STANDARD 17)
@@ -15,24 +15,24 @@ option(USE_GPU "Use GPU" ON) #ON by default because koi libs are available for x
 option(SLOW5_USE_ZSTD_CUSTOM "Use ZSTD custom" OFF) #OFF by default
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_SOURCE_DIR}/torch)
 
 set(CUDNN_LIBRARY_PATH ${CMAKE_SOURCE_DIR}/torch/fake_cudnn)
 set(CUDNN_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/torch/fake_cudnn)
 set(TORCH_LIB "${CMAKE_SOURCE_DIR}/torch/libtorch")
 # #set(TORCH_LIB "${CMAKE_SOURCE_DIR}/3rdparty/torch-${TORCH_VERSION}-${CMAKE_SYSTEM_NAME}-cxx11_ABI/libtorch")
-# list(APPEND CMAKE_PREFIX_PATH ${TORCH_LIB})
-# find_package(Torch REQUIRED)
+ list(APPEND CMAKE_PREFIX_PATH ${TORCH_LIB})
+ find_package(Torch REQUIRED)
 
-# file(GLOB TORCH_DLLS "${TORCH_LIB}/lib/*.so*")
-# install(FILES ${TORCH_DLLS} DESTINATION lib)
+ file(GLOB TORCH_DLLS "${TORCH_LIB}/lib/*.so*")
+ install(FILES ${TORCH_DLLS} DESTINATION lib)
 
 set(LIB_SOURCE_FILES
-        
-        ${CMAKE_SOURCE_DIR}/src/slorado.c
-        ${CMAKE_SOURCE_DIR}/src/basecaller_main.c
-        ${CMAKE_SOURCE_DIR}/src/thread.c
-        ${CMAKE_SOURCE_DIR}/src/misc.c
-        ${CMAKE_SOURCE_DIR}/src/error.c
+        ${CMAKE_SOURCE_DIR}/src/misc.cpp
+        ${CMAKE_SOURCE_DIR}/src/thread.cpp
+        ${CMAKE_SOURCE_DIR}/src/error.cpp
+        ${CMAKE_SOURCE_DIR}/src/slorado.cpp
+        ${CMAKE_SOURCE_DIR}/src/basecaller_main.cpp
         )
 
 # if(USE_GPU)
@@ -60,7 +60,7 @@ endif()
 # include_directories(dorado/3rdparty/tomlc99/)
 # list(APPEND LIB_SOURCE_FILES dorado/3rdparty/tomlc99/toml.c dorado/3rdparty/tomlc99/toml.h)
 
-add_library(slorado_lib ${CMAKE_SOURCE_DIR}/src/main.c)
+#add_library(slorado_lib ${LIB_SOURCE_FILES})
 
 # if(USE_GPU)
 #     message(STATUS " Using prebuilt Koi from ${KOI_DIR}")
@@ -68,16 +68,13 @@ add_library(slorado_lib ${CMAKE_SOURCE_DIR}/src/main.c)
 #     target_link_directories(dorado_lib PUBLIC dorado/3rdparty/koi_lib/lib)
 # endif()
 
-
-
-add_executable(slorado ${LIB_SOURCE_FILES})
+add_executable(slorado ${CMAKE_SOURCE_DIR}/src/main.cpp ${LIB_SOURCE_FILES} )
 
 add_link_options("-lz")
 message(STATUS "TORCH_LIBRARIES")
 message("${TORCH_LIBRARIES}")
-target_link_libraries(slorado_lib ${TORCH_LIBRARIES})
+target_link_libraries(slorado ${TORCH_LIBRARIES})
 # if(USE_GPU)
 #     target_link_libraries(dorado_lib koi)
 # endif()
-target_link_libraries(slorado_lib slow5 -lz -lzstd)
-target_link_libraries(slorado slorado_lib -lpthread -lm -lstdc++fs)
+target_link_libraries(slorado slow5 -lz -lzstd -lpthread -lm -lstdc++fs)
