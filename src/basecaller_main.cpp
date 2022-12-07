@@ -31,6 +31,7 @@ SOFTWARE.
 #include "slorado.h"
 #include "error.h"
 #include "misc.h"
+#include "signal_prep.h"
 #include <assert.h>
 #include <getopt.h>
 #include <pthread.h>
@@ -90,9 +91,8 @@ int basecaller_main(int argc, char* argv[]) {
 
     double array[] = { 1, 2, 3, 4, 5};
 //    auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCUDA, 0);
-    auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCPU, -1);
-    torch::Tensor tharray = torch::from_blob(array, {5}, options);
-
+    // auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCPU, -1);
+    // torch::Tensor tharray = torch::from_blob(array, {5}, options);
 
     double realtime0 = realtime();
 
@@ -207,17 +207,42 @@ int basecaller_main(int argc, char* argv[]) {
 
     int32_t counter=0;
 
+    // read a single record from the file
+    slow5_rec_t *rec = signal_prep::read_file_to_record(data); 
 
-    // load all records from a file into a list, then for each record:
-    // 
-    // intermmediate step record:
-    // std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
-    // std::vector<float> floatTmp(tmp.begin(), tmp.end());
-    //
-    // convert to tensor:
-    // auto options = torch::TensorOptions().dtype(torch::kFloat32);
-    // torch::Tensor signal = torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to(core->m_device_);
-    // int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
+    // convert record to tensor
+    std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
+    std::vector<float> floatTmp(tmp.begin(), tmp.end());
+    
+    auto options = torch::TensorOptions().dtype(torch::kFloat32);
+    auto signal = torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to(core->m_device_);
+
+    // trim signal
+    int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
+
+    signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+
+    // scale signal
+    auto med_mad = calculate_med_mad(signal);
+    float med = med_mad.first;
+    float mad = med_mad.second;
+
+    signal = (signal - med) / std::max(1.0f, mad);
+
+    // split signal into chunks
+
+    // decode signal
+
+    // get decoded signal
+
+    // beam search
+
+    // stitch
+
+    // write seq to file
+
+    // todo: free record
+
 
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));

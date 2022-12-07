@@ -36,6 +36,14 @@ SOFTWARE.
 
 #define TO_PICOAMPS(RAW_VAL, DIGITISATION, OFFSET, RANGE) (((RAW_VAL) + (OFFSET)) * ((RANGE) / (DIGITISATION)))
 
+std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826){
+    //Calculate signal median and median absolute deviation
+    auto med = x.median();
+    auto mad = torch::median(torch::abs(x - med)) * factor + EPS;
+
+    return {med.item<float>(), mad.item<float>()};
+}
+
 slow5_rec_t *read_file_to_record(char *file_path) {
     slow5_file_t *sp = slow5_open(file_path, "r");
     if (sp == NULL) {
