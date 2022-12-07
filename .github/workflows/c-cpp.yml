@@ -7,7 +7,7 @@ on:
     branches: [ '*' ]
 
 jobs:
-  ubuntu_14:
+  # ubuntu_14:
     name: ubuntu_14
     runs-on: ubuntu-18.04
     container: ubuntu:14.04
@@ -40,14 +40,14 @@ jobs:
     - name: install libtorch
       run: bash scripts/install-torch10.sh
     - name: cmake configuration
-      run: cmake -S $PWD -B $PWD/build
+      run: cmake ..
     - name: make build
-      run: make -C $PWD/build -j 8
+      run: make -j 8
     - name: test
       run: make test
     - name: test mem
       run: test/test.sh mem
-  ubuntu_18:
+  # ubuntu_18:
     name: Ubuntu 18
     runs-on: ubuntu-18.04
     steps:
@@ -60,7 +60,7 @@ jobs:
       run:  make -j8
     - name: test
       run: make test
-  ubuntu_20:
+  # ubuntu_20:
     name: Ubuntu 20
     runs-on: ubuntu-20.04
     steps:
@@ -77,7 +77,7 @@ jobs:
       run: make clean && make CC=clang -j8
     - name: test-clang
       run: make test
-  ubuntu_20_icc:
+  # ubuntu_20_icc:
     name: Ubuntu 20 icc
     runs-on: ubuntu-20.04
     steps:
@@ -102,7 +102,7 @@ jobs:
       run: make CC=icc -j8
     - name: test
       run: make test
-  os_x_11:
+  # os_x_11:
     name: OSX 11
     runs-on: macos-11
     steps:
@@ -113,7 +113,7 @@ jobs:
       run: make -j8
     - name: test
       run: make test
-  arm64:
+  # arm64:
     name: ubuntu arm
     runs-on: ubuntu-latest
     steps:
