@@ -42,7 +42,7 @@ Thumbs.db
 
 # binaries
 /slorado
-torch/
+torch/libtorch
 cmake-build-debug/
 
 #Allowed files
