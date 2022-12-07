@@ -12,6 +12,18 @@ make
 ./slorado basecaller test/example.blow5
 ```
 
+```
+# For CMake
+sudo apt-get install zlib1g-dev   #install zlib development libraries
+git clone --recursive https://github.com/BonsonW/slorado
+cd slorado
+bash scripts/install-torch10.sh
+cd build
+cmake ..
+make
+./slorado basecaller test/example.blow5
+```
+
 The commands to install zlib development libraries on some popular distributions:
 
 ```
