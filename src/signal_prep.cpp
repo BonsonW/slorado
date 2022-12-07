@@ -29,17 +29,17 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include <c10/core/TensorOptions.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <slow5/slow5.h>
 #include <torch/torch.h>
 
-#define TO_PICOAMPS(RAW_VAL, DIGITISATION, OFFSET, RANGE) (((RAW_VAL) + (OFFSET)) * ((RANGE) / (DIGITISATION)))
+#define EPS 1e-9f;
 
 std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826){
-    //Calculate signal median and median absolute deviation
-    auto med = x.median();
-    auto mad = torch::median(torch::abs(x - med)) * factor + EPS;
+    torch::Tensor med = x.median();
+    torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
 
     return {med.item<float>(), mad.item<float>()};
 }
@@ -73,7 +73,7 @@ slow5_rec_t *read_file_to_record(char *file_path) {
     return rec;
 }
 
-int trim(torch::Tensor signal, int window_size, float threshold_factor, int min_elements) {
+int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, int min_elements) {
 
     int min_trim = 10;
     signal = signal.index({torch::indexing::Slice(min_trim, torch::indexing::None)});
@@ -108,4 +108,20 @@ int trim(torch::Tensor signal, int window_size, float threshold_factor, int min_
     }
 
     return min_trim;
+}
+
+void scale_signal(torch::Tensor signal) {
+    std::pair<float, float> med_mad = calculate_med_mad(signal);
+    float med = med_mad.first;
+    float mad = med_mad.second;
+
+    signal = (signal - med) / std::max(1.0f, mad);
+}
+
+torch::Tensor tensor_from_record(slow5_rec_t *rec) {
+    std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
+    std::vector<float> floatTmp(tmp.begin(), tmp.end());
+    
+    torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32);
+    return torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to("cpu");
 }

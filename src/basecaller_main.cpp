@@ -208,26 +208,17 @@ int basecaller_main(int argc, char* argv[]) {
     int32_t counter=0;
 
     // read a single record from the file
-    slow5_rec_t *rec = signal_prep::read_file_to_record(data); 
+    slow5_rec_t *rec = read_file_to_record(data); 
 
     // convert record to tensor
-    std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
-    std::vector<float> floatTmp(tmp.begin(), tmp.end());
-    
-    auto options = torch::TensorOptions().dtype(torch::kFloat32);
-    auto signal = torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to(core->m_device_);
+    torch::Tensor signal = tensor_from_record(rec);
 
     // trim signal
-    int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
-
+    int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
     signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
 
     // scale signal
-    auto med_mad = calculate_med_mad(signal);
-    float med = med_mad.first;
-    float mad = med_mad.second;
-
-    signal = (signal - med) / std::max(1.0f, mad);
+    scale_signal(signal);
 
     // split signal into chunks
 
