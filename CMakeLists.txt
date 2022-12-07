@@ -33,6 +33,7 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/error.cpp
         ${CMAKE_SOURCE_DIR}/src/slorado.cpp
         ${CMAKE_SOURCE_DIR}/src/basecaller_main.cpp
+        ${CMAKE_SOURCE_DIR}/src/signal_prep.cpp
         )
 
 # if(USE_GPU)

@@ -17,6 +17,7 @@ OBJ = $(BUILD_DIR)/main.o \
       $(BUILD_DIR)/thread.o \
 	  $(BUILD_DIR)/misc.o \
 	  $(BUILD_DIR)/error.o \
+	  $(BUILD_DIR)/signal_prep.o \
 # add more objects here if needed
 
 VERSION = `git describe --tags`
@@ -53,6 +54,9 @@ $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/signal_prep.o: src/signal_prep.cpp src/signal_prep.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # follow the main.o above and add more objects here if needed

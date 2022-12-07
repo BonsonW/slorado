@@ -19,6 +19,7 @@ git clone --recursive https://github.com/BonsonW/slorado
 cd slorado
 bash scripts/install-torch10.sh
 cd build
+rm -r ./*
 cmake ..
 make
 ./slorado basecaller ../models/dna_r9.4.1_e8.1_hac@v3.3 ../test/example.blow5
