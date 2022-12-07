@@ -29,7 +29,6 @@ SOFTWARE.
 
 ******************************************************************************/
 
-#include <c10/core/TensorOptions.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <slow5/slow5.h>
@@ -74,7 +73,6 @@ slow5_rec_t *read_file_to_record(char *file_path) {
 }
 
 int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, int min_elements) {
-
     int min_trim = 10;
     signal = signal.index({torch::indexing::Slice(min_trim, torch::indexing::None)});
 
@@ -110,7 +108,7 @@ int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, i
     return min_trim;
 }
 
-void scale_signal(torch::Tensor signal) {
+void scale_signal(torch::Tensor &signal) {
     std::pair<float, float> med_mad = calculate_med_mad(signal);
     float med = med_mad.first;
     float mad = med_mad.second;
