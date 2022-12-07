@@ -68,7 +68,6 @@ endif()
 
 add_executable(slorado ${CMAKE_SOURCE_DIR}/src/main.cpp ${LIB_SOURCE_FILES} )
 
-add_link_options("-lz")
 message(STATUS "TORCH_LIBRARIES")
 message("${TORCH_LIBRARIES}")
 target_link_libraries(slorado ${TORCH_LIBRARIES})
