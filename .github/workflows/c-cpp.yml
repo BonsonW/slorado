@@ -37,10 +37,12 @@ jobs:
         submodules: recursive
     - name: install packages
       run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind cmake
+    - name: install libtorch
       run: bash scripts/install-torch10.sh
-    - name: build
+    - name: cmake configuration
       run: cmake -S $PWD -B $PWD/build
-      run: make -C $PWD/build -j
+    - name: make build
+      run: make -C $PWD/build -j 8
     - name: test
       run: make test
     - name: test mem
