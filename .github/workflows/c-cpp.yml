@@ -44,7 +44,7 @@ jobs:
     - name: print ls
       run: ls
     - name: cmake configuration
-      run: cmake -S . -B build
+      run: cmake ..
     # - name: make build
     #   run: make -C $PWD/build -j 8
     # - name: test
