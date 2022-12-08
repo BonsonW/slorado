@@ -7,7 +7,7 @@ on:
     branches: [ '*' ]
 
 jobs:
-ubuntu_20:
+  ubuntu_20:
     name: Ubuntu 20
     runs-on: ubuntu-20.04
     container: ubuntu:20.04
