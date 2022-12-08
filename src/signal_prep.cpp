@@ -30,13 +30,12 @@ SOFTWARE.
 ******************************************************************************/
 
 #include <cstdint>
-#include <stdio.h>
 #include <stdlib.h>
 #include <slow5/slow5.h>
 #include <torch/torch.h>
 #include <vector>
 
-#include "signal_prep.h"
+#include "chunk.h"
 #include "slorado.h"
 
 #define EPS 1e-9f;
