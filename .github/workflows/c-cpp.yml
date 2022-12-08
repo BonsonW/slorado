@@ -60,10 +60,10 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: recursive
-    - name: cuda install
-      run: wget https://developer.download.nvidia.com/compute/cuda/10.2/Prod/local_installers/cuda_10.2.89_440.33.01_linux.run && sh cuda_10.2.89_440.33.01_linux.run
     - name: install packages
       run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind cmake wget unzip
+    - name: cuda install
+      run: wget https://developer.download.nvidia.com/compute/cuda/10.2/Prod/local_installers/cuda_10.2.89_440.33.01_linux.run && sh cuda_10.2.89_440.33.01_linux.run
     - name: install libtorch
       run: bash scripts/install-torch10.sh
     - name: print pwd
