@@ -229,8 +229,9 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stdout, "created %zu chunks for signal\n", chunks.size());
     
     // create model runner
-    ModelRunner<CPUDecoder> model_runner = ModelRunner<CPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
-    fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
+    const char* device = "cpu";
+    ModelRunner<CPUDecoder> model_runner = ModelRunner<CPUDecoder>(model, device, opt.chunk_size, opt.batch_size);
+    fprintf(stdout, "model runner initialized for the [%s]\n", device);
     
     // decode signal
     auto decoded_chunks = basecall_chunks(signal, chunks, opt.chunk_size, model_runner);
