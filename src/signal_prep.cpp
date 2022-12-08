@@ -62,7 +62,7 @@ slow5_rec_t *read_file_to_record(char *file_path) {
         exit(EXIT_FAILURE);
     }
 
-    slow5_rec_t *rec = (slow5_rec_t*)malloc(sizeof(slow5_rec_t));
+    slow5_rec_t *rec = NULL;
 
     ret = slow5_get("r3", &rec, sp);
     if (ret < 0) {
