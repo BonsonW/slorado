@@ -221,7 +221,7 @@ int basecaller_main(int argc, char* argv[]) {
     scale_signal(signal);
 
     // split signal into chunks
-
+    std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
     // decode signal
 
     // get decoded signal

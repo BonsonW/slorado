@@ -33,6 +33,10 @@ SOFTWARE.
 #include <stdlib.h>
 #include <slow5/slow5.h>
 #include <torch/torch.h>
+#include <vector>
+
+#include "signal_prep.h"
+#include "slorado.h"
 
 #define EPS 1e-9f;
 
@@ -76,7 +80,7 @@ int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, i
     int min_trim = 10;
     signal = signal.index({torch::indexing::Slice(min_trim, torch::indexing::None)});
 
-    auto trim_start = -(window_size * 100);
+    int trim_start = -(window_size * 100);
 
     auto trimmed = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
     auto med_mad = calculate_med_mad(trimmed);
@@ -122,4 +126,21 @@ torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     
     torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32);
     return torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to("cpu");
+}
+
+std::vector<Chunk> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap) {
+    std::vector<Chunk> chunks;
+
+    size_t raw_size = tensor.size(0);
+    size_t offset = 0;
+    size_t chunk_in_read_idx = 0;
+    size_t signal_chunk_step = chunk_size - overlap;
+    chunks.push_back(Chunk(offset, chunk_in_read_idx++, chunk_size));
+
+    while (offset + chunk_size < raw_size) {
+        offset = std::min(offset + signal_chunk_step, raw_size - chunk_size);
+        chunks.push_back(Chunk(offset, chunk_in_read_idx++, chunk_size));
+    }
+
+    return chunks;
 }
