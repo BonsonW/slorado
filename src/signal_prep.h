@@ -1,7 +1,7 @@
 #include <slow5/slow5.h>
 #include <torch/torch.h>
 
-#include "chunk.h"
+#include "Chunk.h"
 
 slow5_rec_t *read_file_to_record(char *file_path);
 torch::Tensor tensor_from_record(slow5_rec_t *rec);

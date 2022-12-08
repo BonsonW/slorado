@@ -5,14 +5,17 @@
 #include <slow5/slow5.h>
 #include <torch/torch.h>
 
-#include "inference.h"
-#include "chunk.h"
+#include "decode/CPUDecoder.h"
+#include "Chunk.h"
+#include "nn/ModelRunner.h"
 #include "slorado.h"
 
-void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size) {
+std::vector<DecodedChunk> basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, ModelRunnerBase &model_runner) {
     torch::InferenceMode guard;
     
+    int chunk_idx = 0;
     for (auto &chunk : chunks) {
+        
         // Copy the chunk into the input tensor
         auto input_slice = signal.index({ torch::indexing::Slice(chunk.input_offset, chunk.input_offset + chunk_size) });
         size_t slice_size = input_slice.size(0);
@@ -21,7 +24,9 @@ void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chun
         if (slice_size != chunk_size) {
             input_slice = torch::constant_pad_nd(input_slice, c10::IntArrayRef{ 0, int(chunk_size - slice_size) }, 0);
         }
-        
-        // pass to a model runner
+
+        model_runner.accept_chunk(chunk_idx++, input_slice);
     }
+    
+    return model_runner.call_chunks(chunks.size());
 }

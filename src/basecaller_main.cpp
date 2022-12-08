@@ -28,10 +28,14 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include "decode/CPUDecoder.h"
+#include "nn/ModelRunner.h"
 #include "slorado.h"
 #include "error.h"
 #include "misc.h"
 #include "signal_prep.h"
+#include "inference.h"
+
 #include <assert.h>
 #include <getopt.h>
 #include <pthread.h>
@@ -223,11 +227,11 @@ int basecaller_main(int argc, char* argv[]) {
     // split signal into chunks
     std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
     
+    // create runner
+    ModelRunner<CPUDecoder> model_runner = ModelRunner<CPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
+    
     // decode signal
-
-    // get decoded signal
-
-    // beam search
+    auto decoded_chunks = basecall_chunks(signal, chunks, opt.chunk_size, model_runner);
 
     // stitch
 
