@@ -35,7 +35,7 @@ SOFTWARE.
 #include <torch/torch.h>
 #include <vector>
 
-#include "chunk.h"
+#include "Chunk.h"
 #include "slorado.h"
 
 #define EPS 1e-9f;
