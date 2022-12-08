@@ -58,8 +58,8 @@ if(SLOW5_USE_ZSTD_CUSTOM)
     target_link_directories(slow5 PUBLIC ${CMAKE_SOURCE_DIR}/3rdparty/zstd/lib/)
 endif()
 
-# include_directories(dorado/3rdparty/tomlc99/)
-# list(APPEND LIB_SOURCE_FILES dorado/3rdparty/tomlc99/toml.c dorado/3rdparty/tomlc99/toml.h)
+include_directories(3rdparty/tomlc99/)
+list(APPEND LIB_SOURCE_FILES 3rdparty/tomlc99/toml.c 3rdparty/tomlc99/toml.h)
 
 # if(USE_GPU)
 #     message(STATUS " Using prebuilt Koi from ${KOI_DIR}")

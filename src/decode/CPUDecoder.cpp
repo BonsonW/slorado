@@ -66,7 +66,7 @@ torch::Tensor CPUDecoder::backward_scores(torch::Tensor scores){
     auto idx_sizes = idx.sizes();
     auto idx_T = idx.flatten().argsort().reshape(idx_sizes);
 
-    auto Ms_T = scores.index({torch::indexing::Slice(), torch::indexing::), idx_T});
+    auto Ms_T = scores.index({torch::indexing::Slice(), torch::indexing::Slice(), idx_T});
 
     idx_T = torch::div(idx_T, n_base + 1, "floor");
 
