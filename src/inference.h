@@ -1,3 +1,9 @@
+/* @file inference.h
+**
+** methods for base calling step
+** @@
+******************************************************************************/
+
 #ifndef INFERENCE
 #define INFERENCE
 

@@ -206,7 +206,7 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    //initialise the core data structure
+    // initialise the core data structure
     core_t* core = init_core(data, opt, realtime0);
 
     int32_t counter=0;
@@ -227,7 +227,7 @@ int basecaller_main(int argc, char* argv[]) {
     // split signal into chunks
     std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
     
-    // create runner
+    // create model runner
     ModelRunner<CPUDecoder> model_runner = ModelRunner<CPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
     
     // decode signal

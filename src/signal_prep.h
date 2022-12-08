@@ -1,3 +1,9 @@
+/* @file signal_prep.h
+**
+** methods for preparing a signal for the base calling step
+** @@
+******************************************************************************/
+
 #ifndef SIGNAL_PREP_H
 #define SIGNAL_PREP_H
 

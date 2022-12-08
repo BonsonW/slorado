@@ -34,6 +34,15 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/slorado.cpp
         ${CMAKE_SOURCE_DIR}/src/basecaller_main.cpp
         ${CMAKE_SOURCE_DIR}/src/signal_prep.cpp
+        ${CMAKE_SOURCE_DIR}/src/inference.cpp
+        ${CMAKE_SOURCE_DIR}/src/Chunk.h
+        ${CMAKE_SOURCE_DIR}/src/utils/tensor_utils.cpp
+        ${CMAKE_SOURCE_DIR}/src/nn/CRFModel.cpp
+        ${CMAKE_SOURCE_DIR}/src/nn/ModelRunner.h
+        ${CMAKE_SOURCE_DIR}/src/decode/beam_search.cpp
+        ${CMAKE_SOURCE_DIR}/src/decode/CPUDecoder.cpp
+        ${CMAKE_SOURCE_DIR}/src/decode/Decoder.h
+        ${CMAKE_SOURCE_DIR}/src/decode/fast_hash.cpp
         )
 
 # if(USE_GPU)
