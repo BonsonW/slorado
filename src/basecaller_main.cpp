@@ -1,6 +1,6 @@
 /**
  * @file basecaller_main.c
- * @brief entry point to subtool 1
+ * @brief entry point to basecaller_main
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
 
 MIT License
@@ -208,10 +208,6 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // initialise the core data structure
-    core_t* core = init_core(data, opt, realtime0);
-
-    int32_t counter=0;
 
     // read a single record from the file
     slow5_rec_t *rec = read_file_to_record(data); 
@@ -260,21 +256,7 @@ int basecaller_main(int argc, char* argv[]) {
     // free record
     slow5_rec_free(rec);
 
-    fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
-    fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
-
-    fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
-    fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
-    if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
-            fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
-            fprintf(stderr, "\n[%s]     - Calc time: %.3f sec",__func__, core->calc_time);
-    }
-    fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
-
     fprintf(stderr,"\n");
-
-    //free the core data structure
-    free_core(core,opt);
 
     return 0;
 }
