@@ -38,7 +38,7 @@ jobs:
     - uses: Jimver/cuda-toolkit@v0.2.7
       id: cuda-toolkit
       with:
-        cuda: '10.2.0'
+        cuda: '11.3.0'
     - name: install packages
       run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind cmake wget unzip
     - name: install libtorch
