@@ -29,6 +29,7 @@ SOFTWARE.
 ******************************************************************************/
 
 #include "decode/CPUDecoder.h"
+#include "utils/stitch.h"
 #include "nn/ModelRunner.h"
 #include "slorado.h"
 #include "error.h"
@@ -233,10 +234,21 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
     
     // decode signal
-    auto decoded_chunks = basecall_chunks(signal, chunks, opt.chunk_size, model_runner);
+    std::vector<DecodedChunk> decoded_chunks = basecall_chunks(signal, chunks, opt.chunk_size, model_runner);
+    
+    // update original chunks with decoded data
+    for (int i = 0; i < decoded_chunks.size(); ++i) {
+        chunks[i].seq = decoded_chunks[i].sequence;
+        chunks[i].qstring = decoded_chunks[i].qstring;
+        chunks[i].moves = decoded_chunks[i].moves;
+    }
 
     // stitch
-
+    std::pair<std::string, std::string> stitched = stitch_chunks(chunks);
+    std::string sequence = stitched.first;
+    std::string qstring = stitched.first;
+    
+    fprintf(stdout, "sequence: [%s]", sequence.c_str());
     // write seq to file
 
     // todo: free record
