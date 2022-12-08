@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 14)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -rdynamic -Wall -std=c++14 ")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -rdynamic -Wall -std=gnu++11 ")
 message(STATUS "Using CMAKE_CXX_STANDARD-${CMAKE_CXX_STANDARD}")
-option(USE_GPU "Use GPU" ON) #ON by default because koi libs are available for x86
+option(USE_GPU "Use GPU" OFF) #OFF until koi linked
 option(SLOW5_USE_ZSTD_CUSTOM "Use ZSTD custom" OFF) #OFF by default
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
