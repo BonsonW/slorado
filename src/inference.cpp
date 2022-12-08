@@ -15,7 +15,6 @@ std::vector<DecodedChunk> basecall_chunks(torch::Tensor &signal, std::vector<Chu
     
     int chunk_idx = 0;
     for (auto &chunk : chunks) {
-        
         // Copy the chunk into the input tensor
         auto input_slice = signal.index({ torch::indexing::Slice(chunk.input_offset, chunk.input_offset + chunk_size) });
         size_t slice_size = input_slice.size(0);
@@ -26,7 +25,9 @@ std::vector<DecodedChunk> basecall_chunks(torch::Tensor &signal, std::vector<Chu
         }
 
         model_runner.accept_chunk(chunk_idx++, input_slice);
+        fprintf(stdout, "model runner has accepted chunk: %d\n", chunk_idx);
     }
     
+    fprintf(stdout, "base calling chunks...\n");
     return model_runner.call_chunks(chunks.size());
 }

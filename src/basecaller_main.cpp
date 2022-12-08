@@ -226,9 +226,11 @@ int basecaller_main(int argc, char* argv[]) {
 
     // split signal into chunks
     std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+    fprintf(stdout, "created %zu chunks for signal\n", chunks.size());
     
     // create model runner
     ModelRunner<CPUDecoder> model_runner = ModelRunner<CPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
+    fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
     
     // decode signal
     auto decoded_chunks = basecall_chunks(signal, chunks, opt.chunk_size, model_runner);
