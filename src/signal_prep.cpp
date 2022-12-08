@@ -29,6 +29,7 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include <cstdint>
 #include <stdio.h>
 #include <stdlib.h>
 #include <slow5/slow5.h>
@@ -82,12 +83,12 @@ int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, i
 
     int trim_start = -(window_size * 100);
 
-    auto trimmed = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-    auto med_mad = calculate_med_mad(trimmed);
+    torch::Tensor trimmed = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+    std::pair<float, float> med_mad = calculate_med_mad(trimmed);
 
-    auto threshold = med_mad.first + med_mad.second * threshold_factor;
+    float threshold = med_mad.first + med_mad.second * threshold_factor;
 
-    auto signal_len = signal.size(0);
+    int64_t signal_len = signal.size(0);
     int num_windows = signal_len / window_size;
 
     bool seen_peak = false;
@@ -96,8 +97,8 @@ int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, i
         int start = pos * window_size;
         int end = start + window_size;
 
-        auto window = signal.index({torch::indexing::Slice(start, end)});
-        auto elements = window > threshold;
+        torch::Tensor window = signal.index({torch::indexing::Slice(start, end)});
+        torch::Tensor elements = window > threshold;
 
 
         if ((elements.sum().item<int>() > min_elements) || seen_peak) {
