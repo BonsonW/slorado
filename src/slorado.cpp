@@ -288,6 +288,8 @@ void init_opt(opt_t* opt) {
     opt->overlap = 150;
     opt->num_runners = 1;
     
+    opt->flag |= SLORADO_EFQ;
+    
 #ifdef HAVE_ACC
     opt->flag |= SLORADO_ACC;
 #endif

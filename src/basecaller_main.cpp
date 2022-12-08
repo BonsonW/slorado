@@ -36,6 +36,7 @@ SOFTWARE.
 #include "misc.h"
 #include "signal_prep.h"
 #include "inference.h"
+#include "writer.h"
 
 #include <assert.h>
 #include <getopt.h>
@@ -244,15 +245,20 @@ int basecaller_main(int argc, char* argv[]) {
     }
 
     // stitch
-    std::pair<std::string, std::string> stitched = stitch_chunks(chunks);
+    fprintf(stdout, "stitching %zu chunks...\n", chunks.size());
+    std::pair<std::string, std::string> stitched = stitched_chunks(chunks);
     std::string sequence = stitched.first;
     std::string qstring = stitched.first;
+    bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
+
+    // write to file
+    std::string read_id = "dummy";
+    std::string file_name = "dummy";
+    write_to_file(file_name, sequence, sequence, read_id, emit_fastq);
+    fprintf(stdout, "sequence and qstring written to file %s.txt\n", file_name.c_str());
     
-    fprintf(stdout, "sequence: [%s]", sequence.c_str());
-    // write seq to file
-
-    // todo: free record
-
+    // free record
+    slow5_rec_free(rec);
 
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
