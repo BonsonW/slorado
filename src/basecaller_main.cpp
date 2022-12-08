@@ -58,7 +58,7 @@ static struct option long_options[] = {
     {"accel",required_argument, 0, 0},              //9 accelerator
     {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
-    {"device", required_argument, 0, 'x'},          //12 device [cuda:0]
+    {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
     {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
     {0, 0, 0, 0}};
@@ -229,9 +229,8 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stdout, "created %zu chunks for signal\n", chunks.size());
     
     // create model runner
-    const char* device = "cpu";
-    ModelRunner<CPUDecoder> model_runner = ModelRunner<CPUDecoder>(model, device, opt.chunk_size, opt.batch_size);
-    fprintf(stdout, "model runner initialized for the [%s]\n", device);
+    ModelRunner<CPUDecoder> model_runner = ModelRunner<CPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
+    fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
     
     // decode signal
     auto decoded_chunks = basecall_chunks(signal, chunks, opt.chunk_size, model_runner);
