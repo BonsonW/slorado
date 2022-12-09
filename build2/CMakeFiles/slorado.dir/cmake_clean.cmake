@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/slorado.dir/3rdparty/tomlc99/toml.c.o"
+  "CMakeFiles/slorado.dir/3rdparty/tomlc99/toml.c.o.d"
+  "CMakeFiles/slorado.dir/src/basecaller_main.cpp.o"
+  "CMakeFiles/slorado.dir/src/basecaller_main.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/decode/CPUDecoder.cpp.o"
+  "CMakeFiles/slorado.dir/src/decode/CPUDecoder.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/decode/GPUDecoder.cpp.o"
+  "CMakeFiles/slorado.dir/src/decode/GPUDecoder.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/decode/beam_search.cpp.o"
+  "CMakeFiles/slorado.dir/src/decode/beam_search.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/decode/fast_hash.cpp.o"
+  "CMakeFiles/slorado.dir/src/decode/fast_hash.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/error.cpp.o"
+  "CMakeFiles/slorado.dir/src/error.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/inference.cpp.o"
+  "CMakeFiles/slorado.dir/src/inference.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/main.cpp.o"
+  "CMakeFiles/slorado.dir/src/main.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/misc.cpp.o"
+  "CMakeFiles/slorado.dir/src/misc.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/nn/CRFModel.cpp.o"
+  "CMakeFiles/slorado.dir/src/nn/CRFModel.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/signal_prep.cpp.o"
+  "CMakeFiles/slorado.dir/src/signal_prep.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/slorado.cpp.o"
+  "CMakeFiles/slorado.dir/src/slorado.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/thread.cpp.o"
+  "CMakeFiles/slorado.dir/src/thread.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/utils/stitch.cpp.o"
+  "CMakeFiles/slorado.dir/src/utils/stitch.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/utils/tensor_utils.cpp.o"
+  "CMakeFiles/slorado.dir/src/utils/tensor_utils.cpp.o.d"
+  "CMakeFiles/slorado.dir/src/writer.cpp.o"
+  "CMakeFiles/slorado.dir/src/writer.cpp.o.d"
+  "slorado"
+  "slorado.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C CXX)
+  include(CMakeFiles/slorado.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

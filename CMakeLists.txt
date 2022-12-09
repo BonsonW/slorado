@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 14)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -rdynamic -Wall -std=c++14 ")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -rdynamic -Wall -std=gnu++11 ")
 message(STATUS "Using CMAKE_CXX_STANDARD-${CMAKE_CXX_STANDARD}")
-option(USE_GPU "Use GPU" OFF) #OFF until koi linked
+option(USE_GPU "Use GPU" ON) #OFF until koi linked
 option(SLOW5_USE_ZSTD_CUSTOM "Use ZSTD custom" OFF) #OFF by default
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
@@ -43,17 +43,18 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/nn/ModelRunner.h
         ${CMAKE_SOURCE_DIR}/src/decode/beam_search.cpp
         ${CMAKE_SOURCE_DIR}/src/decode/CPUDecoder.cpp
+        ${CMAKE_SOURCE_DIR}/src/decode/GPUDecoder.cpp
         ${CMAKE_SOURCE_DIR}/src/decode/Decoder.h
         ${CMAKE_SOURCE_DIR}/src/decode/fast_hash.cpp
         )
 
-# if(USE_GPU)
-#     MESSAGE(STATUS "Adding GPU source files to the compiling queue")
-#     add_definitions(-DUSE_GPU)
-#     list(APPEND LIB_SOURCE_FILES
-#             dorado/decode/GPUDecoder.cpp
-#             dorado/decode/GPUDecoder.h)
-# endif()
+if(USE_GPU)
+     MESSAGE(STATUS "Adding GPU source files to the compiling queue")
+     add_definitions(-DUSE_GPU)
+     list(APPEND LIB_SOURCE_FILES
+             ${CMAKE_SOURCE_DIR}/src/decode/GPUDecoder.cpp
+             ${CMAKE_SOURCE_DIR}/src/decode/GPUDecoder.h)
+endif()
 
 if(SLOW5_USE_ZSTD_CUSTOM)
     add_compile_options("-DSLOW5_USE_ZSTD")
@@ -72,18 +73,19 @@ endif()
 include_directories(3rdparty/tomlc99/)
 list(APPEND LIB_SOURCE_FILES 3rdparty/tomlc99/toml.c 3rdparty/tomlc99/toml.h)
 
-# if(USE_GPU)
-#     message(STATUS " Using prebuilt Koi from ${KOI_DIR}")
-#     target_include_directories(dorado_lib PUBLIC dorado/3rdparty/koi_lib/include)
-#     target_link_directories(dorado_lib PUBLIC dorado/3rdparty/koi_lib/lib)
-# endif()
-
 add_executable(slorado ${CMAKE_SOURCE_DIR}/src/main.cpp ${LIB_SOURCE_FILES} )
+
+if(USE_GPU)
+    message(STATUS " Using prebuilt Koi from ${KOI_DIR}")
+    target_include_directories(slorado PUBLIC koi/include)
+    target_link_directories(slorado PUBLIC koi/lib)
+endif()
+
 
 message(STATUS "TORCH_LIBRARIES")
 message("${TORCH_LIBRARIES}")
 target_link_libraries(slorado ${TORCH_LIBRARIES})
-# if(USE_GPU)
-#     target_link_libraries(dorado_lib koi)
-# endif()
+if(USE_GPU)
+    target_link_libraries(slorado koi)
+endif()
 target_link_libraries(slorado slow5 -lz -lzstd -lpthread -lm -lstdc++fs)

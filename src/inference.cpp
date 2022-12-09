@@ -11,8 +11,6 @@
 #include "slorado.h"
 
 std::vector<DecodedChunk> basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, ModelRunnerBase &model_runner) {
-    torch::InferenceMode guard;
-    
     int chunk_idx = 0;
     for (auto &chunk : chunks) {
         // Copy the chunk into the input tensor
