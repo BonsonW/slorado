@@ -253,9 +253,8 @@ int basecaller_main(int argc, char* argv[]) {
     bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
 
     // write to file
-    std::string read_id = "dummy";
     std::string file_name = "dummy";
-    write_to_file(file_name, sequence, sequence, read_id, emit_fastq);
+    write_to_file(file_name, sequence, sequence, rec->read_id, emit_fastq);
     fprintf(stdout, "sequence and qstring written to file %s.txt\n", file_name.c_str());
     
     // free record

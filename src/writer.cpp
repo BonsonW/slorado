@@ -7,7 +7,7 @@ using std::cerr;
 using std::endl;
 
 
-void write_to_file(std::string &name, std::string &sequence, std::string &qstring, std::string &read_id, bool emit_fastq) {
+void write_to_file(std::string &name, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
     ofstream out;
     
     out.open(name + ".txt"); // opens the file
