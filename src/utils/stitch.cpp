@@ -11,7 +11,7 @@ int div_round_closest(const int n, const int d)
     return ((n < 0) ^ (d < 0)) ? ((n - d/2)/d) : ((n + d/2)/d);
 }
 
-std::pair<std::string, std::string> stitched_chunks(std::vector<Chunk> chunks) {
+void stitch_chunks(std::vector<Chunk> chunks, std::string &sequence, std::string &qstring) {
     // Calculate the chunk down sampling, round to closest int.
     int down_sampling = div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size());
 
@@ -49,10 +49,6 @@ std::pair<std::string, std::string> stitched_chunks(std::vector<Chunk> chunks) {
     qstrings.push_back(chunks[chunks.size() - 1].qstring.substr(start_pos));
 
     // Set the read seq and qstring
-    std::string seq;
-    std::string qstring;
-    seq = std::accumulate(sequences.begin(), sequences.end(), std::string(""));
+    sequence = std::accumulate(sequences.begin(), sequences.end(), std::string(""));
     qstring = std::accumulate(qstrings.begin(), qstrings.end(), std::string(""));
-    
-    return {seq, qstring};
 }

@@ -34,7 +34,7 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/slorado.cpp
         ${CMAKE_SOURCE_DIR}/src/basecaller_main.cpp
         ${CMAKE_SOURCE_DIR}/src/signal_prep.cpp
-        ${CMAKE_SOURCE_DIR}/src/inference.cpp
+        ${CMAKE_SOURCE_DIR}/src/basecall.cpp
         ${CMAKE_SOURCE_DIR}/src/writer.cpp
         ${CMAKE_SOURCE_DIR}/src/Chunk.h
         ${CMAKE_SOURCE_DIR}/src/utils/tensor_utils.cpp

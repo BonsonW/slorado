@@ -2,20 +2,7 @@
 #include <iostream>
 #include <fstream>
 
-using std::ofstream;
-using std::cerr;
-using std::endl;
-
-
-void write_to_file(std::string &name, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
-    ofstream out;
-    
-    out.open(name + ".txt"); // opens the file
-       if( !out ) { // file couldn't be opened
-          cerr << "Error: file could not be opened" << endl;
-          exit(1);
-       }
-    
+void write_to_file(std::ofstream &out, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
     // todo:
     // if (!emit_fastq) {
     //     out << "@HD\tVN:1.5\tSO:unknown\n"
@@ -43,6 +30,4 @@ void write_to_file(std::string &name, std::string &sequence, std::string &qstrin
         //     std::cerr << ex.what() << "\n";
         // }
     }
-    
-    out.close();
 }
