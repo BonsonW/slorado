@@ -13,6 +13,6 @@
 
 #include <vector>
 
-std::vector<DecodedChunk> basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, ModelRunnerBase &model_runner);
+void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner);
 
 #endif

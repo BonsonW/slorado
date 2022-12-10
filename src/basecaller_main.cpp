@@ -214,51 +214,63 @@ int basecaller_main(int argc, char* argv[]) {
 
     int32_t counter=0;
 
-    // read a single record from the file
-    slow5_rec_t *rec = read_file_to_record(data); 
-
-    // convert record to tensor
-    torch::Tensor signal = tensor_from_record(rec);
-
-    // trim signal
-    int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
-    signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-
-    // scale signal
-    scale_signal(signal);
-
-    // split signal into chunks
-    std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-    fprintf(stdout, "created %zu chunks for signal\n", chunks.size());
+    // open slow5 file
+    slow5_file_t *sp = slow5_open(data,"r");
+    if (sp==NULL) {
+       fprintf(stderr,"Error in opening slow5 file\n");
+       exit(EXIT_FAILURE);
+    }
+    slow5_rec_t *rec = NULL;
+    int ret=0;
     
-    // create model runner
-    ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
-    fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
+    // prepare output file
+    std::ofstream out;
+    std::string file_name = "dummy";
     
-    // decode signal
-    std::vector<DecodedChunk> decoded_chunks = basecall_chunks(signal, chunks, opt.chunk_size, model_runner);
-    fprintf(stdout, "decoded_chunks size: %zu\n", decoded_chunks.size());
-    // update original chunks with decoded data
-    for (int i = 0; i < chunks.size(); ++i) {
-        chunks[i].seq = decoded_chunks[i].sequence;
-        chunks[i].qstring = decoded_chunks[i].qstring;
-        chunks[i].moves = decoded_chunks[i].moves;
+    out.open(file_name + ".txt");
+    if (!out) {
+        fprintf(stderr,"Error: output file could not be opened\n");
+        exit(EXIT_FAILURE);
     }
 
-    // stitch
-    fprintf(stdout, "stitching %zu chunks...\n", chunks.size());
-    std::pair<std::string, std::string> stitched = stitched_chunks(chunks);
-    std::string sequence = stitched.first;
-    std::string qstring = stitched.first;
-    bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
-
-    // write to file
-    std::string file_name = "dummy";
-    write_to_file(file_name, sequence, sequence, rec->read_id, emit_fastq);
-    fprintf(stdout, "sequence and qstring written to file %s.txt\n", file_name.c_str());
+    while((ret = slow5_get_next(&rec,sp)) >= 0){
+        // create model runner
+        ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
+        fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
     
-    // free record
-    slow5_rec_free(rec);
+        // convert record to tensor
+        torch::Tensor signal = tensor_from_record(rec);
+    
+        // trim signal
+        int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
+        signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+    
+        // scale signal
+        scale_signal(signal);
+    
+        // split signal into chunks
+        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        fprintf(stdout, "created %zu chunks for signal\n", chunks.size());
+        
+        // decode signal
+        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner);
+    
+        // stitch
+        fprintf(stdout, "stitching chunks...\n");
+        std::pair<std::string, std::string> stitched = stitched_chunks(chunks);
+        std::string sequence = stitched.first;
+        std::string qstring = stitched.first;
+        bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
+    
+        // write to file
+        write_to_file(out, sequence, sequence, rec->read_id, emit_fastq);
+        fprintf(stdout, "writing read [%s] to file %s.txt\n", rec->read_id, file_name.c_str());
+    }
+
+    // if (ret != SLOW5_ERR_EOF) {  //check if proper end of file has been reached
+    //     fprintf(stderr,"Error in slow5_get_next. Error code %d\n",ret);
+    //     exit(EXIT_FAILURE);
+    // }
 
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
@@ -273,8 +285,11 @@ int basecaller_main(int argc, char* argv[]) {
 
     fprintf(stderr,"\n");
 
-    //free the core data structure
+    // free everything
     free_core(core,opt);
-
+    slow5_rec_free(rec);
+    slow5_close(sp);
+    out.close();
+    
     return 0;
 }

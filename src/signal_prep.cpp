@@ -31,7 +31,6 @@ SOFTWARE.
 
 #include <cstdint>
 #include <stdlib.h>
-#include <slow5/slow5.h>
 #include <torch/torch.h>
 #include <vector>
 
@@ -45,35 +44,6 @@ std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826)
     torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
 
     return {med.item<float>(), mad.item<float>()};
-}
-
-slow5_rec_t *read_file_to_record(char *file_path) {
-    slow5_file_t *sp = slow5_open(file_path, "r");
-    if (sp == NULL) {
-        fprintf(stderr, "Error in opening slow5 file %s\n", file_path);
-        exit(EXIT_FAILURE);
-    }
-
-    int ret = 0;
-
-    ret = slow5_idx_load(sp);
-    if (ret < 0) {
-        fprintf(stderr, "Error in loading index for slow5 file %s\n", file_path);
-        exit(EXIT_FAILURE);
-    }
-
-    slow5_rec_t *rec = NULL;
-
-    ret = slow5_get("r3", &rec, sp);
-    if (ret < 0) {
-        fprintf(stderr, "Error when fetching the read for slow5 file %s\n", file_path);
-        exit(EXIT_FAILURE);
-    }
-
-    slow5_idx_unload(sp);
-    slow5_close(sp);
-
-    return rec;
 }
 
 int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, int min_elements) {

@@ -100,7 +100,6 @@ template<typename T> ModelRunner<T>::ModelRunner(const std::string &model, const
 template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks) {
     torch::InferenceMode guard;
     auto scores = m_module->forward(m_input.to(m_options.device_opt().value()));
-    fprintf(stdout, "applying beam search on inference...\n");
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options);
 }
 
