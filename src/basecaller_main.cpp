@@ -232,12 +232,14 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr,"Error: output file could not be opened\n");
         exit(EXIT_FAILURE);
     }
+    
+    // create model runner
+    ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
+    fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
 
     while((ret = slow5_get_next(&rec,sp)) >= 0){
-        // create model runner
-        ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
-        fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
-    
+        fprintf(stdout, "\nrecord [%s] start\n", rec->read_id);
+        
         // convert record to tensor
         torch::Tensor signal = tensor_from_record(rec);
     
@@ -256,7 +258,7 @@ int basecaller_main(int argc, char* argv[]) {
         basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner);
     
         // stitch
-        fprintf(stdout, "stitching chunks...\n");
+        fprintf(stdout, "stitching %zu chunks\n", chunks.size());
         std::pair<std::string, std::string> stitched = stitched_chunks(chunks);
         std::string sequence = stitched.first;
         std::string qstring = stitched.first;
@@ -264,8 +266,9 @@ int basecaller_main(int argc, char* argv[]) {
     
         // write to file
         write_to_file(out, sequence, sequence, rec->read_id, emit_fastq);
-        fprintf(stdout, "writing read [%s] to file %s.txt\n", rec->read_id, file_name.c_str());
+        fprintf(stdout, "record [%s] successfully written to file %s.txt\n", rec->read_id, file_name.c_str());
     }
+    fprintf(stdout, "\n");
 
     // if (ret != SLOW5_ERR_EOF) {  //check if proper end of file has been reached
     //     fprintf(stderr,"Error in slow5_get_next. Error code %d\n",ret);
