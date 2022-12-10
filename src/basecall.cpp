@@ -32,7 +32,7 @@ void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chun
             model_runner.accept_chunk(chunk_idx - batch_offset, input_slice);
         }
         
-        fprintf(stdout, "base calling chunks in batch: %d\n", cur_batch);
+        fprintf(stdout, "base calling batch %d of %d chunks\n", cur_batch, n_batched_chunks);
         std::vector<DecodedChunk> decoded_chunks = model_runner.call_chunks(chunk_idx);
         
         for (int i = 0; i < n_batched_chunks; ++i) {

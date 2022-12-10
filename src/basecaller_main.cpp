@@ -36,7 +36,7 @@ SOFTWARE.
 #include "error.h"
 #include "misc.h"
 #include "signal_prep.h"
-#include "inference.h"
+#include "basecall.h"
 #include "writer.h"
 
 #include <assert.h>
@@ -97,10 +97,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 int basecaller_main(int argc, char* argv[]) {
 
     double array[] = { 1, 2, 3, 4, 5};
-//    auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCUDA, 0);
-    // auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCPU, -1);
-    // torch::Tensor tharray = torch::from_blob(array, {5}, options);
-
     double realtime0 = realtime();
 
     const char* optstring = "t:B:K:v:o:x:r:p:c:hV";
@@ -270,8 +266,8 @@ int basecaller_main(int argc, char* argv[]) {
     }
     fprintf(stdout, "\n");
 
-    if (ret != SLOW5_ERR_EOF) {  //check if proper end of file has been reached
-        fprintf(stderr,"Error in slow5_get_next. Error code %d\n",ret);
+    if (ret != SLOW5_ERR_EOF) {
+        fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n",ret);
         exit(EXIT_FAILURE);
     }
 

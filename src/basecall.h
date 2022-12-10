@@ -1,11 +1,11 @@
-/* @file inference.h
+/* @file basecall.h
 **
 ** methods for base calling step
 ** @@
 ******************************************************************************/
 
-#ifndef INFERENCE
-#define INFERENCE
+#ifndef BASECALL
+#define BASECALL
 
 #include "decode/Decoder.h"
 #include "nn/ModelRunner.h"
