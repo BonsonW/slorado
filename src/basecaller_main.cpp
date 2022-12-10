@@ -225,9 +225,9 @@ int basecaller_main(int argc, char* argv[]) {
     
     // prepare output file
     std::ofstream out;
-    std::string file_name = "dummy";
+    std::string file_name = "calls";
     
-    out.open(file_name + ".txt");
+    out.open(file_name + ".fastq");
     if (!out) {
         fprintf(stderr,"Error: output file could not be opened\n");
         exit(EXIT_FAILURE);
@@ -259,9 +259,9 @@ int basecaller_main(int argc, char* argv[]) {
     
         // stitch
         fprintf(stdout, "stitching %zu chunks\n", chunks.size());
-        std::pair<std::string, std::string> stitched = stitched_chunks(chunks);
-        std::string sequence = stitched.first;
-        std::string qstring = stitched.second;
+        std::string sequence;
+        std::string qstring;
+        stitch_chunks(chunks, sequence, qstring);
         bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
     
         // write to file
@@ -270,10 +270,10 @@ int basecaller_main(int argc, char* argv[]) {
     }
     fprintf(stdout, "\n");
 
-    // if (ret != SLOW5_ERR_EOF) {  //check if proper end of file has been reached
-    //     fprintf(stderr,"Error in slow5_get_next. Error code %d\n",ret);
-    //     exit(EXIT_FAILURE);
-    // }
+    if (ret != SLOW5_ERR_EOF) {  //check if proper end of file has been reached
+        fprintf(stderr,"Error in slow5_get_next. Error code %d\n",ret);
+        exit(EXIT_FAILURE);
+    }
 
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
