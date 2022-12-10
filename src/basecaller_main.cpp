@@ -261,7 +261,7 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stdout, "stitching %zu chunks\n", chunks.size());
         std::pair<std::string, std::string> stitched = stitched_chunks(chunks);
         std::string sequence = stitched.first;
-        std::string qstring = stitched.first;
+        std::string qstring = stitched.second;
         bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
     
         // write to file
