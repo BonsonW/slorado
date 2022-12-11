@@ -81,9 +81,9 @@ endif()
 add_executable(slorado ${CMAKE_SOURCE_DIR}/src/main.cpp ${LIB_SOURCE_FILES})
 
 if(USE_GPU)
-    message(STATUS " Using prebuilt Koi from ${KOI_DIR}")
-    target_include_directories(slorado PUBLIC koi/include)
-    target_link_directories(slorado PUBLIC koi/lib)
+    message(STATUS " Using prebuilt Koi")
+    target_include_directories(slorado PUBLIC thirdparty/koi_lib/include)
+    target_link_directories(slorado PUBLIC thirdparty/koi_lib/lib)
 endif()
 
 
