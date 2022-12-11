@@ -24,7 +24,7 @@ endif()
 
 set(CUDNN_LIBRARY_PATH ${CMAKE_SOURCE_DIR}/thirdparty/fake_cudnn)
 set(CUDNN_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/thirdparty/fake_cudnn)
-set(TORCH_LIB "${CMAKE_SOURCE_DIR}/torch/libtorch")
+set(TORCH_LIB "${CMAKE_SOURCE_DIR}/thirdparty/torch/libtorch")
 # #set(TORCH_LIB "${CMAKE_SOURCE_DIR}/3rdparty/torch-${TORCH_VERSION}-${CMAKE_SYSTEM_NAME}-cxx11_ABI/libtorch")
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_LIB})
 find_package(Torch REQUIRED)
