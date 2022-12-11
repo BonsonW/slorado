@@ -45,6 +45,7 @@ Thumbs.db
 /slorado
 torch/libtorch
 cmake-build-debug/
+build*/
 
 #Allowed files
 !CMakeLists.txt
