@@ -1,8 +1,7 @@
 #include <string>
 #include <iostream>
-#include <fstream>
 
-void write_to_file(std::ofstream &out, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
+void write_to_stream(std::ostream &out, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
     // todo:
     // if (!emit_fastq) {
     //     out << "@HD\tVN:1.5\tSO:unknown\n"

@@ -214,24 +214,11 @@ int basecaller_main(int argc, char* argv[]) {
     }
     slow5_rec_t *rec = NULL;
     int ret=0;
-    
-    // prepare output file
-    std::ofstream out;
-    std::string file_name = "calls";
-    
-    out.open(file_name + ".fastq");
-    if (!out) {
-        fprintf(stderr,"Error: output file could not be opened\n");
-        exit(EXIT_FAILURE);
-    }
-    
+
     // create model runner
     ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
-    fprintf(stdout, "model runner initialized for device [%s]\n", opt.device);
 
     while((ret = slow5_get_next(&rec,sp)) >= 0){
-        fprintf(stdout, "\nrecord [%s] start\n", rec->read_id);
-        
         // convert record to tensor
         torch::Tensor signal = tensor_from_record(rec);
     
@@ -244,23 +231,19 @@ int basecaller_main(int argc, char* argv[]) {
     
         // split signal into chunks
         std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        fprintf(stdout, "created %zu chunks for signal\n", chunks.size());
-        
+
         // decode signal
         basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner);
     
         // stitch
-        fprintf(stdout, "stitching %zu chunks\n", chunks.size());
         std::string sequence;
         std::string qstring;
         stitch_chunks(chunks, sequence, qstring);
         bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
     
-        // write to file
-        write_to_file(out, sequence, sequence, rec->read_id, emit_fastq);
-        fprintf(stdout, "record [%s] successfully written to file %s.txt\n", rec->read_id, file_name.c_str());
+        // print output
+        write_to_stream(std::cout, sequence, sequence, rec->read_id, emit_fastq);
     }
-    fprintf(stdout, "\n");
 
     if (ret != SLOW5_ERR_EOF) {
         fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n",ret);
@@ -271,7 +254,6 @@ int basecaller_main(int argc, char* argv[]) {
 
     slow5_rec_free(rec);
     slow5_close(sp);
-    out.close();
-    
+
     return 0;
 }
