@@ -55,20 +55,19 @@ static struct option long_options[] = {
     {"verbose", required_argument, 0, 'v'},         //3 verbosity level [1]
     {"help", no_argument, 0, 'h'},                  //4
     {"version", no_argument, 0, 'V'},               //5
-    {"output", required_argument, 0, 'o'},          //6 output to a file [stdout]
-    {"debug-break", required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
-    {"profile-cpu", required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
-    {"accel",required_argument, 0, 0},              //9 accelerator
-    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
-    {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
-    {"device", required_argument, 0, 'x'},          //12 device [cpu]
-    {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
-    {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
+    {"debug-break", required_argument, 0, 0},       //6 break after processing the first batch (used for debugging)
+    {"profile-cpu", required_argument, 0, 0},       //7 perform section by section (used for profiling - for CPU only)
+    {"accel",required_argument, 0, 0},              //8 accelerator
+    {"chunk-size", required_argument, 0, 'c'},      //9 chunk size [8000]
+    {"overlap", required_argument, 0, 'o'},         //10 overlap [150]
+    {"device", required_argument, 0, 'x'},          //11 device [cpu]
+    {"num-runners", required_argument, 0, 'r'},     //12 number of runners [1]
+    {"emit-fastq", required_argument, 0, 0},        //13 toggles emit fastq
     {0, 0, 0, 0}};
 
 
 static inline void print_help_msg(FILE *fp_help, opt_t opt){
-    fprintf(fp_help, "usage: slorado basecaller [model] [data]\n");
+    fprintf(fp_help, "usage: slorado basecaller [model] [data] [output]\n");
     fprintf(fp_help, "positional arguments:\n");
     fprintf(fp_help, "  model FILE                  the basecaller model to run.\n");
     fprintf(fp_help, "  data FILE                   the data directory.\n");
@@ -76,9 +75,8 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
     fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size); 
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
-    fprintf(fp_help, "  -o FILE                     output to file [stdout]\n");
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
-    fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
+    fprintf(fp_help, "  -o INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
     fprintf(fp_help, "  -h                          shows help message and exits\n");   
@@ -106,6 +104,7 @@ int basecaller_main(int argc, char* argv[]) {
 
     char *data = NULL;
     char *model = NULL;
+    char *out_path = NULL;
 
     FILE *fp_help = stderr;
 
@@ -137,13 +136,15 @@ int basecaller_main(int argc, char* argv[]) {
             set_log_level((enum log_level_opt)v);
         } else if (c == 'x') {
             opt.device = optarg;
+        } else if (c == 'h') {
+            fp_help = stdout;
         } else if (c == 'c') {
             opt.chunk_size = atoi(optarg);
             if (opt.chunk_size < 1) {
                 ERROR("Chunk size should larger than 0. You entered %d", opt.chunk_size);
                 exit(EXIT_FAILURE);
             }
-        } else if (c == 'p') {
+        } else if (c == 'o') {
             opt.overlap = atoi(optarg);
             if (opt.overlap < 1) {
                 ERROR("Overlap should larger than 0. You entered %d", opt.overlap);
@@ -158,26 +159,23 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 'V') {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
-        } else if (c == 'h'){
-            fp_help = stdout;
-            fp_help = stdout;
-        } else if(c == 0 && longindex == 7) { //debug break
+        } else if (c == 0 && longindex == 6) { //debug break
             opt.debug_break = atoi(optarg);
-        } else if(c == 0 && longindex == 8) { //sectional benchmark todo : warning for gpu mode
+        } else if (c == 0 && longindex == 7) { //sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
-        } else if(c == 0 && longindex == 9) { //accel
+        } else if (c == 0 && longindex == 8) { //accel
         #ifdef HAVE_ACC
             yes_or_no(&opt.flag, SLORADO_ACC, long_options[longindex].name, optarg, 1);
         #else
             WARNING("%s", "--accel has no effect when compiled for the CPU");
         #endif
-        } else if(c == 0 && longindex == 14) { //sectional benchmark todo : warning for gpu mode
+        } else if(c == 0 && longindex == 13) { //sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_EFQ, long_options[longindex].name, optarg, 1);
         }
     }
 
     // Incorrect number of arguments given
-    if (argc - optind != 2 || fp_help == stdout) {
+    if (argc - optind != 3 || fp_help == stdout) {
         print_help_msg(fp_help, opt);
         if(fp_help == stdout){
             exit(EXIT_SUCCESS);
@@ -195,7 +193,7 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    data = argv[optind];
+    data = argv[optind++];
 
     if (data == NULL) {
         print_help_msg(fp_help, opt);
@@ -205,6 +203,21 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    out_path = argv[optind++];
+
+    if (out_path == NULL) {
+        print_help_msg(fp_help, opt);
+        if(fp_help == stdout){
+            exit(EXIT_SUCCESS);
+        }
+        exit(EXIT_FAILURE);
+    }
+
+    opt.out = fopen(out_path, "w");
+    if (opt.out == NULL) {
+        fprintf(stderr,"Error in opening output file\n");
+        exit(EXIT_FAILURE);
+    }
 
     // open slow5 file
     slow5_file_t *sp = slow5_open(data,"r");
@@ -239,10 +252,9 @@ int basecaller_main(int argc, char* argv[]) {
         std::string sequence;
         std::string qstring;
         stitch_chunks(chunks, sequence, qstring);
-        bool emit_fastq = (opt.flag & SLORADO_EFQ) != 0;
-    
+
         // print output
-        write_to_stream(std::cout, sequence, sequence, rec->read_id, emit_fastq);
+        write_to_file(opt.out, sequence, sequence, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
     }
 
     if (ret != SLOW5_ERR_EOF) {

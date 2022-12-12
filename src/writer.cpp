@@ -1,7 +1,7 @@
 #include <string>
 #include <iostream>
 
-void write_to_stream(std::ostream &out, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
+void write_to_file(FILE *out, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
     // todo:
     // if (!emit_fastq) {
     //     out << "@HD\tVN:1.5\tSO:unknown\n"
@@ -14,10 +14,10 @@ void write_to_stream(std::ostream &out, std::string &sequence, std::string &qstr
     // }
 
     if (emit_fastq) {
-	    out << "@" << read_id << "\n"
-                  << sequence << "\n"
-                  << "+\n"
-                  << qstring << "\n";
+        fprintf(out, "@%s\n", read_id);
+        fprintf(out, "%s\n", sequence.c_str());
+        fprintf(out, "+\n");
+        fprintf(out, "%s\n", qstring.c_str());
     } else {
         // todo: 
         // try {
