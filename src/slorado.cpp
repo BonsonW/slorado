@@ -284,10 +284,11 @@ void init_opt(opt_t* opt) {
     opt->debug_break = -1;
 
     opt->device = "cuda:0";
-//    opt->device = "cpu";
     opt->chunk_size = 8000;
     opt->overlap = 150;
     opt->num_runners = 1;
+
+    opt->out = stdout;
     
     opt->flag |= SLORADO_EFQ;
     

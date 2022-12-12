@@ -58,6 +58,8 @@ typedef struct {
     int32_t num_thread;         //number of threads used: t
     int32_t debug_break;
 
+    FILE *out;
+
     const char *device;         //specified device: x
     int32_t chunk_size;         //size of chunks: c
     int32_t overlap;            //overlap: p
