@@ -76,7 +76,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
     fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size); 
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
-    fprintf(fp_help, "  -o FILE                     output to file [stdout]\n");
+    fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
@@ -150,7 +150,8 @@ int basecaller_main(int argc, char* argv[]) {
                 exit(EXIT_FAILURE);
             }
         } else if (c == 'o') {
-            opt.out = fopen(optarg, "w");
+            opt.out_path = optarg;
+            opt.out = fopen(opt.out_path, "w");
             if (opt.out == NULL) {
                 fprintf(stderr,"Error in opening output file\n");
                 exit(EXIT_FAILURE);
@@ -165,7 +166,6 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
         } else if (c == 'h'){
-            fp_help = stdout;
             fp_help = stdout;
         } else if(c == 0 && longindex == 7) { //debug break
             opt.debug_break = atoi(optarg);
@@ -210,6 +210,18 @@ int basecaller_main(int argc, char* argv[]) {
         }
         exit(EXIT_FAILURE);
     }
+
+    // print summary
+    fprintf(stderr,"SLORADO\n");
+    fprintf(stderr,"model path:         %s\n", model);
+    fprintf(stderr,"input path:         %s\n", data);
+    fprintf(stderr,"output path:        %s\n", opt.out_path);
+    fprintf(stderr,"device:             %s\n", opt.device);
+    fprintf(stderr,"chunk size:         %d\n", opt.chunk_size);
+    fprintf(stderr,"batch size:         %d\n", opt.batch_size);
+    fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
+    fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
+    fprintf(stderr,"overlap:            %d\n", opt.overlap);
 
     // open slow5 file
     slow5_file_t *sp = slow5_open(data,"r");

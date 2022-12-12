@@ -58,6 +58,7 @@ typedef struct {
     int32_t num_thread;         //number of threads used: t
     int32_t debug_break;
 
+    const char *out_path;       //path to output file: o
     FILE *out;
 
     const char *device;         //specified device: x

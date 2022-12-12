@@ -277,7 +277,7 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 5; // should be default 512, 5 is for testing purposes
+    opt->batch_size = 512;
     opt->batch_size_bytes = 20*1000*1000;
     opt->num_thread = 8;
 
