@@ -212,7 +212,7 @@ int basecaller_main(int argc, char* argv[]) {
     }
 
     // print summary
-    fprintf(stderr,"SLORADO\n");
+    fprintf(stderr,"slorado base-caller version %s\n", SLORADO_VERSION);
     fprintf(stderr,"model path:         %s\n", model);
     fprintf(stderr,"input path:         %s\n", data);
     fprintf(stderr,"output path:        %s\n", opt.out_path);
