@@ -246,7 +246,7 @@ int basecaller_main(int argc, char* argv[]) {
         stitch_chunks(chunks, sequence, qstring);
 
         // print output
-        write_to_file(opt.out, sequence, sequence, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
+        write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
     }
 
     if (ret != SLOW5_ERR_EOF) {
