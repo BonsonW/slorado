@@ -23,7 +23,7 @@ cd build
 rm -r ./*
 cmake ..
 make -j
-./slorado basecaller ../models/dna_r9.4.1_e8.1_fast@v3.4 ../test/example.blow5 >> calls.fastq
+./slorado basecaller ../models/dna_r9.4.1_e8.1_fast@v3.4 ../test/example.blow5
 ```
 
 The commands to install zlib development libraries on some popular distributions:
