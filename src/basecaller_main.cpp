@@ -43,12 +43,14 @@ SOFTWARE.
 #include <assert.h>
 #include <cstdint>
 #include <getopt.h>
+#include <memory>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <torch/torch.h>
+#include <vector>
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
@@ -242,8 +244,29 @@ int basecaller_main(int argc, char* argv[]) {
     int ret=0;
 
     // create model runner
-    ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
+    // only one is used for now
+    std::vector<Runner> runners;
     
+#ifdef USE_GPU
+    if (strcmp(opt.device, "cpu") == 0) {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        }
+    } else {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            runners.push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        }
+    }
+#else
+    if (strcmp(opt.device, "cpu") == 0) {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        }
+    } else {
+        throw std::runtime_error("Error. Please compile again for GPU");
+    }
+#endif
+
     // total time
     ts.time_total = -realtime();
 
@@ -285,7 +308,7 @@ int basecaller_main(int argc, char* argv[]) {
         ts.time_chunk += realtime();
 
         // decode signal
-        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner, ts);
+        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *runners[0], ts);
     
         // stitch
         ts.time_stitch -= realtime();
@@ -298,9 +321,7 @@ int basecaller_main(int argc, char* argv[]) {
         ts.time_write -= realtime();
         write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
         ts.time_write += realtime();
-        
-        ts.time_read -= realtime();
-        
+
         ++n_reads;
     }
     ts.time_total += realtime();
