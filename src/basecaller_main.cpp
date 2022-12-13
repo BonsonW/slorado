@@ -263,7 +263,8 @@ int basecaller_main(int argc, char* argv[]) {
             runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
         }
     } else {
-        throw std::runtime_error("Error. Please compile again for GPU");
+        fprintf(stderr, "Error. Please compile again for GPU\n");
+        exit(EXIT_FAILURE);
     }
 #endif
 
