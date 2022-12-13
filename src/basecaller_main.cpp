@@ -226,15 +226,8 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     
     // performance vars
-    double time_read = 0;
-    double time_tens = 0;
-    double time_trim = 0;
-    double time_scale = 0;
-    double time_chunk = 0;
-    double time_basecall = 0;
-    double time_decode = 0;
-    double time_stitch = 0;
-    double time_write = 0;
+    timestamps_t ts;
+    init_timestamps(&ts);
     
     // open slow5 file
     slow5_file_t *sp = slow5_open(data,"r");
@@ -250,54 +243,54 @@ int basecaller_main(int argc, char* argv[]) {
     
     // total time
     uint64_t n_samples = 0;
-    double total_time = -realtime();
+    ts.time_total = -realtime();
     
-    time_read -= realtime();
+    ts.time_read -= realtime();
     while ((ret = slow5_get_next(&rec,sp)) >= 0) {
-        time_read += realtime();
+        ts.time_read += realtime();
         
         // convert record to tensor
-        time_tens -= realtime();
+        ts.time_tens -= realtime();
         torch::Tensor signal = tensor_from_record(rec);
-        time_tens += realtime();
+        ts.time_tens += realtime();
         
         n_samples += signal.size(0);
 
         // trim signal
-        time_trim -= realtime();
+        ts.time_trim -= realtime();
         int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
         signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-        time_trim += realtime();
+        ts.time_trim += realtime();
         
         // scale signal
-        time_scale -= realtime();
+        ts.time_scale -= realtime();
         scale_signal(signal);
-        time_scale += realtime();
+        ts.time_scale += realtime();
     
         // split signal into chunks
-        time_chunk -= realtime();
+        ts.time_chunk -= realtime();
         std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        time_chunk += realtime();
+        ts.time_chunk += realtime();
 
         // decode signal
-        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner, time_basecall, time_decode);
+        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner, ts);
     
         // stitch
-        time_stitch -= realtime();
+        ts.time_stitch -= realtime();
         std::string sequence;
         std::string qstring;
         stitch_chunks(chunks, sequence, qstring);
-        time_stitch += realtime();
+        ts.time_stitch += realtime();
 
         // print output
-        time_write -= realtime();
+        ts.time_write -= realtime();
         write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
-        time_write += realtime();
+        ts.time_write += realtime();
         
-        time_read -= realtime();
+        ts.time_read -= realtime();
     }
-    time_read += realtime();
-    total_time += realtime();
+    ts.time_read += realtime();
+    ts.time_total += realtime();
     
     if (ret != SLOW5_ERR_EOF) {
         fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n",ret);
@@ -306,16 +299,19 @@ int basecaller_main(int argc, char* argv[]) {
     
     // print perofrmance times
     fprintf(stdout, "\npeformance summary\n");
-    fprintf(stdout, "read:              %f\n", time_read);
-    fprintf(stdout, "conv tensor:       %f\n", time_tens);
-    fprintf(stdout, "trim:              %f\n", time_trim);
-    fprintf(stdout, "scale:             %f\n", time_scale);
-    fprintf(stdout, "chunk:             %f\n", time_chunk);
-    fprintf(stdout, "basecall:          %f\n", time_basecall);
-    fprintf(stdout, "decode:            %f\n", time_decode);
-    fprintf(stdout, "stitch:            %f\n", time_stitch);
-    fprintf(stdout, "write:             %f\n", time_write);
-    fprintf(stdout, "samples/ps:        %f\n", n_samples / total_time);
+    fprintf(stdout, "read:              %f\n", ts.time_read);
+    fprintf(stdout, "conv tensor:       %f\n", ts.time_tens);
+    fprintf(stdout, "trim:              %f\n", ts.time_trim);
+    fprintf(stdout, "scale:             %f\n", ts.time_scale);
+    fprintf(stdout, "chunk:             %f\n", ts.time_chunk);
+    fprintf(stdout, "copy:              %f\n", ts.time_copy);
+    fprintf(stdout, "zero pad:          %f\n", ts.time_pad);
+    fprintf(stdout, "accept:            %f\n", ts.time_pad);
+    fprintf(stdout, "basecall:          %f\n", ts.time_basecall);
+    fprintf(stdout, "decode:            %f\n", ts.time_decode);
+    fprintf(stdout, "stitch:            %f\n", ts.time_stitch);
+    fprintf(stdout, "write:             %f\n", ts.time_write);
+    fprintf(stdout, "samples/s:         %f\n", n_samples / ts.time_total);
 
     fprintf(stderr,"\n");
 
