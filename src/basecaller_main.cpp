@@ -252,8 +252,16 @@ int basecaller_main(int argc, char* argv[]) {
     uint64_t n_samples = 0;
     double total_time = -realtime();
     
-    time_read -= realtime();
-    while ((ret = slow5_get_next(&rec,sp)) >= 0) {
+    while (1) {
+        time_read -= realtime();
+        ret = slow5_get_next(&rec,sp);
+        if(ret < 0){
+            if (slow5_errno != SLOW5_ERR_EOF) {
+                return EXIT_FAILURE;
+            } else { //EOF file reached
+                break;
+            }
+        }
         time_read += realtime();
         
         // convert record to tensor
@@ -294,9 +302,7 @@ int basecaller_main(int argc, char* argv[]) {
         write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
         time_write += realtime();
         
-        time_read -= realtime();
     }
-    time_read += realtime();
     total_time += realtime();
     
     if (ret != SLOW5_ERR_EOF) {
