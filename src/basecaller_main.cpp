@@ -246,11 +246,21 @@ int basecaller_main(int argc, char* argv[]) {
     
     // total time
     ts.time_total = -realtime();
-    
-    ts.time_read -= realtime();
-    while ((ret = slow5_get_next(&rec,sp)) >= 0) {
+
+    while (1) {
+        ts.time_read -= realtime();
+        ret = slow5_get_next(&rec,sp);
         ts.time_read += realtime();
         
+        if(ret < 0){
+            if (slow5_errno != SLOW5_ERR_EOF) {
+                fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n", slow5_errno);
+                return EXIT_FAILURE;
+            } else { //EOF file reached
+                break;
+            }
+        }
+
         // convert record to tensor
         ts.time_tens -= realtime();
         torch::Tensor signal = tensor_from_record(rec);
@@ -293,13 +303,7 @@ int basecaller_main(int argc, char* argv[]) {
         
         ++n_reads;
     }
-    ts.time_read += realtime();
     ts.time_total += realtime();
-    
-    if (ret != SLOW5_ERR_EOF) {
-        fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n",ret);
-        exit(EXIT_FAILURE);
-    }
     
     // print perofrmance times
     fprintf(stdout, "\npeformance summary\n");
@@ -317,12 +321,14 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stdout, "time to decode:        %f\n", ts.time_decode);
     fprintf(stdout, "time to stitch:        %f\n", ts.time_stitch);
     fprintf(stdout, "time to write:         %f\n", ts.time_write);
-    
-
     fprintf(stderr,"\n");
 
     slow5_rec_free(rec);
     slow5_close(sp);
-
+    
+    if (opt.out != stdout) {
+        fclose(opt.out);
+    }
+    
     return 0;
 }
