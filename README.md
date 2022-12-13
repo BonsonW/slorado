@@ -34,6 +34,12 @@ On Fedora/CentOS : sudo dnf/yum install zlib-devel
 On OS X : brew install zlib
 ```
 
+## Calculate basecalling accuracy
+```
+set variables MINIMAP2, REFERENCE_GENOME, FASTQ_FILE in the script and run
+scripts/calculate_basecalling_accuarcy.sh
+```
+
 ## Acknowledgement
 Code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
 
