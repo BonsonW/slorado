@@ -1,4 +1,3 @@
-#include <c10/core/InferenceMode.h>
 #include <cstdint>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,8 +8,9 @@
 #include "Chunk.h"
 #include "nn/ModelRunner.h"
 #include "slorado.h"
+#include "misc.h"
 
-void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner) {
+void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, double &time_basecall, double &time_decode) {
     int chunk_idx = 0;
     int n_batched_chunks = 0;
     int cur_batch = 0;
@@ -31,7 +31,13 @@ void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chun
             model_runner.accept_chunk(chunk_idx - batch_offset, input_slice);
         }
         
-        std::vector<DecodedChunk> decoded_chunks = model_runner.call_chunks(chunk_idx);
+        time_basecall -= realtime();
+        torch::Tensor scores = model_runner.call_chunks();
+        time_basecall += realtime();
+        
+        time_decode -= realtime();
+        std::vector<DecodedChunk> decoded_chunks = model_runner.decode_chunks(scores, chunk_idx);
+        time_decode += realtime();
         
         for (int i = 0; i < n_batched_chunks; ++i) {
             chunks[batch_offset + i].seq = decoded_chunks[i].sequence;

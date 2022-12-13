@@ -10,7 +10,8 @@
 class ModelRunnerBase {
     public:
         virtual void accept_chunk(int chunk_idx, at::Tensor slice) = 0;
-        virtual std::vector<DecodedChunk> call_chunks(int num_chunks) = 0;
+        virtual torch::Tensor call_chunks() = 0;
+        virtual std::vector<DecodedChunk> decode_chunks(const torch::Tensor &scores, int num_chunks) = 0;
 };
 
 using Runner = std::shared_ptr<ModelRunnerBase>;
@@ -19,7 +20,8 @@ template<typename T> class ModelRunner : public ModelRunnerBase {
     public:
         ModelRunner(const std::string &model, const std::string &device, int chunk_size, int batch_size);
         void accept_chunk(int chunk_idx, at::Tensor slice) final;
-        std::vector<DecodedChunk> call_chunks(int num_chunks) final;
+        torch::Tensor call_chunks() final;
+        std::vector<DecodedChunk> decode_chunks(const torch::Tensor &scores, int num_chunks) final;
     private:
         std::string m_device;
         torch::Tensor m_input;
@@ -97,9 +99,12 @@ template<typename T> ModelRunner<T>::ModelRunner(const std::string &model, const
 #endif
 }
 
-template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks) {
+template<typename T> torch::Tensor ModelRunner<T>::call_chunks() {
     torch::InferenceMode guard;
-    auto scores = m_module->forward(m_input.to(m_options.device_opt().value()));
+    return m_module->forward(m_input.to(m_options.device_opt().value()));
+}
+
+template<typename T> std::vector<DecodedChunk> ModelRunner<T>::decode_chunks(const torch::Tensor &scores, int num_chunks) {
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options);
 }
 

@@ -38,8 +38,10 @@ SOFTWARE.
 #include "signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
+#include "misc.h"
 
 #include <assert.h>
+#include <cstdint>
 #include <getopt.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -212,7 +214,7 @@ int basecaller_main(int argc, char* argv[]) {
     }
 
     // print summary
-    fprintf(stderr,"slorado base-caller version %s\n", SLORADO_VERSION);
+    fprintf(stderr,"\nslorado base-caller version %s\n", SLORADO_VERSION);
     fprintf(stderr,"model path:         %s\n", model);
     fprintf(stderr,"input path:         %s\n", data);
     fprintf(stderr,"output path:        %s\n", opt.out_path);
@@ -222,7 +224,18 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
     fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
-
+    
+    // performance vars
+    double time_read = 0;
+    double time_tens = 0;
+    double time_trim = 0;
+    double time_scale = 0;
+    double time_chunk = 0;
+    double time_basecall = 0;
+    double time_decode = 0;
+    double time_stitch = 0;
+    double time_write = 0;
+    
     // open slow5 file
     slow5_file_t *sp = slow5_open(data,"r");
     if (sp==NULL) {
@@ -234,37 +247,75 @@ int basecaller_main(int argc, char* argv[]) {
 
     // create model runner
     ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
-
-    while((ret = slow5_get_next(&rec,sp)) >= 0){
-        // convert record to tensor
-        torch::Tensor signal = tensor_from_record(rec);
     
+    // total time
+    uint64_t n_samples = 0;
+    double total_time = -realtime();
+    
+    time_read -= realtime();
+    while ((ret = slow5_get_next(&rec,sp)) >= 0) {
+        time_read += realtime();
+        
+        // convert record to tensor
+        time_tens -= realtime();
+        torch::Tensor signal = tensor_from_record(rec);
+        time_tens += realtime();
+        
+        n_samples += signal.size(0);
+
         // trim signal
+        time_trim -= realtime();
         int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
         signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-    
+        time_trim += realtime();
+        
         // scale signal
+        time_scale -= realtime();
         scale_signal(signal);
+        time_scale += realtime();
     
         // split signal into chunks
+        time_chunk -= realtime();
         std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        time_chunk += realtime();
 
         // decode signal
-        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner);
+        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, model_runner, time_basecall, time_decode);
     
         // stitch
+        time_stitch -= realtime();
         std::string sequence;
         std::string qstring;
         stitch_chunks(chunks, sequence, qstring);
+        time_stitch += realtime();
 
         // print output
+        time_write -= realtime();
         write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
+        time_write += realtime();
+        
+        time_read -= realtime();
     }
-
+    time_read += realtime();
+    total_time += realtime();
+    
     if (ret != SLOW5_ERR_EOF) {
         fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n",ret);
         exit(EXIT_FAILURE);
     }
+    
+    // print perofrmance times
+    fprintf(stdout, "\npeformance summary\n");
+    fprintf(stdout, "read:              %f\n", time_read);
+    fprintf(stdout, "conv tensor:       %f\n", time_tens);
+    fprintf(stdout, "trim:              %f\n", time_trim);
+    fprintf(stdout, "scale:             %f\n", time_scale);
+    fprintf(stdout, "chunk:             %f\n", time_chunk);
+    fprintf(stdout, "basecall:          %f\n", time_basecall);
+    fprintf(stdout, "decode:            %f\n", time_decode);
+    fprintf(stdout, "stitch:            %f\n", time_stitch);
+    fprintf(stdout, "write:             %f\n", time_write);
+    fprintf(stdout, "samples/ps:        %f\n", n_samples / total_time);
 
     fprintf(stderr,"\n");
 
