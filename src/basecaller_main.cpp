@@ -227,6 +227,9 @@ int basecaller_main(int argc, char* argv[]) {
     
     // performance vars
     timestamps_t ts;
+    uint64_t n_reads = 0;
+    uint64_t n_samples = 0;
+    
     init_timestamps(&ts);
     
     // open slow5 file
@@ -242,7 +245,6 @@ int basecaller_main(int argc, char* argv[]) {
     ModelRunner<GPUDecoder> model_runner = ModelRunner<GPUDecoder>(model, opt.device, opt.chunk_size, opt.batch_size);
     
     // total time
-    uint64_t n_samples = 0;
     ts.time_total = -realtime();
     
     ts.time_read -= realtime();
@@ -288,6 +290,8 @@ int basecaller_main(int argc, char* argv[]) {
         ts.time_write += realtime();
         
         ts.time_read -= realtime();
+        
+        ++n_reads;
     }
     ts.time_read += realtime();
     ts.time_total += realtime();
@@ -299,19 +303,21 @@ int basecaller_main(int argc, char* argv[]) {
     
     // print perofrmance times
     fprintf(stdout, "\npeformance summary\n");
-    fprintf(stdout, "read:              %f\n", ts.time_read);
-    fprintf(stdout, "conv tensor:       %f\n", ts.time_tens);
-    fprintf(stdout, "trim:              %f\n", ts.time_trim);
-    fprintf(stdout, "scale:             %f\n", ts.time_scale);
-    fprintf(stdout, "chunk:             %f\n", ts.time_chunk);
-    fprintf(stdout, "copy:              %f\n", ts.time_copy);
-    fprintf(stdout, "zero pad:          %f\n", ts.time_pad);
-    fprintf(stdout, "accept:            %f\n", ts.time_pad);
-    fprintf(stdout, "basecall:          %f\n", ts.time_basecall);
-    fprintf(stdout, "decode:            %f\n", ts.time_decode);
-    fprintf(stdout, "stitch:            %f\n", ts.time_stitch);
-    fprintf(stdout, "write:             %f\n", ts.time_write);
-    fprintf(stdout, "samples/s:         %f\n", n_samples / ts.time_total);
+    fprintf(stdout, "reads completed:       %zu\n", n_reads);
+    fprintf(stdout, "samples/s:             %f\n", n_samples / ts.time_total);
+    fprintf(stdout, "time to read:          %f\n", ts.time_read);
+    fprintf(stdout, "time to conv tensor:   %f\n", ts.time_tens);
+    fprintf(stdout, "time to trim:          %f\n", ts.time_trim);
+    fprintf(stdout, "time to scale:         %f\n", ts.time_scale);
+    fprintf(stdout, "time to chunk:         %f\n", ts.time_chunk);
+    fprintf(stdout, "time to copy:          %f\n", ts.time_copy);
+    fprintf(stdout, "time to zero pad:      %f\n", ts.time_pad);
+    fprintf(stdout, "time to accept:        %f\n", ts.time_pad);
+    fprintf(stdout, "time to basecall:      %f\n", ts.time_basecall);
+    fprintf(stdout, "time to decode:        %f\n", ts.time_decode);
+    fprintf(stdout, "time to stitch:        %f\n", ts.time_stitch);
+    fprintf(stdout, "time to write:         %f\n", ts.time_write);
+    
 
     fprintf(stderr,"\n");
 
