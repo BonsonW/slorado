@@ -67,7 +67,8 @@ static struct option long_options[] = {
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
     {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
-    {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
+    {"debug-file", required_argument, 0, 0},        //14 debug-file path
+    {"emit-fastq", required_argument, 0, 0},        //15 toggles emit fastq
     {0, 0, 0, 0}};
 
 
@@ -85,11 +86,12 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
-    fprintf(fp_help, "  -h                          shows help message and exits\n");   
+    fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\nadvanced options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
+    fprintf(fp_help, "  --debug-file                file to write debug output [%s]\n", opt.debug_out_path);
     fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 #ifdef HAVE_ACC
@@ -182,6 +184,13 @@ int basecaller_main(int argc, char* argv[]) {
             WARNING("%s", "--accel has no effect when compiled for the CPU");
         #endif
         } else if(c == 0 && longindex == 14) { //sectional benchmark todo : warning for gpu mode
+            opt.debug_out_path = optarg;
+            opt.debug_out = fopen(opt.debug_out_path, "w");
+            if (opt.debug_out == NULL) {
+                fprintf(stderr,"Error in opening debug output file\n");
+                exit(EXIT_FAILURE);
+            }
+        } else if(c == 0 && longindex == 15) { //sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_EFQ, long_options[longindex].name, optarg, 1);
         }
     }
@@ -305,11 +314,17 @@ int basecaller_main(int argc, char* argv[]) {
     
         // split signal into chunks
         ts.time_chunk -= realtime();
-        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt);
         ts.time_chunk += realtime();
 
+        if (opt.debug_out) {
+            for(size_t i=0; i<chunks.size(); i++){
+                fprintf(opt.debug_out, "%zu\t%zu\n", i, chunks[i].raw_chunk_size);
+            }
+        }
+
         // decode signal
-        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *runners[0], ts);
+        basecall_chunks(signal, chunks, opt, *runners[0], ts);
     
         // stitch
         ts.time_stitch -= realtime();
@@ -320,7 +335,7 @@ int basecaller_main(int argc, char* argv[]) {
 
         // print output
         ts.time_write -= realtime();
-        write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
+        write_to_file(sequence, qstring, rec->read_id, opt);
         ts.time_write += realtime();
 
         ++n_reads;
@@ -350,6 +365,9 @@ int basecaller_main(int argc, char* argv[]) {
     
     if (opt.out != stdout) {
         fclose(opt.out);
+    }
+    if (opt.debug_out) {
+        fclose(opt.debug_out);
     }
     
     return 0;

@@ -98,7 +98,10 @@ torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     return torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to("cpu");
 }
 
-std::vector<Chunk> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap) {
+std::vector<Chunk> chunks_from_tensor(torch::Tensor &tensor, opt_t &opt) {
+    int chunk_size = opt.chunk_size;
+    int overlap = opt.overlap;
+    
     std::vector<Chunk> chunks;
 
     size_t raw_size = tensor.size(0);

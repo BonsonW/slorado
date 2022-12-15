@@ -289,7 +289,8 @@ void init_opt(opt_t* opt) {
     opt->num_runners = 1;
 
     opt->out = stdout;
-    
+    opt->debug_out = NULL;
+
     opt->flag |= SLORADO_EFQ;
     
 #ifdef HAVE_ACC

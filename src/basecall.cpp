@@ -10,10 +10,12 @@
 #include "slorado.h"
 #include "misc.h"
 
-void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t &ts) {
+void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, opt_t &opt, ModelRunnerBase &model_runner, timestamps_t &ts) {
     int chunk_idx = 0;
     int n_batched_chunks = 0;
     int cur_batch = 0;
+    int batch_size = opt.batch_size;
+    int chunk_size = opt.chunk_size;
     
     while (chunk_idx < chunks.size()) {
         int batch_offset = cur_batch * batch_size;
