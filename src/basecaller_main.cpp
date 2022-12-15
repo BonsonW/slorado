@@ -41,6 +41,7 @@ SOFTWARE.
 #include "misc.h"
 
 #include <assert.h>
+#include <cstddef>
 #include <cstdint>
 #include <getopt.h>
 #include <memory>
@@ -219,13 +220,14 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"\nslorado base-caller version %s\n", SLORADO_VERSION);
     fprintf(stderr,"model path:         %s\n", model);
     fprintf(stderr,"input path:         %s\n", data);
-    fprintf(stderr,"output path:        %s\n", opt.out_path);
+    fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
     fprintf(stderr,"device:             %s\n", opt.device);
     fprintf(stderr,"chunk size:         %d\n", opt.chunk_size);
     fprintf(stderr,"batch size:         %d\n", opt.batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
     fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
+    fprintf(stderr, "\n");
     
     // performance vars
     timestamps_t ts;
@@ -270,13 +272,13 @@ int basecaller_main(int argc, char* argv[]) {
 
     // total time
     ts.time_total = -realtime();
-
+    
     while (1) {
         ts.time_read -= realtime();
         ret = slow5_get_next(&rec,sp);
         ts.time_read += realtime();
         
-        if(ret < 0){
+        if (ret < 0) {
             if (slow5_errno != SLOW5_ERR_EOF) {
                 fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n", slow5_errno);
                 return EXIT_FAILURE;
@@ -284,8 +286,10 @@ int basecaller_main(int argc, char* argv[]) {
                 break;
             }
         }
+        VERBOSE("processing signal %zu...", n_reads);
 
         // convert record to tensor
+        VERBOSE("converting signal to tensor...%s", "");
         ts.time_tens -= realtime();
         torch::Tensor signal = tensor_from_record(rec);
         ts.time_tens += realtime();
@@ -293,17 +297,20 @@ int basecaller_main(int argc, char* argv[]) {
         n_samples += signal.size(0);
 
         // trim signal
+        VERBOSE("trimming tensor...%s", "");
         ts.time_trim -= realtime();
         int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
         signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
         ts.time_trim += realtime();
         
         // scale signal
+        VERBOSE("scaling tensor...%s", "");
         ts.time_scale -= realtime();
         scale_signal(signal);
         ts.time_scale += realtime();
-    
+        
         // split signal into chunks
+        VERBOSE("splitting signal into chunks...%s", "");
         ts.time_chunk -= realtime();
         std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         ts.time_chunk += realtime();
@@ -312,6 +319,7 @@ int basecaller_main(int argc, char* argv[]) {
         basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *runners[0], ts);
     
         // stitch
+        VERBOSE("stitching %zu chunks...", chunks.size());
         ts.time_stitch -= realtime();
         std::string sequence;
         std::string qstring;
@@ -319,6 +327,7 @@ int basecaller_main(int argc, char* argv[]) {
         ts.time_stitch += realtime();
 
         // print output
+        VERBOSE("writing output into %s", opt.out_path == NULL ? "stdout" : opt.out_path);
         ts.time_write -= realtime();
         write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
         ts.time_write += realtime();

@@ -9,6 +9,7 @@
 #include "nn/ModelRunner.h"
 #include "slorado.h"
 #include "misc.h"
+#include "error.h"
 
 void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t &ts) {
     int chunk_idx = 0;
@@ -37,14 +38,16 @@ void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chun
             ts.time_accept += realtime();
         }
         
+        VERBOSE("basecalling %d chunks of batch %d...", n_batched_chunks, cur_batch);
         ts.time_basecall -= realtime();
         torch::Tensor scores = model_runner.call_chunks();
         ts.time_basecall += realtime();
         
+        VERBOSE("decoding %d chunks of batch %d...", n_batched_chunks, cur_batch);
         ts.time_decode -= realtime();
         std::vector<DecodedChunk> decoded_chunks = model_runner.decode_chunks(scores, chunk_idx);
         ts.time_decode += realtime();
-        
+
         for (int i = 0; i < n_batched_chunks; ++i) {
             chunks[batch_offset + i].seq = decoded_chunks[i].sequence;
             chunks[batch_offset + i].qstring = decoded_chunks[i].qstring;
