@@ -60,6 +60,8 @@ typedef struct {
 
     const char *out_path;       //path to output file: o
     FILE *out;
+    const char *debug_out_path;       //path to output file: o
+    FILE *debug_out;
 
     const char *device;         //specified device: x
     int32_t chunk_size;         //size of chunks: c
