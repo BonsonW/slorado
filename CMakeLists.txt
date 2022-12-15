@@ -24,7 +24,16 @@ endif()
 
 set(CUDNN_LIBRARY_PATH ${CMAKE_SOURCE_DIR}/thirdparty/fake_cudnn)
 set(CUDNN_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/thirdparty/fake_cudnn)
-set(TORCH_LIB "${CMAKE_SOURCE_DIR}/thirdparty/torch/libtorch")
+
+if(DEFINED SLORADO_LIBTORCH_DIR)
+    # Use the existing libtorch we have been pointed at
+    list(APPEND CMAKE_PREFIX_PATH ${SLORADO_LIBTORCH_DIR})
+    message(STATUS "Using existing libtorch at ${SLORADO_LIBTORCH_DIR}")
+    set(TORCH_LIB ${SLORADO_LIBTORCH_DIR})
+else()
+    set(TORCH_LIB "${CMAKE_SOURCE_DIR}/thirdparty/torch/libtorch")
+endif()
+
 # #set(TORCH_LIB "${CMAKE_SOURCE_DIR}/3rdparty/torch-${TORCH_VERSION}-${CMAKE_SYSTEM_NAME}-cxx11_ABI/libtorch")
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_LIB})
 find_package(Torch REQUIRED)
@@ -48,7 +57,6 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/nn/ModelRunner.h
         ${CMAKE_SOURCE_DIR}/src/decode/beam_search.cpp
         ${CMAKE_SOURCE_DIR}/src/decode/CPUDecoder.cpp
-        ${CMAKE_SOURCE_DIR}/src/decode/GPUDecoder.cpp
         ${CMAKE_SOURCE_DIR}/src/decode/Decoder.h
         ${CMAKE_SOURCE_DIR}/src/decode/fast_hash.cpp
         )
