@@ -314,17 +314,17 @@ int basecaller_main(int argc, char* argv[]) {
     
         // split signal into chunks
         ts.time_chunk -= realtime();
-        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt);
         ts.time_chunk += realtime();
 
-        if(opt.debug_out){
+        if (opt.debug_out) {
             for(size_t i=0; i<chunks.size(); i++){
                 fprintf(opt.debug_out, "%zu\t%zu\n", i, chunks[i].raw_chunk_size);
             }
         }
 
         // decode signal
-        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *runners[0], ts);
+        basecall_chunks(signal, chunks, opt, *runners[0], ts);
     
         // stitch
         ts.time_stitch -= realtime();
@@ -335,7 +335,7 @@ int basecaller_main(int argc, char* argv[]) {
 
         // print output
         ts.time_write -= realtime();
-        write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
+        write_to_file(sequence, qstring, rec->read_id, opt);
         ts.time_write += realtime();
 
         ++n_reads;

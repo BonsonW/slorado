@@ -11,9 +11,10 @@
 #include "misc.h"
 #include "nn/ModelRunner.h"
 #include "Chunk.h"
+#include "slorado.h"
 
 #include <vector>
 
-void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t &ts);
+void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, opt_t &opt, ModelRunnerBase &model_runner, timestamps_t &ts);
 
 #endif

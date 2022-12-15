@@ -1,7 +1,11 @@
+#include "slorado.h"
 #include <string>
 #include <iostream>
 
-void write_to_file(FILE *out, std::string &sequence, std::string &qstring, char *read_id, bool emit_fastq) {
+void write_to_file(std::string &sequence, std::string &qstring, char *read_id, opt_t &opt) {
+    bool emit_fastq = opt.flag & SLORADO_EFQ;
+    FILE *out = opt.out;
+    
     // todo:
     // if (!emit_fastq) {
     //     out << "@HD\tVN:1.5\tSO:unknown\n"
