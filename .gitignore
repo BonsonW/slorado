@@ -43,9 +43,11 @@ Thumbs.db
 
 # binaries
 /slorado
-torch/libtorch
+/thirdparty/torch
+/thirdparty/koi_lib
 cmake-build-debug/
-build*/
+build/
+/models/*
 
 #Allowed files
 !CMakeLists.txt
