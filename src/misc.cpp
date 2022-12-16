@@ -130,21 +130,3 @@ void print_size(const char* name, uint64_t bytes)
         fprintf(stderr, "[%s] %s : %.1f %s\n", __func__, name, count, suffixes[s]);
 }
 
-/* initialise timestamps */
-void init_timestamps(timestamps_t* time_stamps) {
-    memset(time_stamps, 0, sizeof(timestamps_t));
-    
-    time_stamps->time_read = 0;
-    time_stamps->time_tens = 0;
-    time_stamps->time_trim = 0;
-    time_stamps->time_scale = 0;
-    time_stamps->time_chunk = 0;
-    time_stamps->time_copy = 0;
-    time_stamps->time_pad = 0;
-    time_stamps->time_accept = 0;
-    time_stamps->time_basecall = 0;
-    time_stamps->time_decode = 0;
-    time_stamps->time_stitch = 0;
-    time_stamps->time_write = 0;
-    time_stamps->time_total = 0;
-}

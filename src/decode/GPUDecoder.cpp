@@ -5,7 +5,7 @@
 #include <torch/torch.h>
 
 extern "C" {
-#include "koi.h"
+#include <koi.h>
 }
 #include <cuda_runtime.h>
 

@@ -79,14 +79,14 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  data FILE                   the data directory.\n");
     fprintf(fp_help, "\nbasic options:\n");
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
-    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size); 
+    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size);
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
     fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
-    fprintf(fp_help, "  -h                          shows help message and exits\n");   
+    fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\nadvanced options:\n");
@@ -228,138 +228,198 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
-    
-    // performance vars
-    timestamps_t ts;
-    uint64_t n_reads = 0;
-    uint64_t n_samples = 0;
-    
-    init_timestamps(&ts);
-    
-    // open slow5 file
-    slow5_file_t *sp = slow5_open(data,"r");
-    if (sp==NULL) {
-       fprintf(stderr,"Error in opening slow5 file\n");
-       exit(EXIT_FAILURE);
+
+/////////////////////////////////////////////////////////////////////////////
+
+    //initialise the core data structure
+    core_t* core = init_core(data, opt, model, realtime0);
+
+    int32_t counter=0;
+
+    //initialise a databatch
+    db_t* db = init_db(core);
+
+    ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
+    while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
+
+        //load a databatch
+        status = load_db(core, db);
+
+        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
+                realtime() - realtime0, cputime() / (realtime() - realtime0),
+                status.num_reads,status.num_bytes/(1000.0*1000.0));
+
+        //process a databatch
+        process_db(core, db);
+
+        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) processed\n", __func__,
+                realtime() - realtime0, cputime() / (realtime() - realtime0),
+                status.num_reads,status.num_bytes/(1000.0*1000.0));
+
+        //output print
+        output_db(core, db);
+
+        //free temporary
+        free_db_tmp(db);
+
+        if(opt.debug_break==counter){
+            break;
+        }
+        counter++;
     }
-    slow5_rec_t *rec = NULL;
-    int ret=0;
+
+    //free the databatch
+    free_db(db);
+
+    fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
+    fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
+
+    fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
+    fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
+    if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
+            fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
+            fprintf(stderr, "\n[%s]     - Calc time: %.3f sec",__func__, core->calc_time);
+    }
+    fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
+
+    fprintf(stderr,"\n");
+
+    //free the core data structure
+    free_core(core,opt);
+
+////////////////////////////////////////////////////////////////////////////
+
+    // // performance vars
+    // timestamps_t ts;
+    // uint64_t n_reads = 0;
+    // uint64_t n_samples = 0;
+
+    // init_timestamps(&ts);
+
+    // // open slow5 file
+    // slow5_file_t *sp = slow5_open(data,"r");
+    // if (sp==NULL) {
+    //    fprintf(stderr,"Error in opening slow5 file\n");
+    //    exit(EXIT_FAILURE);
+    // }
+    // slow5_rec_t *rec = NULL;
+    // int ret=0;
 
     // create model runner
     // only one is used for now
-    std::vector<Runner> runners;
-    
-#ifdef USE_GPU
-    if (strcmp(opt.device, "cpu") == 0) {
-        for (int i = 0; i < opt.num_runners; ++i) {
-            runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
-        }
-    } else {
-        for (int i = 0; i < opt.num_runners; ++i) {
-            runners.push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
-        }
-    }
-#else
-    if (strcmp(opt.device, "cpu") == 0) {
-        for (int i = 0; i < opt.num_runners; ++i) {
-            runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
-        }
-    } else {
-        fprintf(stderr, "Error. Please compile again for GPU\n");
-        exit(EXIT_FAILURE);
-    }
-#endif
+//     std::vector<Runner> runners;
 
-    // total time
-    ts.time_total = -realtime();
-    
-    while (1) {
-        ts.time_read -= realtime();
-        ret = slow5_get_next(&rec,sp);
-        ts.time_read += realtime();
-        
-        if (ret < 0) {
-            if (slow5_errno != SLOW5_ERR_EOF) {
-                fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n", slow5_errno);
-                return EXIT_FAILURE;
-            } else { //EOF file reached
-                break;
-            }
-        }
-        VERBOSE("processing signal %zu...", n_reads);
+// #ifdef USE_GPU
+//     if (strcmp(opt.device, "cpu") == 0) {
+//         for (int i = 0; i < opt.num_runners; ++i) {
+//             runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+//         }
+//     } else {
+//         for (int i = 0; i < opt.num_runners; ++i) {
+//             runners.push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+//         }
+//     }
+// #else
+//     if (strcmp(opt.device, "cpu") == 0) {
+//         for (int i = 0; i < opt.num_runners; ++i) {
+//             runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+//         }
+//     } else {
+//         fprintf(stderr, "Error. Please compile again for GPU\n");
+//         exit(EXIT_FAILURE);
+//     }
+// #endif
 
-        // convert record to tensor
-        VERBOSE("converting signal to tensor...%s", "");
-        ts.time_tens -= realtime();
-        torch::Tensor signal = tensor_from_record(rec);
-        ts.time_tens += realtime();
-        
-        n_samples += signal.size(0);
+    // // total time
+    // ts.time_total = -realtime();
 
-        // trim signal
-        VERBOSE("trimming tensor...%s", "");
-        ts.time_trim -= realtime();
-        int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
-        signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-        ts.time_trim += realtime();
-        
-        // scale signal
-        VERBOSE("scaling tensor...%s", "");
-        ts.time_scale -= realtime();
-        scale_signal(signal);
-        ts.time_scale += realtime();
-        
-        // split signal into chunks
-        VERBOSE("splitting signal into chunks...%s", "");
-        ts.time_chunk -= realtime();
-        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        ts.time_chunk += realtime();
+    // while (1) {
+    //     ts.time_read -= realtime();
+    //     ret = slow5_get_next(&rec,sp);
+    //     ts.time_read += realtime();
 
-        // decode signal
-        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *runners[0], ts);
-    
-        // stitch
-        VERBOSE("stitching %zu chunks...", chunks.size());
-        ts.time_stitch -= realtime();
-        std::string sequence;
-        std::string qstring;
-        stitch_chunks(chunks, sequence, qstring);
-        ts.time_stitch += realtime();
+    //     if (ret < 0) {
+    //         if (slow5_errno != SLOW5_ERR_EOF) {
+    //             fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n", slow5_errno);
+    //             return EXIT_FAILURE;
+    //         } else { //EOF file reached
+    //             break;
+    //         }
+    //     }
+    //     VERBOSE("processing signal %zu...", n_reads);
 
-        // print output
-        VERBOSE("writing output into %s", opt.out_path == NULL ? "stdout" : opt.out_path);
-        ts.time_write -= realtime();
-        write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
-        ts.time_write += realtime();
+    //     // convert record to tensor
+    //     VERBOSE("converting signal to tensor...%s", "");
+    //     ts.time_tens -= realtime();
+    //     torch::Tensor signal = tensor_from_record(rec);
+    //     ts.time_tens += realtime();
 
-        ++n_reads;
-    }
-    ts.time_total += realtime();
-    
+    //     n_samples += signal.size(0);
+
+    //     // trim signal
+    //     VERBOSE("trimming tensor...%s", "");
+    //     ts.time_trim -= realtime();
+    //     int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
+    //     signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+    //     ts.time_trim += realtime();
+
+    //     // scale signal
+    //     VERBOSE("scaling tensor...%s", "");
+    //     ts.time_scale -= realtime();
+    //     scale_signal(signal);
+    //     ts.time_scale += realtime();
+
+    //     // split signal into chunks
+    //     VERBOSE("splitting signal into chunks...%s", "");
+    //     ts.time_chunk -= realtime();
+    //     std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+    //     ts.time_chunk += realtime();
+
+    //     // decode signal
+    //     basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *runners[0], ts);
+
+    //     // stitch
+    //     VERBOSE("stitching %zu chunks...", chunks.size());
+    //     ts.time_stitch -= realtime();
+    //     std::string sequence;
+    //     std::string qstring;
+    //     stitch_chunks(chunks, sequence, qstring);
+    //     ts.time_stitch += realtime();
+
+    //     // print output
+    //     VERBOSE("writing output into %s", opt.out_path == NULL ? "stdout" : opt.out_path);
+    //     ts.time_write -= realtime();
+    //     write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
+    //     ts.time_write += realtime();
+
+    //     ++n_reads;
+    // }
+    // ts.time_total += realtime();
+
     // print perofrmance times
-    fprintf(stdout, "\npeformance summary\n");
-    fprintf(stdout, "reads completed:       %zu\n", n_reads);
-    fprintf(stdout, "samples/s:             %f\n", n_samples / ts.time_total);
-    fprintf(stdout, "time to read:          %f\n", ts.time_read);
-    fprintf(stdout, "time to conv tensor:   %f\n", ts.time_tens);
-    fprintf(stdout, "time to trim:          %f\n", ts.time_trim);
-    fprintf(stdout, "time to scale:         %f\n", ts.time_scale);
-    fprintf(stdout, "time to chunk:         %f\n", ts.time_chunk);
-    fprintf(stdout, "time to copy:          %f\n", ts.time_copy);
-    fprintf(stdout, "time to zero pad:      %f\n", ts.time_pad);
-    fprintf(stdout, "time to accept:        %f\n", ts.time_pad);
-    fprintf(stdout, "time to basecall:      %f\n", ts.time_basecall);
-    fprintf(stdout, "time to decode:        %f\n", ts.time_decode);
-    fprintf(stdout, "time to stitch:        %f\n", ts.time_stitch);
-    fprintf(stdout, "time to write:         %f\n", ts.time_write);
-    fprintf(stderr,"\n");
+    // fprintf(stdout, "\npeformance summary\n");
+    // fprintf(stdout, "reads completed:       %zu\n", n_reads);
+    // fprintf(stdout, "samples/s:             %f\n", n_samples / ts.time_total);
+    // fprintf(stdout, "time to read:          %f\n", ts.time_read);
+    // fprintf(stdout, "time to conv tensor:   %f\n", ts.time_tens);
+    // fprintf(stdout, "time to trim:          %f\n", ts.time_trim);
+    // fprintf(stdout, "time to scale:         %f\n", ts.time_scale);
+    // fprintf(stdout, "time to chunk:         %f\n", ts.time_chunk);
+    // fprintf(stdout, "time to copy:          %f\n", ts.time_copy);
+    // fprintf(stdout, "time to zero pad:      %f\n", ts.time_pad);
+    // fprintf(stdout, "time to accept:        %f\n", ts.time_pad);
+    // fprintf(stdout, "time to basecall:      %f\n", ts.time_basecall);
+    // fprintf(stdout, "time to decode:        %f\n", ts.time_decode);
+    // fprintf(stdout, "time to stitch:        %f\n", ts.time_stitch);
+    // fprintf(stdout, "time to write:         %f\n", ts.time_write);
+    // fprintf(stderr,"\n");
 
-    slow5_rec_free(rec);
-    slow5_close(sp);
-    
+    // slow5_rec_free(rec);
+    // slow5_close(sp);
+
     if (opt.out != stdout) {
         fclose(opt.out);
     }
-    
+
     return 0;
 }

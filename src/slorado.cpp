@@ -39,13 +39,21 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
+#include "decode/GPUDecoder.h"
+#include "decode/CPUDecoder.h"
+#include "signal_prep.h"
+#include "basecall.h"
+#include "writer.h"
+#include "utils/stitch.h"
+
 #include <slow5/slow5.h>
 
 #include <sys/wait.h>
 #include <unistd.h>
 
+
 /* initialise the core data structure */
-core_t* init_core(char *slow5file, opt_t opt,double realtime0) {
+core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core_t* core = (core_t*)malloc(sizeof(core_t));
     MALLOC_CHK(core);
@@ -56,8 +64,28 @@ core_t* init_core(char *slow5file, opt_t opt,double realtime0) {
         exit(EXIT_FAILURE);
     }
 
-
     core->opt = opt;
+
+#ifdef USE_GPU
+    if (strcmp(opt.device, "cpu") == 0) {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            core->runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        }
+    } else {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            core->runners.push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        }
+    }
+#else
+    if (strcmp(opt.device, "cpu") == 0) {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            core->runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        }
+    } else {
+        fprintf(stderr, "Error. Please compile again for GPU\n");
+        exit(EXIT_FAILURE);
+    }
+#endif
 
     //realtime0
     core->realtime0=realtime0;
@@ -68,6 +96,8 @@ core_t* init_core(char *slow5file, opt_t opt,double realtime0) {
 
     core->sum_bytes=0;
     core->total_reads=0; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+
+    init_timestamps(&core->ts);
 
 #ifdef HAVE_ACC
     if (core->opt.flag & SLORADO_ACC) {
@@ -111,9 +141,20 @@ db_t* init_db(core_t* core) {
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
 
+    db->sequence = (char**)malloc(db->capacity_rec*sizeof(char*));
+    MALLOC_CHK(db->sequence);
+
+    db->qstring = (char**)malloc(db->capacity_rec*sizeof(char*));
+    MALLOC_CHK(db->qstring);
+
+    db->chunks = (std::vector<Chunk>*)malloc(db->capacity_rec*sizeof(std::vector<Chunk>));
+    MALLOC_CHK(db->chunks);
+
+    db->signal = (torch::Tensor *)malloc(db->capacity_rec*sizeof(torch::Tensor));
+    MALLOC_CHK(db->signal);
+
     db->total_reads=0;
     db->sum_bytes=0;
-
 
     return db;
 }
@@ -188,43 +229,136 @@ void mean_single(core_t* core,db_t* db, int32_t i){
 
 }
 
-void work_per_single_read(core_t* core,db_t* db, int32_t i){
-    parse_single(core,db,i);
-    mean_single(core,db,i);
+
+void preprocess_signal(core_t* core,db_t* db, int32_t i){
+
+    slow5_rec_t* rec = db->slow5_rec[i];
+    uint64_t len_raw_signal = rec->len_raw_signal;
+    opt_t opt = core->opt;
+
+    if(len_raw_signal>0){
+        torch::Tensor signal = tensor_from_record(rec);
+        int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
+        signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+        scale_signal(signal);
+        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        VERBOSE("Read %s has %d chunks\n", rec->read_id, chunks.size());
+        db->chunks[i] = chunks;
+        VERBOSE("%s","assigned\n");
+        db->signal[i] = signal;
+        VERBOSE("%s","assigned signal\n");
+    }
+
 }
 
-void mean_db(core_t* core, db_t* db) {
-#ifdef HAVE_ACC
-    if (core->opt.flag & SLORADO_ACC) {
-        VERBOSE("%s","Aligning reads with accel");
-        work_db(core,db,mean_single);
-    }
-#endif
 
-    if (!(core->opt.flag & SLORADO_ACC)) {
-        //fprintf(stderr, "cpu\n");
-        work_db(core,db,mean_single);
+
+void basecall_signal(core_t* core,db_t* db, int32_t i){
+
+    slow5_rec_t* rec = db->slow5_rec[i];
+    uint64_t len_raw_signal = rec->len_raw_signal;
+    opt_t opt = core->opt;
+    timestamps_t ts = core->ts;
+
+    if(len_raw_signal>0){
+
+        std::vector<Chunk> chunks = db->chunks[i];
+        torch::Tensor signal = db->signal[i];
+        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+
     }
+
 }
+
+void basecall_db(core_t* core, db_t* db) {
+
+
+    for(int32_t i=0;i<db->n_rec;i++){
+        basecall_signal(core,db,i);
+    }
+
+
+}
+
+
+void postprocess_signal(core_t* core,db_t* db, int32_t i){
+
+    slow5_rec_t* rec = db->slow5_rec[i];
+    uint64_t len_raw_signal = rec->len_raw_signal;
+    opt_t opt = core->opt;
+
+    if(len_raw_signal>0){
+
+        std::vector<Chunk> chunks = db->chunks[i];
+        std::string sequence;
+        std::string qstring;
+        stitch_chunks(chunks, sequence, qstring);
+        db->sequence[i] = strdup(sequence.c_str());
+        assert(db->sequence[i] != NULL);
+        db->qstring[i] = strdup(qstring.c_str());
+        assert(db->qstring[i] != NULL);
+    }
+
+}
+
+
+
+// void work_per_single_read(core_t* core,db_t* db, int32_t i){
+//     parse_single(core,db,i);
+//     preprocess_signal(core,db,i);
+//     mean_single(core,db,i);
+
+// }
+
+// void mean_db(core_t* core, db_t* db) {
+// #ifdef HAVE_ACC
+//     if (core->opt.flag & SLORADO_ACC) {
+//         VERBOSE("%s","Aligning reads with accel");
+//         work_db(core,db,mean_single);
+//     }
+// #endif
+
+//     if (!(core->opt.flag & SLORADO_ACC)) {
+//         fprintf(stderr, "cpu\n");
+//         work_db(core,db,mean_single);
+//     }
+//     VERBOSE("Read %d\n",0);
+// }
 
 
 void process_db(core_t* core,db_t* db){
     double proc_start = realtime();
 
-    if(core->opt.flag & SLORADO_PRF || core->opt.flag & SLORADO_ACC){
+    // if(core->opt.flag & SLORADO_PRF || core->opt.flag & SLORADO_ACC){
         double a = realtime();
         work_db(core,db,parse_single);
         double b = realtime();
         core->parse_time += (b-a);
+        VERBOSE("%s","Parsed reads\n");
 
         a = realtime();
-        mean_db(core,db);
+        work_db(core,db,preprocess_signal);
         b = realtime();
         core->calc_time += (b-a);
+        VERBOSE("%s","Preprocessed reads\n");
 
-    } else {
-        work_db(core, db, work_per_single_read);
-    }
+        a = realtime();
+        basecall_db(core,db);
+        b = realtime();
+        core->calc_time += (b-a);
+        VERBOSE("%s","Basecalled reads\n");
+
+
+        a = realtime();
+        work_db(core,db,postprocess_signal);
+        b = realtime();
+        core->calc_time += (b-a);
+        VERBOSE("%s","Postprocessed reads\n");
+
+
+    // } else {
+    //     work_db(core, db, work_per_single_read);
+    // }
 
     double proc_end = realtime();
     core->process_db_time += (proc_end-proc_start);
@@ -239,7 +373,7 @@ void output_db(core_t* core, db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->n_rec; i++) {
         if(db->slow5_rec[i]->len_raw_signal>0){
-            printf("%s\t%f\n",db->slow5_rec[i]->read_id,db->means[i]);
+            write_to_file(core->opt.out, db->sequence[i], db->qstring[i], db->slow5_rec[i]->read_id, (core->opt.flag & SLORADO_EFQ) != 0);
         }
     }
 
@@ -257,6 +391,8 @@ void free_db_tmp(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->n_rec; ++i) {
         free(db->mem_records[i]);
+        free(db->sequence[i]);
+        free(db->qstring[i]);
     }
 }
 
@@ -271,6 +407,10 @@ void free_db(db_t* db) {
     free(db->mem_records);
     free(db->mem_bytes);
     free(db->means);
+    free(db->chunks);
+    free(db->signal);
+    free(db->sequence);
+    free(db->qstring);
     free(db);
 }
 
@@ -289,11 +429,31 @@ void init_opt(opt_t* opt) {
     opt->num_runners = 1;
 
     opt->out = stdout;
-    
+
     opt->flag |= SLORADO_EFQ;
-    
+
 #ifdef HAVE_ACC
     opt->flag |= SLORADO_ACC;
 #endif
 
+}
+
+
+/* initialise timestamps */
+void init_timestamps(timestamps_t* time_stamps) {
+    memset(time_stamps, 0, sizeof(timestamps_t));
+
+    time_stamps->time_read = 0;
+    time_stamps->time_tens = 0;
+    time_stamps->time_trim = 0;
+    time_stamps->time_scale = 0;
+    time_stamps->time_chunk = 0;
+    time_stamps->time_copy = 0;
+    time_stamps->time_pad = 0;
+    time_stamps->time_accept = 0;
+    time_stamps->time_basecall = 0;
+    time_stamps->time_decode = 0;
+    time_stamps->time_stitch = 0;
+    time_stamps->time_write = 0;
+    time_stamps->time_total = 0;
 }

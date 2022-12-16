@@ -34,6 +34,9 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdint.h>
 #include <slow5/slow5.h>
+#include <vector>
+#include "nn/ModelRunner.h"
+#include "Chunk.h"
 
 #define SLORADO_VERSION "0.1.0"
 
@@ -43,7 +46,7 @@ SOFTWARE.
 
 #define SLORADO_PRF 0x001 //cpu-profile mode
 #define SLORADO_ACC 0x002 //accelerator enable
-#define SLORADO_EFQ 0x003 //emit fastq enable
+#define SLORADO_EFQ 0x004 //emit fastq enable
 
 #define WORK_STEAL 1 //simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 //stealing threshold
@@ -81,6 +84,12 @@ typedef struct {
 
     double *means;
 
+    std::vector<Chunk> *chunks;
+    torch::Tensor *signal;
+
+    char **sequence;
+    char **qstring;
+
     //stats
     int64_t sum_bytes;
     int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
@@ -88,7 +97,23 @@ typedef struct {
 
 } db_t;
 
+/* time stamps */
+typedef struct {
+    double_t time_read;
+    double_t time_tens;
+    double_t time_trim;
+    double_t time_scale;
+    double_t time_chunk;
+    double_t time_copy;
+    double_t time_pad;
+    double_t time_accept;
+    double_t time_basecall;
+    double_t time_decode;
+    double_t time_stitch;
+    double_t time_write;
+    double_t time_total;
 
+} timestamps_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
@@ -99,6 +124,10 @@ typedef struct {
     // options
     opt_t opt;
 
+    // create model runner
+    // only one is used for now
+    std::vector<Runner> runners;
+
     //realtime0
     double realtime0;
 
@@ -107,6 +136,7 @@ typedef struct {
     double parse_time;
     double calc_time;
     double output_time;
+    timestamps_t ts;
 
     //stats //set by output_db
     int64_t sum_bytes;
@@ -146,7 +176,7 @@ typedef struct {
 void init_opt(opt_t* opt);
 
 /* initialise the core data structure */
-core_t* init_core(char *slow5file, opt_t opt, double realtime0);
+core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0);
 
 /* initialise a data batch */
 db_t* init_db(core_t* core);
@@ -175,5 +205,7 @@ void free_db(db_t* db);
 
 /* free the core data structure */
 void free_core(core_t* core,opt_t opt);
+
+void init_timestamps(timestamps_t* time_stamps);
 
 #endif
