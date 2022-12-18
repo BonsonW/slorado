@@ -84,16 +84,15 @@ typedef struct {
 
     double *means;
 
-    std::vector<Chunk> *chunks;
+    std::vector<std::vector<Chunk>> chunks;
     torch::Tensor *signal;
 
-    char **sequence;
-    char **qstring;
+    std::vector<char *> sequence;
+    std::vector<char *> qstring;
 
     //stats
     int64_t sum_bytes;
     int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
-
 
 } db_t;
 

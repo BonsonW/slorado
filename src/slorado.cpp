@@ -50,6 +50,7 @@ SOFTWARE.
 
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
 
 
 /* initialise the core data structure */
@@ -140,15 +141,10 @@ db_t* init_db(core_t* core) {
 
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
-
-    db->sequence = (char**)malloc(db->capacity_rec*sizeof(char*));
-    MALLOC_CHK(db->sequence);
-
-    db->qstring = (char**)malloc(db->capacity_rec*sizeof(char*));
-    MALLOC_CHK(db->qstring);
-
-    db->chunks = (std::vector<Chunk>*)malloc(db->capacity_rec*sizeof(std::vector<Chunk>));
-    MALLOC_CHK(db->chunks);
+    
+    db->chunks.resize(db->capacity_rec, std::vector<Chunk>());
+    db->sequence.resize(db->capacity_rec, NULL);
+    db->qstring.resize(db->capacity_rec, NULL);
 
     db->signal = (torch::Tensor *)malloc(db->capacity_rec*sizeof(torch::Tensor));
     MALLOC_CHK(db->signal);
@@ -242,7 +238,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
         signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
         scale_signal(signal);
         std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        VERBOSE("Read %s has %d chunks\n", rec->read_id, chunks.size());
+        VERBOSE("Read %s has %zu chunks\n", rec->read_id, chunks.size());
         db->chunks[i] = chunks;
         VERBOSE("%s","assigned\n");
         db->signal[i] = signal;
@@ -407,10 +403,7 @@ void free_db(db_t* db) {
     free(db->mem_records);
     free(db->mem_bytes);
     free(db->means);
-    free(db->chunks);
     free(db->signal);
-    free(db->sequence);
-    free(db->qstring);
     free(db);
 }
 

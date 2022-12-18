@@ -11,6 +11,7 @@
 #include "misc.h"
 #include "nn/ModelRunner.h"
 #include "Chunk.h"
+#include "slorado.h"
 
 #include <vector>
 
