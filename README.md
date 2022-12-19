@@ -22,7 +22,7 @@ bash scripts/install-koi.sh
 cd build
 rm -r ./* && cmake ..
 make -j
-./slorado basecaller -o one_read.fastq ../models/dna_r9.4.1_e8.1_fast@v3.4 ../test/one_read.slow5
+./slorado basecaller -o one_read.fastq ../models/dna_r9.4.1_e8.1_fast@v3.4 ../test/one_read.slow5 -v 5
 ```
 
 The commands to install zlib development libraries on some popular distributions:

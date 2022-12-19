@@ -84,11 +84,11 @@ typedef struct {
 
     double *means;
 
-    std::vector<std::vector<Chunk>> chunks;
+    std::vector<std::vector<Chunk>> *chunks;
     torch::Tensor *signal;
 
-    std::vector<char *> sequence;
-    std::vector<char *> qstring;
+    std::vector<char *> *sequence;
+    std::vector<char *> *qstring;
 
     //stats
     int64_t sum_bytes;

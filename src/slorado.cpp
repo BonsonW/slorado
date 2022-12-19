@@ -141,10 +141,11 @@ db_t* init_db(core_t* core) {
 
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
-    
-    db->chunks.resize(db->capacity_rec, std::vector<Chunk>());
-    db->sequence.resize(db->capacity_rec, NULL);
-    db->qstring.resize(db->capacity_rec, NULL);
+
+    db->chunks = new std::vector<std::vector<Chunk>>(db->capacity_rec, std::vector<Chunk>());
+    db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
+    db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
+
 
     db->signal = (torch::Tensor *)malloc(db->capacity_rec*sizeof(torch::Tensor));
     MALLOC_CHK(db->signal);
@@ -239,7 +240,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
         scale_signal(signal);
         std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         VERBOSE("Read %s has %zu chunks\n", rec->read_id, chunks.size());
-        db->chunks[i] = chunks;
+        (*db->chunks)[i] = chunks;
         VERBOSE("%s","assigned\n");
         db->signal[i] = signal;
         VERBOSE("%s","assigned signal\n");
@@ -258,7 +259,7 @@ void basecall_signal(core_t* core,db_t* db, int32_t i){
 
     if(len_raw_signal>0){
 
-        std::vector<Chunk> chunks = db->chunks[i];
+        std::vector<Chunk> chunks = (*db->chunks)[i];
         torch::Tensor signal = db->signal[i];
         basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
 
@@ -285,14 +286,14 @@ void postprocess_signal(core_t* core,db_t* db, int32_t i){
 
     if(len_raw_signal>0){
 
-        std::vector<Chunk> chunks = db->chunks[i];
+        std::vector<Chunk> chunks = (*db->chunks)[i];
         std::string sequence;
         std::string qstring;
         stitch_chunks(chunks, sequence, qstring);
-        db->sequence[i] = strdup(sequence.c_str());
-        assert(db->sequence[i] != NULL);
-        db->qstring[i] = strdup(qstring.c_str());
-        assert(db->qstring[i] != NULL);
+        (*db->sequence)[i] = strdup(sequence.c_str());
+        assert((*db->sequence)[i] != NULL);
+        (*db->qstring)[i] = strdup(qstring.c_str());
+        assert((*db->qstring)[i] != NULL);
     }
 
 }
@@ -369,7 +370,7 @@ void output_db(core_t* core, db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->n_rec; i++) {
         if(db->slow5_rec[i]->len_raw_signal>0){
-            write_to_file(core->opt.out, db->sequence[i], db->qstring[i], db->slow5_rec[i]->read_id, (core->opt.flag & SLORADO_EFQ) != 0);
+            write_to_file(core->opt.out, (*db->sequence)[i], (*db->qstring)[i], db->slow5_rec[i]->read_id, (core->opt.flag & SLORADO_EFQ) != 0);
         }
     }
 
@@ -387,8 +388,8 @@ void free_db_tmp(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->n_rec; ++i) {
         free(db->mem_records[i]);
-        free(db->sequence[i]);
-        free(db->qstring[i]);
+        free((*db->sequence)[i]);
+        free((*db->qstring)[i]);
     }
 }
 
@@ -403,6 +404,9 @@ void free_db(db_t* db) {
     free(db->mem_records);
     free(db->mem_bytes);
     free(db->means);
+    free(db->chunks);
+    free(db->sequence);
+    free(db->qstring);
     free(db->signal);
     free(db);
 }
