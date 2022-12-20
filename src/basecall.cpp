@@ -11,51 +11,26 @@
 #include "misc.h"
 #include "error.h"
 
-void basecall_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t &ts) {
-    int chunk_idx = 0;
-    int n_batched_chunks = 0;
-    int cur_batch = 0;
-    
-    while (chunk_idx < chunks.size()) {
-        int batch_offset = cur_batch * batch_size;
-        
-        for (; chunk_idx < chunks.size() && n_batched_chunks < batch_size; ++chunk_idx, ++n_batched_chunks) {
-            // copy the chunk into the input tensor
-            ts.time_copy -= realtime();
-            auto input_slice = signal.index({ torch::indexing::Slice(chunks[chunk_idx].input_offset, chunks[chunk_idx].input_offset + chunk_size) });
-            size_t slice_size = input_slice.size(0);
-            ts.time_copy += realtime();
-        
-            // zero-pad any non-full chunks
-            if (slice_size != chunk_size) {
-                ts.time_pad -= realtime();
-                input_slice = torch::constant_pad_nd(input_slice, c10::IntArrayRef{ 0, int(chunk_size - slice_size) }, 0);
-                ts.time_pad += realtime();
-            }
-            
-            ts.time_accept -= realtime();
-            model_runner.accept_chunk(chunk_idx - batch_offset, input_slice);
-            ts.time_accept += realtime();
-        }
-        
-        VERBOSE("basecalling %d chunks of batch %d...", n_batched_chunks, cur_batch);
-        ts.time_basecall -= realtime();
-        torch::Tensor scores = model_runner.call_chunks();
-        ts.time_basecall += realtime();
-        
-        VERBOSE("decoding %d chunks of batch %d...", n_batched_chunks, cur_batch);
-        ts.time_decode -= realtime();
-        std::vector<DecodedChunk> decoded_chunks = model_runner.decode_chunks(scores, chunk_idx);
-        ts.time_decode += realtime();
-
-        for (int i = 0; i < n_batched_chunks; ++i) {
-            chunks[batch_offset + i].seq = decoded_chunks[i].sequence;
-            chunks[batch_offset + i].qstring = decoded_chunks[i].qstring;
-            chunks[batch_offset + i].moves = decoded_chunks[i].moves;
-        }
-        
-        n_batched_chunks = 0;
-        ++cur_batch;
+void basecall_chunks(std::vector<torch::Tensor *> &tensors, std::vector<Chunk *> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t &ts) {
+    for (int i = 0; i < tensors.size(); ++i) {
+        ts.time_accept -= realtime();
+        model_runner.accept_chunk(i, *tensors[i]);
+        ts.time_accept += realtime();
     }
+
+    VERBOSE("%s", "basecalling chunks");
+    ts.time_basecall -= realtime();
+    torch::Tensor scores = model_runner.call_chunks();
+    ts.time_basecall += realtime();
     
+    VERBOSE("%s", "decoding chunks");
+    ts.time_decode -= realtime();
+    std::vector<DecodedChunk> decoded_chunks = model_runner.decode_chunks(scores, chunks.size());
+    ts.time_decode += realtime();
+
+    for (int i = 0; i < chunks.size(); ++i) {
+        chunks[i]->seq = decoded_chunks[i].sequence;
+        chunks[i]->qstring = decoded_chunks[i].qstring;
+        chunks[i]->moves = decoded_chunks[i].moves;
+    }
 }

@@ -36,6 +36,7 @@ SOFTWARE.
 
 #include "Chunk.h"
 #include "slorado.h"
+#include "error.h"
 
 #define EPS 1e-9f;
 
@@ -98,19 +99,35 @@ torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     return torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to("cpu");
 }
 
-std::vector<Chunk> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap) {
-    std::vector<Chunk> chunks;
+std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap) {
+    std::vector<Chunk *> chunks;
 
     size_t raw_size = tensor.size(0);
     size_t offset = 0;
     size_t chunk_in_read_idx = 0;
     size_t signal_chunk_step = chunk_size - overlap;
-    chunks.push_back(Chunk(offset, chunk_in_read_idx++, chunk_size));
+    chunks.push_back(new Chunk(offset, chunk_in_read_idx++, chunk_size));
 
     while (offset + chunk_size < raw_size) {
         offset = std::min(offset + signal_chunk_step, raw_size - chunk_size);
-        chunks.push_back(Chunk(offset, chunk_in_read_idx++, chunk_size));
+        chunks.push_back(new Chunk(offset, chunk_in_read_idx++, chunk_size));
     }
 
     return chunks;
+}
+
+std::vector<torch::Tensor *> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, int chunk_size) {
+    std::vector<torch::Tensor *> tensors;
+    
+    for (int i = 0; i < chunks.size(); ++i) {
+        torch::Tensor *signal_chunk = new torch::Tensor(signal.index({ torch::indexing::Slice(chunks[i]->input_offset, chunks[i]->input_offset + chunk_size) }));
+        size_t slice_size = signal_chunk->size(0);
+    
+        if (slice_size != chunk_size) {
+            *signal_chunk = torch::constant_pad_nd(*signal_chunk, c10::IntArrayRef{ 0, int(chunk_size - slice_size) }, 0);
+        }
+        tensors.push_back(signal_chunk);
+    }
+
+    return tensors;
 }

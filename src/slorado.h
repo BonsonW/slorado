@@ -35,6 +35,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <slow5/slow5.h>
 #include <vector>
+#include <memory>
 #include "nn/ModelRunner.h"
 #include "Chunk.h"
 
@@ -84,8 +85,8 @@ typedef struct {
 
     double *means;
 
-    std::vector<std::vector<Chunk>> *chunks;
-    torch::Tensor *signal;
+    std::vector<std::vector<Chunk *>> *chunks;
+    std::vector<std::vector<torch::Tensor *>> *tensors;
 
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;

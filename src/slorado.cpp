@@ -142,13 +142,10 @@ db_t* init_db(core_t* core) {
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
 
-    db->chunks = new std::vector<std::vector<Chunk>>(db->capacity_rec, std::vector<Chunk>());
+    db->chunks = new std::vector<std::vector<Chunk *>>(db->capacity_rec, std::vector<Chunk *>());
+    db->tensors = new std::vector<std::vector<torch::Tensor *>>(db->capacity_rec, std::vector<torch::Tensor *>());
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
     db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
-
-
-    db->signal = (torch::Tensor *)malloc(db->capacity_rec*sizeof(torch::Tensor));
-    MALLOC_CHK(db->signal);
 
     db->total_reads=0;
     db->sum_bytes=0;
@@ -233,48 +230,73 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
 
-    if(len_raw_signal>0){
+    if (len_raw_signal>0) {
         torch::Tensor signal = tensor_from_record(rec);
+        
         int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
         signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+        
         scale_signal(signal);
-        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        
+        std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         VERBOSE("Read %s has %zu chunks\n", rec->read_id, chunks.size());
+        
         (*db->chunks)[i] = chunks;
-        VERBOSE("%s","assigned\n");
-        db->signal[i] = signal;
-        VERBOSE("%s","assigned signal\n");
+        VERBOSE("%s","assigned chunks\n");
+        
+        std::vector<torch::Tensor *> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
+        
+        (*db->tensors)[i] = tensors;
+        VERBOSE("%s","assigned tensors\n");
     }
-
 }
 
 
 
-void basecall_signal(core_t* core,db_t* db, int32_t i){
+// void basecall_signal(core_t* core,db_t* db, int32_t i){
 
-    slow5_rec_t* rec = db->slow5_rec[i];
-    uint64_t len_raw_signal = rec->len_raw_signal;
-    opt_t opt = core->opt;
-    timestamps_t ts = core->ts;
+//     slow5_rec_t* rec = db->slow5_rec[i];
+//     uint64_t len_raw_signal = rec->len_raw_signal;
+//     opt_t opt = core->opt;
+//     timestamps_t ts = core->ts;
 
-    if(len_raw_signal>0){
+//     if (len_raw_signal > 0) {
+//         std::vector<Chunk *> chunks = (*db->chunks)[i];
+//         std::vector<torch::Tensor *> tensors = (*db->tensors)[i];
+//         basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+//     }
 
-        std::vector<Chunk> chunks = (*db->chunks)[i];
-        torch::Tensor signal = db->signal[i];
-        basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
-
-    }
-
-}
+// }
 
 void basecall_db(core_t* core, db_t* db) {
+    opt_t opt = core->opt;
+    timestamps_t ts = core->ts;
+    
+    std::vector<Chunk *> chunks;
+    std::vector<torch::Tensor *> tensors;
+    
+    int chunks_pushed = 0;
+    
+    // basecall_chunks((*db->tensors)[0], (*db->chunks)[0], opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+    
+    for (int read_idx = 0; read_idx < (*db->chunks).size(); ++read_idx) {
+        for (int chunk_idx = 0; chunk_idx < (*db->chunks)[read_idx].size(); ++chunk_idx) {
+        
+            chunks.push_back(((*db->chunks)[read_idx])[chunk_idx]);
+            tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
+            
+            if (chunks.size() == opt.batch_size) {
 
-
-    for(int32_t i=0;i<db->n_rec;i++){
-        basecall_signal(core,db,i);
+                basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+                chunks.clear();
+                tensors.clear();
+            }
+        }
     }
-
-
+    
+    if (chunks.size() > 0) {
+        basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+    }
 }
 
 
@@ -284,14 +306,16 @@ void postprocess_signal(core_t* core,db_t* db, int32_t i){
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
 
-    if(len_raw_signal>0){
-
-        std::vector<Chunk> chunks = (*db->chunks)[i];
+    if (len_raw_signal > 0) {
+        std::vector<Chunk *> chunks = (*db->chunks)[i];
+        
         std::string sequence;
         std::string qstring;
         stitch_chunks(chunks, sequence, qstring);
+        
         (*db->sequence)[i] = strdup(sequence.c_str());
         assert((*db->sequence)[i] != NULL);
+        
         (*db->qstring)[i] = strdup(qstring.c_str());
         assert((*db->qstring)[i] != NULL);
     }
@@ -399,6 +423,9 @@ void free_db(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
         slow5_rec_free(db->slow5_rec[i]);
+        
+        for (Chunk *chunk: (*db->chunks)[i]) free(chunk);
+        for (torch::Tensor *tensor: (*db->tensors)[i]) free(tensor);
     }
     free(db->slow5_rec);
     free(db->mem_records);
@@ -407,7 +434,7 @@ void free_db(db_t* db) {
     free(db->chunks);
     free(db->sequence);
     free(db->qstring);
-    free(db->signal);
+    free(db->tensors);
     free(db);
 }
 
