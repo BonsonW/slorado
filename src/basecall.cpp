@@ -18,12 +18,12 @@ void basecall_chunks(std::vector<torch::Tensor> &tensors, std::vector<Chunk *> &
         ts->time_accept += realtime();
     }
 
-    VERBOSE("%s", "basecalling chunks");
+    LOG_TRACE("%s", "basecalling chunks");
     ts->time_basecall -= realtime();
     torch::Tensor scores = model_runner.call_chunks();
     ts->time_basecall += realtime();
 
-    VERBOSE("%s", "decoding chunks");
+    LOG_TRACE("%s", "decoding chunks");
     ts->time_decode -= realtime();
     std::vector<DecodedChunk> decoded_chunks = model_runner.decode_chunks(scores, chunks.size());
     ts->time_decode += realtime();

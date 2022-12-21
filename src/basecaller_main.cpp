@@ -236,9 +236,6 @@ int basecaller_main(int argc, char* argv[]) {
 
     int32_t counter=0;
 
-    uint64_t n_reads = 0;
-    uint64_t n_samples = 0;
-
     //initialise a databatch
     db_t* db = init_db(core);
 
@@ -269,8 +266,6 @@ int basecaller_main(int argc, char* argv[]) {
             break;
         }
         counter++;
-        n_reads += status.num_reads;
-        n_samples += (status.num_bytes/2);
     }
 
     //free the databatch
