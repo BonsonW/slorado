@@ -11,10 +11,10 @@
 #include "misc.h"
 #include "error.h"
 
-void basecall_chunks(std::vector<torch::Tensor *> &tensors, std::vector<Chunk *> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t *ts) {
+void basecall_chunks(std::vector<torch::Tensor> &tensors, std::vector<Chunk *> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t *ts) {
     for (int i = 0; i < tensors.size(); ++i) {
         ts->time_accept -= realtime();
-        model_runner.accept_chunk(i, *tensors[i]);
+        model_runner.accept_chunk(i, tensors[i]);
         ts->time_accept += realtime();
     }
 

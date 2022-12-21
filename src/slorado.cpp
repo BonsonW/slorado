@@ -149,7 +149,7 @@ db_t* init_db(core_t* core) {
     MALLOC_CHK(db->means);
 
     db->chunks = new std::vector<std::vector<Chunk *>>(db->capacity_rec, std::vector<Chunk *>());
-    db->tensors = new std::vector<std::vector<torch::Tensor *>>(db->capacity_rec, std::vector<torch::Tensor *>());
+    db->tensors = new std::vector<std::vector<torch::Tensor>>(db->capacity_rec, std::vector<torch::Tensor>());
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
     db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
 
@@ -250,7 +250,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
         (*db->chunks)[i] = chunks;
         LOG_DEBUG("%s","assigned chunks");
 
-        std::vector<torch::Tensor *> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
+        std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
 
         (*db->tensors)[i] = tensors;
         LOG_DEBUG("%s","assigned tensors");
@@ -279,7 +279,7 @@ void basecall_db(core_t* core, db_t* db) {
     timestamps_t *ts = &(core->ts);
 
     std::vector<Chunk *> chunks;
-    std::vector<torch::Tensor *> tensors;
+    std::vector<torch::Tensor> tensors;
 
     int chunks_pushed = 0;
 
@@ -430,7 +430,6 @@ void free_db(db_t* db) {
         slow5_rec_free(db->slow5_rec[i]);
 
         for (Chunk *chunk: (*db->chunks)[i]) free(chunk);
-        for (torch::Tensor *tensor: (*db->tensors)[i]) free(tensor);
     }
     free(db->slow5_rec);
     free(db->mem_records);

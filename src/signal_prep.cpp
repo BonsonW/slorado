@@ -116,15 +116,15 @@ std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, i
     return chunks;
 }
 
-std::vector<torch::Tensor *> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, int chunk_size) {
-    std::vector<torch::Tensor *> tensors;
+std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, int chunk_size) {
+    std::vector<torch::Tensor> tensors;
     
     for (int i = 0; i < chunks.size(); ++i) {
-        torch::Tensor *signal_chunk = new torch::Tensor(signal.index({ torch::indexing::Slice(chunks[i]->input_offset, chunks[i]->input_offset + chunk_size) }));
-        size_t slice_size = signal_chunk->size(0);
+        torch::Tensor signal_chunk = signal.index({ torch::indexing::Slice(chunks[i]->input_offset, chunks[i]->input_offset + chunk_size) });
+        size_t slice_size = signal_chunk.size(0);
     
         if (slice_size != chunk_size) {
-            *signal_chunk = torch::constant_pad_nd(*signal_chunk, c10::IntArrayRef{ 0, int(chunk_size - slice_size) }, 0);
+            signal_chunk = torch::constant_pad_nd(signal_chunk, c10::IntArrayRef{ 0, int(chunk_size - slice_size) }, 0);
         }
         tensors.push_back(signal_chunk);
     }

@@ -86,7 +86,7 @@ typedef struct {
     double *means;
 
     std::vector<std::vector<Chunk *>> *chunks;
-    std::vector<std::vector<torch::Tensor *>> *tensors;
+    std::vector<std::vector<torch::Tensor>> *tensors;
 
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
