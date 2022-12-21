@@ -134,7 +134,9 @@ typedef struct {
     double load_db_time;
     double process_db_time;
     double parse_time;
-    double calc_time;
+    double preproc_time;
+    double basecall_time;
+    double postproc_time;
     double output_time;
     timestamps_t ts;
 

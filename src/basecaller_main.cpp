@@ -236,6 +236,9 @@ int basecaller_main(int argc, char* argv[]) {
 
     int32_t counter=0;
 
+    uint64_t n_reads = 0;
+    uint64_t n_samples = 0;
+
     //initialise a databatch
     db_t* db = init_db(core);
 
@@ -266,6 +269,8 @@ int basecaller_main(int argc, char* argv[]) {
             break;
         }
         counter++;
+        n_reads += status.num_reads;
+        n_samples += (status.num_bytes/2);
     }
 
     //free the databatch
@@ -276,10 +281,14 @@ int basecaller_main(int argc, char* argv[]) {
 
     fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
     fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
-    if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
+    //if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
-            fprintf(stderr, "\n[%s]     - Calc time: %.3f sec",__func__, core->calc_time);
-    }
+            fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
+            fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
+            fprintf(stderr, "\n[%s]          - Basecall time: %.3f sec",__func__, core->ts.time_basecall);
+            fprintf(stderr, "\n[%s]          - Decode: %.3f sec",__func__, core->ts.time_decode);
+            fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
+    //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
 
     fprintf(stderr,"\n");
@@ -397,21 +406,21 @@ int basecaller_main(int argc, char* argv[]) {
     // ts.time_total += realtime();
 
     // print perofrmance times
-    // fprintf(stdout, "\npeformance summary\n");
-    // fprintf(stdout, "reads completed:       %zu\n", n_reads);
-    // fprintf(stdout, "samples/s:             %f\n", n_samples / ts.time_total);
-    // fprintf(stdout, "time to read:          %f\n", ts.time_read);
-    // fprintf(stdout, "time to conv tensor:   %f\n", ts.time_tens);
-    // fprintf(stdout, "time to trim:          %f\n", ts.time_trim);
-    // fprintf(stdout, "time to scale:         %f\n", ts.time_scale);
-    // fprintf(stdout, "time to chunk:         %f\n", ts.time_chunk);
-    // fprintf(stdout, "time to copy:          %f\n", ts.time_copy);
-    // fprintf(stdout, "time to zero pad:      %f\n", ts.time_pad);
-    // fprintf(stdout, "time to accept:        %f\n", ts.time_pad);
-    // fprintf(stdout, "time to basecall:      %f\n", ts.time_basecall);
-    // fprintf(stdout, "time to decode:        %f\n", ts.time_decode);
-    // fprintf(stdout, "time to stitch:        %f\n", ts.time_stitch);
-    // fprintf(stdout, "time to write:         %f\n", ts.time_write);
+    // fprintf(stderr, "\npeformance summary\n");
+    // fprintf(stderr, "reads completed:       %zu\n", n_reads);
+    // fprintf(stderr, "samples/s:             %f\n", n_samples / core->ts.time_total);
+    // fprintf(stderr, "time to read:          %f\n", core->ts.time_read);
+    // fprintf(stderr, "time to conv tensor:   %f\n", core->ts.time_tens);
+    // fprintf(stderr, "time to trim:          %f\n", core->ts.time_trim);
+    // fprintf(stderr, "time to scale:         %f\n", core->ts.time_scale);
+    // fprintf(stderr, "time to chunk:         %f\n", core->ts.time_chunk);
+    // fprintf(stderr, "time to copy:          %f\n", core->ts.time_copy);
+    // fprintf(stderr, "time to zero pad:      %f\n", core->ts.time_pad);
+    // fprintf(stderr, "time to accept:        %f\n", core->ts.time_pad);
+    // fprintf(stderr, "time to basecall:      %f\n", core->ts.time_basecall);
+    // fprintf(stderr, "time to decode:        %f\n", core->ts.time_decode);
+    // fprintf(stderr, "time to stitch:        %f\n", core->ts.time_stitch);
+    // fprintf(stderr, "time to write:         %f\n", core->ts.time_write);
     // fprintf(stderr,"\n");
 
     // slow5_rec_free(rec);

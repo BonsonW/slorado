@@ -11,22 +11,22 @@
 #include "misc.h"
 #include "error.h"
 
-void basecall_chunks(std::vector<torch::Tensor *> &tensors, std::vector<Chunk *> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t &ts) {
+void basecall_chunks(std::vector<torch::Tensor *> &tensors, std::vector<Chunk *> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t *ts) {
     for (int i = 0; i < tensors.size(); ++i) {
-        ts.time_accept -= realtime();
+        ts->time_accept -= realtime();
         model_runner.accept_chunk(i, *tensors[i]);
-        ts.time_accept += realtime();
+        ts->time_accept += realtime();
     }
 
     VERBOSE("%s", "basecalling chunks");
-    ts.time_basecall -= realtime();
+    ts->time_basecall -= realtime();
     torch::Tensor scores = model_runner.call_chunks();
-    ts.time_basecall += realtime();
-    
+    ts->time_basecall += realtime();
+
     VERBOSE("%s", "decoding chunks");
-    ts.time_decode -= realtime();
+    ts->time_decode -= realtime();
     std::vector<DecodedChunk> decoded_chunks = model_runner.decode_chunks(scores, chunks.size());
-    ts.time_decode += realtime();
+    ts->time_decode += realtime();
 
     for (int i = 0; i < chunks.size(); ++i) {
         chunks[i]->seq = decoded_chunks[i].sequence;

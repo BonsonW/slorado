@@ -93,6 +93,9 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->load_db_time=0;
     core->process_db_time=0;
+    core->preproc_time=0;
+    core->basecall_time=0;
+    core->postproc_time=0;
     core->output_time=0;
 
     core->sum_bytes=0;
@@ -232,22 +235,22 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 
     if (len_raw_signal>0) {
         torch::Tensor signal = tensor_from_record(rec);
-        
+
         int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
         signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-        
+
         scale_signal(signal);
-        
+
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        VERBOSE("Read %s has %zu chunks\n", rec->read_id, chunks.size());
-        
+        LOG_DEBUG("Read %s has %zu chunks", rec->read_id, chunks.size());
+
         (*db->chunks)[i] = chunks;
-        VERBOSE("%s","assigned chunks\n");
-        
+        LOG_DEBUG("%s","assigned chunks");
+
         std::vector<torch::Tensor *> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
-        
+
         (*db->tensors)[i] = tensors;
-        VERBOSE("%s","assigned tensors\n");
+        LOG_DEBUG("%s","assigned tensors");
     }
 }
 
@@ -270,21 +273,21 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 
 void basecall_db(core_t* core, db_t* db) {
     opt_t opt = core->opt;
-    timestamps_t ts = core->ts;
-    
+    timestamps_t *ts = &(core->ts);
+
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor *> tensors;
-    
+
     int chunks_pushed = 0;
-    
+
     // basecall_chunks((*db->tensors)[0], (*db->chunks)[0], opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
-    
+
     for (int read_idx = 0; read_idx < (*db->chunks).size(); ++read_idx) {
         for (int chunk_idx = 0; chunk_idx < (*db->chunks)[read_idx].size(); ++chunk_idx) {
-        
+
             chunks.push_back(((*db->chunks)[read_idx])[chunk_idx]);
             tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
-            
+
             if (chunks.size() == opt.batch_size) {
 
                 basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
@@ -293,7 +296,7 @@ void basecall_db(core_t* core, db_t* db) {
             }
         }
     }
-    
+
     if (chunks.size() > 0) {
         basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
     }
@@ -308,14 +311,14 @@ void postprocess_signal(core_t* core,db_t* db, int32_t i){
 
     if (len_raw_signal > 0) {
         std::vector<Chunk *> chunks = (*db->chunks)[i];
-        
+
         std::string sequence;
         std::string qstring;
         stitch_chunks(chunks, sequence, qstring);
-        
+
         (*db->sequence)[i] = strdup(sequence.c_str());
         assert((*db->sequence)[i] != NULL);
-        
+
         (*db->qstring)[i] = strdup(qstring.c_str());
         assert((*db->qstring)[i] != NULL);
     }
@@ -355,26 +358,25 @@ void process_db(core_t* core,db_t* db){
         work_db(core,db,parse_single);
         double b = realtime();
         core->parse_time += (b-a);
-        VERBOSE("%s","Parsed reads\n");
+        LOG_TRACE("%s","Parsed reads");
 
         a = realtime();
         work_db(core,db,preprocess_signal);
         b = realtime();
-        core->calc_time += (b-a);
-        VERBOSE("%s","Preprocessed reads\n");
+        core->preproc_time += (b-a);
+        LOG_TRACE("%s","Preprocessed reads");
 
         a = realtime();
         basecall_db(core,db);
         b = realtime();
-        core->calc_time += (b-a);
-        VERBOSE("%s","Basecalled reads\n");
-
+        core->basecall_time += (b-a);
+        LOG_TRACE("%s","Basecalled reads");
 
         a = realtime();
         work_db(core,db,postprocess_signal);
         b = realtime();
-        core->calc_time += (b-a);
-        VERBOSE("%s","Postprocessed reads\n");
+        core->postproc_time += (b-a);
+        LOG_TRACE("%s","Postprocessed reads");
 
 
     // } else {
@@ -423,7 +425,7 @@ void free_db(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
         slow5_rec_free(db->slow5_rec[i]);
-        
+
         for (Chunk *chunk: (*db->chunks)[i]) free(chunk);
         for (torch::Tensor *tensor: (*db->tensors)[i]) free(tensor);
     }
