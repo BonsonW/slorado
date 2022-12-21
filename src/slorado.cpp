@@ -66,15 +66,17 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     }
 
     core->opt = opt;
-
+    
+    core->runners = new std::vector<Runner>();
+    
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
         }
     } else {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners.push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
         }
     }
 #else
@@ -123,6 +125,7 @@ void free_core(core_t* core,opt_t opt) {
 #endif
 
     slow5_close(core->sp);
+    free(core->runners);
     free(core);
 }
 
@@ -290,7 +293,7 @@ void basecall_db(core_t* core, db_t* db) {
 
             if (chunks.size() == opt.batch_size) {
 
-                basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+                basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), ts);
                 chunks.clear();
                 tensors.clear();
             }
@@ -298,7 +301,7 @@ void basecall_db(core_t* core, db_t* db) {
     }
 
     if (chunks.size() > 0) {
-        basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+        basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), ts);
     }
 }
 

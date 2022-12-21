@@ -126,7 +126,7 @@ typedef struct {
 
     // create model runner
     // only one is used for now
-    std::vector<Runner> runners;
+    std::vector<Runner> *runners;
 
     //realtime0
     double realtime0;
