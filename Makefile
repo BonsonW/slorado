@@ -8,7 +8,7 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I $(LIBTORCH_DIR)/include -I thirdparty/ \
 			-I thirdparty/tomlc99/
 CFLAGS	+= 	-g -Wall -O2
-CXXFLAGS   += -g -Wall -O2  -D_GLIBCXX_USE_CXX11_ABI=0 -std=c++14
+CXXFLAGS   += -g -Wall -O2  -std=c++14
 LIBS    += -Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			$(LIBTORCH_DIR)/lib/libtorch.so \
 			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
@@ -20,6 +20,11 @@ BUILD_DIR = build
 
 ifeq ($(zstd),1)
 LDFLAGS		+= -lzstd
+endif
+
+# https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
+ifeq ($(cxx11_abi),) #  cxx11_abi not defined
+CXXFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
 endif
 
 # change the tool name to what you want
