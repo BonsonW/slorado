@@ -37,8 +37,19 @@ SOFTWARE.
 #include "Chunk.h"
 #include "slorado.h"
 #include "error.h"
+#include "utils/tensor_utils.h"
 
 #define EPS 1e-9f;
+
+std::pair<float, float> normalisation(torch::Tensor& x) {
+    //Calculate shift and scale factors for normalisation.
+    auto quantiles = quantile_counting(x, torch::tensor({0.2, 0.9}));
+    float q20 = quantiles[0].item<float>();
+    float q90 = quantiles[1].item<float>();
+    float shift = std::max(10.0f, 0.51f * (q20 + q90));
+    float scale = std::max(1.0f, 0.53f * (q90 - q20));
+    return std::make_pair(shift, scale);
+}
 
 std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826){
     torch::Tensor med = x.median();
