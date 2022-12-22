@@ -8,9 +8,33 @@ This is a template repository is mostly for my own use, but also demonstrates th
 sudo apt-get install zlib1g-dev   #install zlib development libraries
 git clone --recursive https://github.com/BonsonW/slorado
 cd slorado
+```
+
+### Make
+
+CPU version:
+
+```
+scripts/install-torch10.sh
 make
 ./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
 ```
+
+CUDA GPU version:
+```
+scripts/install-torch10.sh
+bash scripts/install-koi.sh
+make cuda=1
+./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
+```
+
+advanced options:
+```
+make cuda=1 LIBTORCH_DIR=/path/to/torachlib CUDA_LIB=/path/to/cuda/library/
+```
+
+
+### CMake
 
 ```
 # For CMake
