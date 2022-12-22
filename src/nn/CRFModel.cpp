@@ -38,7 +38,6 @@ static bool cuda_lstm_is_quantized(int layer_size) {
 }
 #endif  // if USE_CUDA_LSTM
 
-namespace {
 template <class Model>
 ModuleHolder<AnyModule> populate_model(Model &&model,
                                        const std::filesystem::path &path,
@@ -55,11 +54,6 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
     auto holder = ModuleHolder<AnyModule>(module);
     return holder;
 }
-}  // namespace
-
-namespace dorado {
-
-namespace nn {
 
 struct ConvolutionImpl : Module {
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
@@ -591,8 +585,6 @@ TORCH_MODULE(CudaCRFModel);
 using CpuCRFModelImpl = CRFModelImpl<LSTMStack>;
 TORCH_MODULE(CpuCRFModel);
 
-}  // namespace nn
-
 CRFModelConfig load_crf_model_config(const std::filesystem::path &path) {
     const auto config_toml = toml::parse(path / "config.toml");
 
@@ -731,5 +723,3 @@ ModuleHolder<AnyModule> load_crf_model(const std::filesystem::path &path,
                               model_config.bias);
     }
 }
-
-}  // namespace dorado
