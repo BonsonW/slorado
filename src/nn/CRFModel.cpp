@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 #include <math.h>
-#include <nvtx3/nvtx3.hpp>
+// #include <nvtx3/nvtx3.hpp>
 #include <toml.hpp>
 #include <torch/torch.h>
 
@@ -565,7 +565,7 @@ struct CRFModelImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        nvtx3::scoped_range loop{"nn_forward"};
+        // nvtx3::scoped_range loop{"nn_forward"};
         return encoder->forward(x);
     }
 
