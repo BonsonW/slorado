@@ -9,12 +9,10 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I thirdparty/tomlc99/
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++14
-LIBS    += -Wl,-rpath,$(LIBTORCH_DIR)/lib \
-			$(LIBTORCH_DIR)/lib/libtorch.so \
+LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
-			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so \
-#-Wl,--as-needed $(LIBTORCH_DIR)libtorch/lib/libc10_cuda.so $(LIBTORCH_DIR)libtorch/lib/libc10.so   \
-#-Wl,--no-as-needed,"$(LIBTORCH_DIR)libtorch/lib/libtorch.so" -Wl,--as-needed $(LIBTORCH_DIR)libtorch/lib/libc10.so
+			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
+			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
 LDFLAGS  += $(LIBS) -lz -lm -lpthread -lstdc++fs
 BUILD_DIR = build
 
@@ -66,6 +64,7 @@ ifdef cuda
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I thirdparty/koi_lib/include -I $(CUDA_INC)
 	OBJ += $(BUILD_DIR)/GPUDecoder.o
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so"
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
 endif
 
