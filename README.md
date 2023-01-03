@@ -8,9 +8,41 @@ This is a template repository is mostly for my own use, but also demonstrates th
 sudo apt-get install zlib1g-dev   #install zlib development libraries
 git clone --recursive https://github.com/BonsonW/slorado
 cd slorado
+```
+
+The commands to install zlib development libraries on some popular distributions:
+
+```
+On Debian/Ubuntu : sudo apt-get install zlib1g-dev
+On Fedora/CentOS : sudo dnf/yum install zlib-devel
+On OS X : brew install zlib
+```
+
+### Make
+
+CPU version:
+
+```
+scripts/install-torch10.sh
 make
 ./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
 ```
+
+CUDA GPU version:
+```
+scripts/install-torch10.sh
+bash scripts/install-koi.sh
+make cuda=1
+./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
+```
+
+advanced options:
+```
+make cuda=1 LIBTORCH_DIR=/path/to/torachlib CUDA_LIB=/path/to/cuda/library/
+```
+
+
+### CMake
 
 ```
 # For CMake
@@ -24,13 +56,10 @@ rm -r ./* && cmake ..
 make -j && ./slorado basecaller -o one_read.fastq ../models/dna_r9.4.1_e8.1_fast@v3.4 ../test/one_read.slow5 -v 5
 ```
 
-The commands to install zlib development libraries on some popular distributions:
+if different cuda location, before cmake:
+export PATH=/usr/local/cuda-10.2/bin/:$PATH
 
-```
-On Debian/Ubuntu : sudo apt-get install zlib1g-dev
-On Fedora/CentOS : sudo dnf/yum install zlib-devel
-On OS X : brew install zlib
-```
+
 
 ## Calculate basecalling accuracy
 ```

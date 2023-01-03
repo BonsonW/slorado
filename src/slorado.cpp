@@ -66,9 +66,9 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     }
 
     core->opt = opt;
-    
+
     core->runners = new std::vector<Runner>();
-    
+
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
@@ -82,7 +82,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 #else
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
         }
     } else {
         fprintf(stderr, "Error. Please compile again for GPU\n");
