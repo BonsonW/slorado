@@ -5,13 +5,12 @@
 #include <c10/cuda/CUDAStream.h>
 #include <torch/torch.h>
 
-#include <filesystem>
 #include <memory>
 #include <vector>
 
 class CudaCaller;
 
-std::shared_ptr<CudaCaller> create_cuda_caller(const std::filesystem::path& model_path,
+std::shared_ptr<CudaCaller> create_cuda_caller(const std::string& model_path,
                                                int chunk_size,
                                                int batch_size,
                                                const std::string& device);
@@ -20,7 +19,7 @@ class CudaModelRunner : public ModelRunnerBase {
 public:
     CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_size, int batch_size);
     void accept_chunk(int chunk_idx, at::Tensor slice) final;
-    std::vector<DecodedChunk> call_chunks(int num_chunks) final;
+    torch::Tensor call_chunks() final;
     size_t model_stride() const final;
     size_t chunk_size() const final;
 

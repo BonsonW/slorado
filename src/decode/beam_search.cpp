@@ -3,7 +3,6 @@
 #include "fast_hash.h"
 
 #include <math.h>
-#include <spdlog/spdlog.h>
 #include <torch/torch.h>
 
 #include <algorithm>
@@ -450,7 +449,11 @@ float beam_search(const T* const scores,
         for (int shift_base = 0; shift_base < num_bases; shift_base++) {
             block_prob += float(timestep_posts[r_shift_idx + shift_base]);
         }
-        block_prob = std::clamp(block_prob, 0.0f, 1.0f);
+        if (block_prob < 0.0f) {
+            block_prob = 0.0f;
+        } else if (block_prob > 1.0f) {
+            block_prob = 1.0f;
+        }
         block_prob = powf(block_prob, 0.4f);  // Power fudge factor
 
         // Calculate a placeholder qscore for the "wrong" bases

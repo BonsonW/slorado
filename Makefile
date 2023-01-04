@@ -6,7 +6,7 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I src/ \
 			-I $(LIBTORCH_DIR)/include/torch/csrc/api/include \
 			-I $(LIBTORCH_DIR)/include -I thirdparty/ \
-			-I thirdparty/tomlc99/
+			-I thirdparty/toml11/
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++14
 LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
@@ -41,9 +41,9 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/CPUDecoder.o \
 	  $(BUILD_DIR)/fast_hash.o \
 	  $(BUILD_DIR)/CRFModel.o \
+	  $(BUILD_DIR)/CudaCRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
-	  $(BUILD_DIR)/toml.o \
 
 
 # add more objects here if needed
@@ -114,15 +114,15 @@ $(BUILD_DIR)/fast_hash.o: src/decode/fast_hash.cpp
 
 $(BUILD_DIR)/CRFModel.o: src/nn/CRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+	
+$(BUILD_DIR)/CudaCRFModel.o: src/nn/CudaCRFModel.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/stitch.o: src/utils/stitch.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/tensor_utils.o: src/utils/tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # follow the main.o above and add more objects here if needed
 

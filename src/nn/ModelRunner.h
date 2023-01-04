@@ -11,7 +11,8 @@
 class ModelRunnerBase {
 public:
     virtual void accept_chunk(int chunk_idx, at::Tensor slice) = 0;
-    virtual std::vector<DecodedChunk> call_chunks(int num_chunks) = 0;
+    virtual torch::Tensor call_chunks() = 0;
+    virtual std::vector<DecodedChunk> decode_chunks(const torch::Tensor &scores, int num_chunks) = 0;
     virtual size_t model_stride() const = 0;
     virtual size_t chunk_size() const = 0;
 };
@@ -21,12 +22,13 @@ using Runner = std::shared_ptr<ModelRunnerBase>;
 template <typename T>
 class ModelRunner : public ModelRunnerBase {
 public:
-    ModelRunner(const std::filesystem::path &model,
+    ModelRunner(const std::string &model_path,
                 const std::string &device,
                 int chunk_size,
                 int batch_size);
     void accept_chunk(int chunk_idx, at::Tensor slice) final;
-    std::vector<DecodedChunk> call_chunks(int num_chunks) final;
+    torch::Tensor call_chunks() final;
+    std::vector<DecodedChunk> decode_chunks(const torch::Tensor &scores, int num_chunks) final;
     size_t model_stride() const final { return m_model_stride; }
     size_t chunk_size() const final { return m_input.size(2); }
 
@@ -41,7 +43,7 @@ private:
 };
 
 template <typename T>
-ModelRunner<T>::ModelRunner(const std::filesystem::path &model_path,
+ModelRunner<T>::ModelRunner(const std::string &model_path,
                             const std::string &device,
                             int chunk_size,
                             int batch_size) {

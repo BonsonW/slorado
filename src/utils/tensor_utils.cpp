@@ -1,5 +1,4 @@
 #include <fstream>
-//#include <filesystem> todo:
 #include <experimental/filesystem>
 #include <torch/csrc/jit/serialization/pickle.h>
 #include "torch/torch.h"
@@ -58,18 +57,18 @@ std::vector<torch::Tensor> load_weights(const std::string& dir) {
 
     for (auto weight : tensors) {
         auto path = fs::path( dir ) / weight;
-        torch::load(weights, path.string());
+        torch::load(weights, path);
     }
 
     return weights;
 }
 
-std::vector<torch::Tensor> load_tensors(const std::filesystem::path& dir,
+std::vector<torch::Tensor> load_tensors(const std::string& dir,
                                         const std::vector<std::string>& tensors) {
     auto weights = std::vector<torch::Tensor>();
     for (auto tensor : tensors) {
-        auto path = dir / tensor;
-        torch::load(weights, path.string());
+        auto path = dir + "/" + tensor;
+        torch::load(weights, path);
     }
 
     return weights;
