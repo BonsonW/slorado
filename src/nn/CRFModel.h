@@ -2,7 +2,6 @@
 
 #include <torch/torch.h>
 
-#include <optional>
 #include <vector>
 
 // Values extracted from config.toml used in construction of the model module.
