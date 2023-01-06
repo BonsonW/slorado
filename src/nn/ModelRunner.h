@@ -88,9 +88,15 @@ template<typename T> ModelRunner<T>::ModelRunner(const std::string &model, const
         m_module = load_crf_model(model, batch_size, chunk_size, m_options);
         m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(torch::kF32).device(torch::kCPU)); //todo
     } else {
+#ifdef USE_KOI
         m_options = torch::TensorOptions().dtype(torch::kF16).device(device); //todo
         m_module = load_crf_model(model, batch_size, chunk_size, m_options);
         m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(torch::kF16).device(torch::kCPU)); //todo
+#else
+        m_options = torch::TensorOptions().dtype(torch::kF32).device(device); //todo
+        m_module = load_crf_model(model, batch_size, chunk_size, m_options);
+        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(torch::kF32).device(torch::kCPU)); //todo
+#endif
     }
 #else
     m_options = torch::TensorOptions().dtype(torch::kF32).device(device); //todo

@@ -4,14 +4,19 @@
 
 #include <torch/torch.h>
 
+#ifdef USE_KOI
 extern "C" {
 #include <koi.h>
 }
+#endif
+
+
 #include <cuda_runtime.h>
 
 std::vector<DecodedChunk> GPUDecoder::beam_search(torch::Tensor scores,
                                                   int num_chunks,
                                                   DecoderOptions options) {
+#ifdef USE_KOI
     scores = scores.transpose(1, 0).contiguous();
 
     long int N = scores.sizes()[0];
@@ -96,7 +101,12 @@ std::vector<DecodedChunk> GPUDecoder::beam_search(torch::Tensor scores,
     }
 
     return called_chunks;
+#else
+    return std::vector<DecodedChunk>();
+#endif
 }
+
+
 
 int GPUDecoder::get_cuda_device_id_from_device(const c10::Device& device) {
     if (!device.is_cuda() || !device.has_index()) {

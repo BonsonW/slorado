@@ -229,7 +229,15 @@ ModuleHolder<AnyModule> load_crf_model(const std::string& path, int batch_size, 
     // const auto state_len = 3;
 
     int outsize = pow(4, state_len) * 4;
+#ifdef USE_GPU
+    #ifdef USE_KOI
+        bool expand = options.device_opt().value() == torch::kCPU;
+    #else
+        bool expand = true;
+    #endif
+#else // USE_GPU
     bool expand = options.device_opt().value() == torch::kCPU;
+#endif
 
     auto state_dict = load_weights(path);
     auto model = CRFModel(insize, outsize, stride, expand);
