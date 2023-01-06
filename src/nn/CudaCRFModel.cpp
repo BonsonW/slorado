@@ -2,7 +2,7 @@
 
 #include "decode/GPUDecoder.h"
 
-#include <c10/cuda/CUDAGuard.h>
+// #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
 #include <toml.hpp>
 #include <torch/torch.h>
@@ -70,7 +70,7 @@ public:
 
     void cuda_thread_fn() {
         torch::InferenceMode guard;
-        c10::cuda::CUDAGuard device_guard(m_options.device());
+        // c10::cuda::CUDAGuard device_guard(m_options.device());
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
 
         while (true) {

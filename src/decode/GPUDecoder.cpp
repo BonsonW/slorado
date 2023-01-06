@@ -2,7 +2,7 @@
 
 #include "Decoder.h"
 
-#include <c10/cuda/CUDAGuard.h>
+// #include <c10/cuda/CUDAGuard.h>
 // #include <nvtx3/nvtx3.hpp>
 #include <torch/torch.h>
 
@@ -48,7 +48,7 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     auto sequence = moves_sequence_qstring[1];
     auto qstring = moves_sequence_qstring[2];
 
-    c10::cuda::CUDAGuard device_guard(scores.device());
+    // c10::cuda::CUDAGuard device_guard(scores.device());
     host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
