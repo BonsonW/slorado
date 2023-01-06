@@ -78,7 +78,12 @@ torch::Tensor quantile(const torch::Tensor t, const torch::Tensor q) {
     assert(q.dtype() == torch::kF32);
 
     auto tmp = t.clone();
-    auto [qval, qidx] = q.sort();
+
+    // auto [qval, qidx] = q.sort();
+    auto q_sorted = q.sort();
+    auto qval = std::get<0>(q_sorted);
+    auto qidx = std::get<1>(q_sorted);
+
     auto res = torch::empty_like(q);
 
     auto start = tmp.data_ptr<float>();
