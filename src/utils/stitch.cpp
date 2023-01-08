@@ -21,7 +21,7 @@ void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::str
     int start_pos = 0;
     std::vector<std::string> sequences;
     std::vector<std::string> qstrings;
-    for (int i = 0; i < chunks.size() - 1; i++){
+    for (size_t i = 0; i < chunks.size() - 1; i++){
         Chunk &current_chunk = *chunks[i];
         Chunk &next_chunk = *chunks[i+1];
         int overlap_size = (current_chunk.raw_chunk_size + current_chunk.input_offset) - (next_chunk.input_offset);
@@ -29,7 +29,7 @@ void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::str
         int mid_point = overlap_down_sampled / 2;
 
         int current_chunk_bases_to_trim = 0;
-        for (int i = current_chunk.moves.size() - 1; i > current_chunk.moves.size() - mid_point; i--){
+        for (int i = current_chunk.moves.size() - 1; i > (current_chunk.moves.size() - mid_point); i--){
             current_chunk_bases_to_trim += (int) current_chunk.moves[i];
         }
 

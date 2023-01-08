@@ -117,11 +117,11 @@ torch::Tensor quantile_counting(const torch::Tensor t, const torch::Tensor q) {
 
     auto res = torch::empty_like(q);
 
-    for (size_t idx = 0; idx < q.numel(); idx++) {
+    for (int idx = 0; idx < q.numel(); idx++) {
         int threshold = q[idx].item<float>() * (size - 1);
-        for (int i = 0; i <= counts.size(); ++i) {
+        for (size_t i = 0; i <= counts.size(); ++i) {
             if (counts[i] > threshold) {
-                res[idx] = i + range_min;
+                res[idx] = (int)i + range_min;
                 break;
             }
         }

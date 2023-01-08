@@ -127,10 +127,10 @@ std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, i
     return chunks;
 }
 
-std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, int chunk_size) {
+std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, size_t chunk_size) {
     std::vector<torch::Tensor> tensors;
     
-    for (int i = 0; i < chunks.size(); ++i) {
+    for (size_t i = 0; i < chunks.size(); ++i) {
         torch::Tensor signal_chunk = signal.index({ torch::indexing::Slice(chunks[i]->input_offset, chunks[i]->input_offset + chunk_size) });
         size_t slice_size = signal_chunk.size(0);
     

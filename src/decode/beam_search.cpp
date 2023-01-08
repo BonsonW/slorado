@@ -124,12 +124,12 @@ float beam_search(const T* const scores,
         throw std::range_error("Beamsearch max_beam_width cannot be greater than 256.");
     }
 
-    // Some values we need
-#ifdef REMOVE_FIXED_BEAM_STAYS
-    size_t num_transitions = num_states * num_bases;
-#else
-    size_t num_transitions = num_states * (num_bases + 1);
-#endif
+    // Some values we might need
+// #ifdef REMOVE_FIXED_BEAM_STAYS
+//     size_t num_transitions = num_states * num_bases;
+// #else
+//     size_t num_transitions = num_states * (num_bases + 1);
+// #endif
     constexpr uint64_t hash_seed = 0x880355f21e6d1965ULL;
     const float log_beam_cut =
             (beam_cut > 0.0f) ? (temperature * logf(beam_cut)) : std::numeric_limits<float>::max();
