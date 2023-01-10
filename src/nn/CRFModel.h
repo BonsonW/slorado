@@ -14,6 +14,7 @@ struct CRFModelConfig {
     bool bias;
     bool clamp;
     // If there is a decomposition of the linear layer, this is the bottleneck feature size.
+    bool decomposition;
     int out_features;
     int state_len;
     // Output feature size of the linear layer.  Dictated by state_len and whether

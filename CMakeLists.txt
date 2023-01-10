@@ -47,7 +47,6 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/utils/stitch.cpp
         ${CMAKE_SOURCE_DIR}/src/utils/cuda_utils.cpp
         ${CMAKE_SOURCE_DIR}/src/nn/CRFModel.cpp
-        ${CMAKE_SOURCE_DIR}/src/nn/CudaCRFModel.cpp
         ${CMAKE_SOURCE_DIR}/src/nn/ModelRunner.h
         ${CMAKE_SOURCE_DIR}/src/decode/beam_search.cpp
         ${CMAKE_SOURCE_DIR}/src/decode/CPUDecoder.cpp

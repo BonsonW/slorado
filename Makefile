@@ -62,7 +62,7 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I thirdparty/koi_lib/include -I $(CUDA_INC)
-	OBJ += $(BUILD_DIR)/GPUDecoder.o $(BUILD_DIR)/CudaCRFModel.o 
+	OBJ += $(BUILD_DIR)/GPUDecoder.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
 endif
@@ -112,9 +112,6 @@ $(BUILD_DIR)/fast_hash.o: src/decode/fast_hash.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/CRFModel.o: src/nn/CRFModel.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/CudaCRFModel.o: src/nn/CudaCRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/stitch.o: src/utils/stitch.cpp

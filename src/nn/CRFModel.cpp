@@ -124,7 +124,6 @@ struct LSTMStackImpl : Module {
         auto y1 = std::get<0>(t1);
         auto h1 = std::get<1>(t1);
 
-
         x = y1.flip(1);
 
         // rnn2
@@ -132,10 +131,9 @@ struct LSTMStackImpl : Module {
         auto y2 = std::get<0>(t2);
         auto h2 = std::get<1>(t2);
 
-        x = y2;
+        x = y2.flip(1);
 
         // rnn3
-        x = x.flip(1);
         auto t3 = rnn3(x);
         auto y3 = std::get<0>(t3);
         auto h3 = std::get<1>(t3);
@@ -146,9 +144,8 @@ struct LSTMStackImpl : Module {
         auto t4 = rnn4(x);
         auto y4 = std::get<0>(t4);
         auto h4 = std::get<1>(t4);
-        x = y4;
 
-        x = x.flip(1);
+        x = y4.flip(1);
 
         // rnn5
         auto t5 = rnn5(x);
@@ -208,7 +205,7 @@ struct CRFModelImpl : Module {
         rnns = register_module(
                 "rnns", LSTMStackType(config.insize, batch_size, chunk_size / config.stride));
 
-        if (config.out_features != -1) {
+        if (config.decomposition) {
             // The linear layer is decomposed into 2 matmuls.
             const int decomposition = config.out_features;
             linear1 = register_module("linear1", Linear(config.insize, decomposition));
@@ -269,6 +266,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     config.stride = 1;
     config.bias = true;
     config.clamp = false;
+    config.decomposition = false;
 
     // The encoder scale only appears in pre-v4 models.  In v4 models
     // the value of 1 is used.
@@ -290,7 +288,13 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             } else if (type.compare("linear") == 0) {
                 // Specifying out_features implies a decomposition of the linear layer matrix
                 // multiply with a bottleneck before the final feature size.
-                config.out_features = toml::find_or<int>(segment, "out_features", -1); // I have no idea if -1 is an invalid number but will have to use for now without C++17 in place of std::optional
+                try {
+                    config.out_features = toml::find<int>(segment, "out_features");
+                    config.decomposition = true;
+                } catch (std::out_of_range e) {
+                    config.decomposition = false;
+                }
+                 // I have no idea if -1 is an invalid number but will have to use for now without C++17 in place of std::optional
             } else if (type.compare("clamp") == 0) {
                 config.clamp = true;
             } else if (type.compare("linearcrfencoder") == 0) {
@@ -358,6 +362,7 @@ std::vector<torch::Tensor> load_crf_model_weights(const std::string &dir,
         tensors.push_back("10.linear.weight.tensor");
     }
 
+    fprintf(stderr, "loading tensors from %s\n", dir.c_str());
     return load_tensors(dir, tensors);
 }
 
@@ -366,8 +371,8 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const int batch_size,
                                        const int chunk_size,
                                        const torch::TensorOptions &options) {
-    const bool expand_blanks = true;
+    const bool expand_blanks = false;
     auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);
-    return populate_model(model, path, options, model_config.out_features,
+    return populate_model(model, path, options, model_config.decomposition, // check if out_features is null
                           model_config.bias);
 }
