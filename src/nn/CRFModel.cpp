@@ -294,7 +294,6 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
                 } catch (std::out_of_range e) {
                     config.decomposition = false;
                 }
-                 // I have no idea if -1 is an invalid number but will have to use for now without C++17 in place of std::optional
             } else if (type.compare("clamp") == 0) {
                 config.clamp = true;
             } else if (type.compare("linearcrfencoder") == 0) {
@@ -362,7 +361,6 @@ std::vector<torch::Tensor> load_crf_model_weights(const std::string &dir,
         tensors.push_back("10.linear.weight.tensor");
     }
 
-    fprintf(stderr, "loading tensors from %s\n", dir.c_str());
     return load_tensors(dir, tensors);
 }
 
@@ -373,6 +371,6 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const torch::TensorOptions &options) {
     const bool expand_blanks = false;
     auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);
-    return populate_model(model, path, options, model_config.decomposition, // check if out_features is null
+    return populate_model(model, path, options, model_config.decomposition,
                           model_config.bias);
 }
