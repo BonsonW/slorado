@@ -42,7 +42,7 @@ SOFTWARE.
 #define EPS 1e-9f;
 
 std::pair<float, float> normalisation(torch::Tensor& x) {
-    //Calculate shift and scale factors for normalisation.
+    // Calculate shift and scale factors for normalisation.
     auto quantiles = quantile_counting(x, torch::tensor({0.2, 0.9}));
     float q20 = quantiles[0].item<float>();
     float q90 = quantiles[1].item<float>();
@@ -58,36 +58,34 @@ std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826)
     return {med.item<float>(), mad.item<float>()};
 }
 
-int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, int min_elements) {
+int trim_signal(torch::Tensor signal,
+                     int window_size,
+                     float threshold,
+                     int min_elements,
+                     int max_samples,
+                     float max_trim) {
     int min_trim = 10;
-    signal = signal.index({torch::indexing::Slice(min_trim, torch::indexing::None)});
-
-    int trim_start = -(window_size * 100);
-
-    torch::Tensor trimmed = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-    std::pair<float, float> med_mad = calculate_med_mad(trimmed);
-
-    float threshold = med_mad.first + med_mad.second * threshold_factor;
-
-    int64_t signal_len = signal.size(0);
-    int num_windows = signal_len / window_size;
-
     bool seen_peak = false;
+    int num_samples = std::min(max_samples, static_cast<int>(signal.size(0)));
+    int num_windows = num_samples / window_size;
 
     for (int pos = 0; pos < num_windows; pos++) {
-        int start = pos * window_size;
+        int start = pos * window_size + min_trim;
         int end = start + window_size;
 
-        torch::Tensor window = signal.index({torch::indexing::Slice(start, end)});
-        torch::Tensor elements = window > threshold;
-
+        auto window = signal.index({torch::indexing::Slice(start, end)});
+        auto elements = window > threshold;
 
         if ((elements.sum().item<int>() > min_elements) || seen_peak) {
             seen_peak = true;
             if (window[-1].item<float>() > threshold) {
                 continue;
             }
-            return std::min(end + min_trim, (int) signal.size(0));
+            if (end >= num_samples || end >= (max_trim * signal.size(0))) {
+                return min_trim;
+            } else {
+                return end;
+            }
         }
     }
 
