@@ -239,18 +239,9 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     if (len_raw_signal>0) {
         torch::Tensor signal = tensor_from_record(rec);
 
-        auto t0 = normalisation(signal);
-        auto shift = std::get<0>(t0);
-        auto scale = std::get<1>(t0);
-        signal = (signal - shift) / scale;
-        float threshold = shift + scale * 2.4;
-
-        // 8000 value may be changed in future. Currently this is found to work well.
-        int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}), threshold);
-
+        int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
         signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
 
-        fprintf(stderr, "scaling signal...\n");
         scale_signal(signal);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
