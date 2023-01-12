@@ -115,12 +115,12 @@ std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstr
 #endif
 }
 
-int GPUDecoder::get_cuda_device_id_from_device(const c10::Device& device) {
-    if (!device.is_cuda() || !device.has_index()) {
-        std::stringstream ss;
-        ss << "Unable to extract CUDA device ID from device " << device;
-        throw std::runtime_error(ss.str());
-    }
+// int GPUDecoder::get_cuda_device_id_from_device(const c10::Device& device) {
+//     if (!device.is_cuda() || !device.has_index()) {
+//         std::stringstream ss;
+//         ss << "Unable to extract CUDA device ID from device " << device;
+//         throw std::runtime_error(ss.str());
+//     }
 
-    return device.index();
-}
+//     return device.index();
+// }
