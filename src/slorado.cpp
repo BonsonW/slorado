@@ -77,6 +77,9 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     } else {
         for (int i = 0; i < opt.num_runners; ++i) {
             core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        #ifndef USE_KOI
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+        #endif
         }
     }
 #else
@@ -293,7 +296,15 @@ void basecall_db(core_t* core, db_t* db) {
 
             if (chunks.size() == opt.batch_size) {
 
-                basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), ts);
+                #ifdef USE_GPU
+                #ifdef USE_KOI
+                    basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
+                #else
+                    basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[1]), ts);
+                #endif
+                #else
+                basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
+                #endif
                 chunks.clear();
                 tensors.clear();
             }
@@ -301,7 +312,15 @@ void basecall_db(core_t* core, db_t* db) {
     }
 
     if (chunks.size() > 0) {
-        basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), ts);
+        #ifdef USE_GPU
+        #ifdef USE_KOI
+            basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
+        #else
+            basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[1]), ts);
+        #endif
+        #else
+        basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
+        #endif
     }
 }
 

@@ -11,7 +11,7 @@
 #include "misc.h"
 #include "error.h"
 
-void basecall_chunks(std::vector<torch::Tensor> &tensors, std::vector<Chunk *> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, timestamps_t *ts) {
+void basecall_chunks(std::vector<torch::Tensor> &tensors, std::vector<Chunk *> &chunks, int chunk_size, int batch_size, ModelRunnerBase &model_runner, ModelRunnerBase &decoder, timestamps_t *ts) {
     for (size_t i = 0; i < tensors.size(); ++i) {
         ts->time_accept -= realtime();
         model_runner.accept_chunk(i, tensors[i]);
@@ -25,7 +25,7 @@ void basecall_chunks(std::vector<torch::Tensor> &tensors, std::vector<Chunk *> &
 
     LOG_TRACE("%s", "decoding chunks");
     ts->time_decode -= realtime();
-    std::vector<DecodedChunk> decoded_chunks = model_runner.decode_chunks(scores, chunks.size());
+    std::vector<DecodedChunk> decoded_chunks = decoder.decode_chunks(scores, chunks.size());
     ts->time_decode += realtime();
 
     for (size_t i = 0; i < chunks.size(); ++i) {

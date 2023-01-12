@@ -369,7 +369,16 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const int batch_size,
                                        const int chunk_size,
                                        const torch::TensorOptions &options) {
-    const bool expand_blanks = false;
+
+#ifdef USE_GPU
+    #ifdef USE_KOI
+        bool expand_blanks = options.device_opt().value() == torch::kCPU;
+    #else
+        bool expand_blanks = true;
+    #endif
+#else // USE_GPU
+    bool expand_blanks = options.device_opt().value() == torch::kCPU;
+#endif
     auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);
     return populate_model(model, path, options, model_config.decomposition,
                           model_config.bias);
