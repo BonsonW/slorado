@@ -17,7 +17,7 @@ for var in "$@"
 do
     clean_fscache
     if [ "$var" = "slorado" ]; then
-        /usr/bin/time -v ./slorado basecaller -o ${OUTPUT_DIR}/slorado_calls.fastq -t 40 -x cuda:0 -B500M -K500 ${MODEL} ${BLOW5_FILE} 2>${OUTPUT_DIR}/slorado_log.txt
+        /usr/bin/time -v ./slorado basecaller -o ${OUTPUT_DIR}/slorado_calls.fastq -t 40 -x cuda:0 -B500M -K500 --verbose 6 ${MODEL} ${BLOW5_FILE} 2>${OUTPUT_DIR}/slorado_log.txt
         get_accuracy "slorado_calls.fastq" "slorado_accuracy.txt"
         rm ${OUTPUT_DIR}/slorado_calls.fastq
     elif [ "$var" = "dorado_release" ]; then

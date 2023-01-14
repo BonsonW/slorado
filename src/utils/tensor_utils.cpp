@@ -2,6 +2,7 @@
 #include <experimental/filesystem>
 #include <torch/csrc/jit/serialization/pickle.h>
 #include "torch/torch.h"
+#include "error.h"
 
 namespace fs = std::experimental::filesystem;
 
@@ -62,15 +63,16 @@ torch::Tensor quantile_counting(const torch::Tensor t, const torch::Tensor q) {
     for (int i = 0; i < size; ++i) {
         counts[p[i] - range_min]++;
     }
+
     std::partial_sum(counts.begin(), counts.end(), counts.begin());
 
     auto res = torch::empty_like(q);
 
-    for (int idx = 0; idx < q.numel(); idx++) {
+    for (size_t idx = 0; idx < q.numel(); idx++) {
         int threshold = q[idx].item<float>() * (size - 1);
-        for (size_t i = 0; i <= counts.size(); ++i) {
+        for (int i = 0; i <= counts.size(); ++i) {
             if (counts[i] > threshold) {
-                res[idx] = (int)i + range_min;
+                res[idx] = i + range_min;
                 break;
             }
         }

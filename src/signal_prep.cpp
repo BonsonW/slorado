@@ -36,6 +36,7 @@ SOFTWARE.
 
 #include "Chunk.h"
 #include "slorado.h"
+#include "signal_prep.h"
 #include "error.h"
 #include "utils/tensor_utils.h"
 
@@ -56,6 +57,25 @@ std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826)
     torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
 
     return {med.item<float>(), mad.item<float>()};
+}
+
+void scale_signal(torch::Tensor &signal, float scaling, float offset) {
+    auto t1 = normalisation(signal);
+    auto shift = std::get<0>(t1);
+    auto scale = std::get<1>(t1);
+
+    LOG_TRACE("%s", "fucksdkadkf");
+
+    signal = (signal - shift) / scale;
+
+    scale = scaling * scale;
+    shift = scaling * (shift + offset);
+
+    float threshold = shift + scale * 2.4;
+
+    // 8000 value may be changed in future. Currently this is found to work well.
+    int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}), threshold);
+    signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
 }
 
 int trim(torch::Tensor signal,
@@ -92,28 +112,11 @@ int trim(torch::Tensor signal,
     return min_trim;
 }
 
-void scale_signal(torch::Tensor &signal, float scaling, float offset) {
-    auto t1 = normalisation(signal);
-    auto shift = std::get<0>(t1);
-    auto scale = std::get<1>(t1);
-
-    signal = (signal - shift) / scale;
-
-    scale = scaling * scale;
-    shift = scaling * (shift + offset);
-
-    float threshold = shift + scale * 2.4;
-
-    // 8000 value may be changed in future. Currently this is found to work well.
-    int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}), threshold);
-    signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-}
-
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
     std::vector<float> floatTmp(tmp.begin(), tmp.end());
     
-    torch::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32);
+    torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
     return torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to("cpu");
 }
 

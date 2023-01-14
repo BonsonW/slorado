@@ -232,7 +232,6 @@ void mean_single(core_t* core,db_t* db, int32_t i){
 
 }
 
-
 void preprocess_signal(core_t* core,db_t* db, int32_t i){
 
     slow5_rec_t* rec = db->slow5_rec[i];
@@ -240,9 +239,9 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     opt_t opt = core->opt;
 
     if (len_raw_signal>0) {
-        torch::Tensor signal = tensor_from_record(rec);
+        torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
 
-        scale_signal(signal, rec->offset);
+        scale_signal(signal, rec->range / rec->digitisation, rec->offset);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         LOG_DEBUG("Read %s has %zu chunks", rec->read_id, chunks.size());
