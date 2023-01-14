@@ -58,48 +58,55 @@ std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826)
     return {med.item<float>(), mad.item<float>()};
 }
 
-int trim_signal(torch::Tensor signal, int window_size, float threshold_factor, int min_elements) {
+int trim(torch::Tensor signal,
+                     int window_size,
+                     float threshold,
+                     int min_elements,
+                     int max_samples,
+                     float max_trim) {
     int min_trim = 10;
-    signal = signal.index({torch::indexing::Slice(min_trim, torch::indexing::None)});
-
-    int trim_start = -(window_size * 100);
-
-    torch::Tensor trimmed = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-    std::pair<float, float> med_mad = calculate_med_mad(trimmed);
-
-    float threshold = med_mad.first + med_mad.second * threshold_factor;
-
-    int64_t signal_len = signal.size(0);
-    int num_windows = signal_len / window_size;
-
     bool seen_peak = false;
+    int num_samples = std::min(max_samples, static_cast<int>(signal.size(0)));
+    int num_windows = num_samples / window_size;
 
     for (int pos = 0; pos < num_windows; pos++) {
-        int start = pos * window_size;
+        int start = pos * window_size + min_trim;
         int end = start + window_size;
 
-        torch::Tensor window = signal.index({torch::indexing::Slice(start, end)});
-        torch::Tensor elements = window > threshold;
-
+        auto window = signal.index({torch::indexing::Slice(start, end)});
+        auto elements = window > threshold;
 
         if ((elements.sum().item<int>() > min_elements) || seen_peak) {
             seen_peak = true;
             if (window[-1].item<float>() > threshold) {
                 continue;
             }
-            return std::min(end + min_trim, (int) signal.size(0));
+            if (end >= num_samples || end >= (max_trim * signal.size(0))) {
+                return min_trim;
+            } else {
+                return end;
+            }
         }
     }
 
     return min_trim;
 }
 
-void scale_signal(torch::Tensor &signal) {
-    std::pair<float, float> med_mad = calculate_med_mad(signal);
-    float med = med_mad.first;
-    float mad = med_mad.second;
+void scale_signal(torch::Tensor &signal, float scaling, float offset) {
+    auto t1 = normalisation(signal);
+    auto shift = std::get<0>(t1);
+    auto scale = std::get<1>(t1);
 
-    signal = (signal - med) / std::max(1.0f, mad);
+    signal = (signal - shift) / scale;
+
+    scale = scaling * scale;
+    shift = scaling * (shift + offset);
+
+    float threshold = shift + scale * 2.4;
+
+    // 8000 value may be changed in future. Currently this is found to work well.
+    int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}), threshold);
+    signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
 }
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {

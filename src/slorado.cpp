@@ -242,10 +242,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     if (len_raw_signal>0) {
         torch::Tensor signal = tensor_from_record(rec);
 
-        int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
-        signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-
-        scale_signal(signal);
+        scale_signal(signal, rec->offset);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         LOG_DEBUG("Read %s has %zu chunks", rec->read_id, chunks.size());
