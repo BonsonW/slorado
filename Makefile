@@ -6,7 +6,7 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I src/ \
 			-I $(LIBTORCH_DIR)/include/torch/csrc/api/include \
 			-I $(LIBTORCH_DIR)/include -I thirdparty/ \
-			-I thirdparty/toml11/
+			-I thirdparty/tomlc99/
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++14
 LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
@@ -43,6 +43,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
+	  $(BUILD_DIR)/toml.o \
 
 
 # add more objects here if needed
@@ -123,6 +124,9 @@ $(BUILD_DIR)/stitch.o: src/utils/stitch.cpp
 
 $(BUILD_DIR)/tensor_utils.o: src/utils/tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
+	$(CC) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # follow the main.o above and add more objects here if needed
 

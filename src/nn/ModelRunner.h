@@ -3,7 +3,7 @@
 #include "../decode/Decoder.h"
 #include "CRFModel.h"
 
-#include <toml.hpp>
+#include "toml.h"
 #include <torch/torch.h>
 
 #include <string>
