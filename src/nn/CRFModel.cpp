@@ -1,6 +1,7 @@
 #include "CRFModel.h"
 
 #include "../utils/tensor_utils.h"
+#include "error.h"
 
 // #include <ATen/cuda/CUDAContext.h>
 // #include <c10/cuda/CUDAGuard.h>
@@ -251,16 +252,16 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     char errbuf[200];
 
     fp = fopen((path + "/config.toml").c_str(), "r");
-    // if (!fp) {
-    //     error("cannot open toml - ", strerror(errno));
-    // }
+    if (!fp) {
+        ERROR("cannot open toml - %s", (path + "/config.toml").c_str());
+    }
 
     toml_table_t *config_toml = toml_parse_file(fp, errbuf, sizeof(errbuf));
     fclose(fp);
 
-    // if (!conf) {
-    //     error("cannot parse - ", errbuf);
-    // }
+    if (!config_toml) {
+        ERROR("cannot parse - ", errbuf);
+    }
 
     CRFModelConfig config;
     config.qscale = 1.0f;
