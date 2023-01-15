@@ -318,8 +318,9 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             } else if (strcmp(type, "linearcrfencoder") == 0) {
                 config.blank_score = (float)toml_double_in(segment, "blank_score").u.d;
             }
-            free(segment);
+            
             free(type);
+            free(segment);
         }
         
         free(sublayers);
@@ -349,6 +350,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     free(global_norm);
     free(encoder);
     free(input);
+    free(config_toml);
 
     return config;
 }
