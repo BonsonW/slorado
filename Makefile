@@ -70,6 +70,8 @@ ifdef koi
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
 endif
 	LDFLAGS +=  -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
+# required for CPUDecoder
+	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif
 
 .PHONY: clean distclean test
