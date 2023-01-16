@@ -4,7 +4,7 @@
 
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
-#include <toml.hpp>
+#include "toml.h"
 #include <torch/torch.h>
 
 using namespace std::chrono_literals;
