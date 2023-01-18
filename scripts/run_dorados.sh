@@ -25,7 +25,7 @@ do
         get_accuracy "dorado_release_calls.fastq" "dorado_release_accuracy.txt"
         rm ${OUTPUT_DIR}/dorado_release_calls.fastq
     elif [ "$var" = "dorado" ]; then
-        /usr/bin/time -v /data/hiruna/dorado/cmake-build/bin/dorado basecaller ${MODEL} ${POD5_FILE} -x cuda:0 -r 1 --emit-fastq > ${OUTPUT_DIR}/dorado_calls.fastq 2>${OUTPUT_DIR}/dorado_log.txt
+        /usr/bin/time -v /data/bonwon/dorado/bin/dorado basecaller ${MODEL} ${POD5_FILE} -x cuda:0 -r 1 --emit-fastq > ${OUTPUT_DIR}/dorado_calls.fastq 2>${OUTPUT_DIR}/dorado_log.txt
         get_accuracy "dorado_calls.fastq" "dorado_accuracy.txt"
         rm ${OUTPUT_DIR}/dorado_calls.fastq
     elif [ "$var" = "slorado_cpu" ]; then
