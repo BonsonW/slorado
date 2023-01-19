@@ -114,7 +114,7 @@ int trim(torch::Tensor signal,
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
-    std::vector<float> floatTmp(tmp.begin(), tmp.end());
+    std::vector<int16_t> floatTmp(tmp.begin(), tmp.end());
     
     torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
     return torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to("cpu");
