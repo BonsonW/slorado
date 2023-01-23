@@ -26,7 +26,7 @@ CXXFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
 endif
 
 # change the tool name to what you want
-BINARY = slorado
+BINARY = slorado_cpu
 
 OBJ = $(BUILD_DIR)/main.o \
       $(BUILD_DIR)/slorado.o \
@@ -71,8 +71,9 @@ ifdef koi
 endif
 	LDFLAGS +=  -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
 # required for CPUDecoder
-	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif
+
+CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 
 .PHONY: clean distclean test
 

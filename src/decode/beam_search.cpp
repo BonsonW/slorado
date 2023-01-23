@@ -6,10 +6,13 @@
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <iostream>
 #include <limits>
 #include <numeric>
+
+#define REMOVE_FIXED_BEAM_STAYS
 
 // 16 bit state supports 7-mers with 4 bases.
 typedef int16_t state_t;
@@ -65,7 +68,7 @@ std::tuple<std::string, std::string> generate_sequence(const std::vector<uint8_t
 
     std::string sequence(seqLen, 'N');
     std::string qstring(seqLen, '!');
-    std::vector<char> alphabet = {'A', 'C', 'G', 'T'};
+    std::array<char, 4> alphabet = {'A', 'C', 'G', 'T'};
     std::vector<float> baseProbs(seqLen), totalProbs(seqLen);
 
     for (size_t blk = 0; blk < num_blocks; ++blk) {
@@ -124,12 +127,7 @@ float beam_search(const T* const scores,
         throw std::range_error("Beamsearch max_beam_width cannot be greater than 256.");
     }
 
-    // Some values we might need
-// #ifdef REMOVE_FIXED_BEAM_STAYS
-//     size_t num_transitions = num_states * num_bases;
-// #else
-//     size_t num_transitions = num_states * (num_bases + 1);
-// #endif
+    // Some values we need
     constexpr uint64_t hash_seed = 0x880355f21e6d1965ULL;
     const float log_beam_cut =
             (beam_cut > 0.0f) ? (temperature * logf(beam_cut)) : std::numeric_limits<float>::max();
@@ -191,7 +189,7 @@ float beam_search(const T* const scores,
         /*  kmer transitions order:
 	 *  N^K , N array
 	 *  Elements stored as resulting kmer and modifying action (stays have a fixed score and are not computed).
-	 *  Kmer index is lexographic with most recent base in the fastest index
+	 *  Kmer index is lexicographic with most recent base in the fastest index
 	 *
 	 *  E.g.  AGT has index (4^2, 4, 1) . (0, 2, 3) == 11
 	 *  The modifying action is
@@ -210,7 +208,7 @@ float beam_search(const T* const scores,
         /*  kmer transitions order:
          *  N^K , (N + 1) array
          *  Elements stored as resulting kmer and modifying action (0 == stay).
-         *  Kmer index is lexographic with most recent base in the fastest index
+         *  Kmer index is lexicographic with most recent base in the fastest index
          *
          *  E.g.  AGT has index (4^2, 4, 1) . (0, 2, 3) == 11
          *  The modifying action is
@@ -449,11 +447,8 @@ float beam_search(const T* const scores,
         for (int shift_base = 0; shift_base < num_bases; shift_base++) {
             block_prob += float(timestep_posts[r_shift_idx + shift_base]);
         }
-        if (block_prob < 0.0f) {
-            block_prob = 0.0f;
-        } else if (block_prob > 1.0f) {
-            block_prob = 1.0f;
-        }
+        if (block_prob < 0.0f) block_prob = 0.0f;
+        else if (block_prob > 1.0f) block_prob = 1.0f;\
         block_prob = powf(block_prob, 0.4f);  // Power fudge factor
 
         // Calculate a placeholder qscore for the "wrong" bases
