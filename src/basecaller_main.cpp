@@ -55,7 +55,7 @@ SOFTWARE.
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
-    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [512]
+    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
     {"max-bytes", required_argument, 0, 'B'},       //2 batchsize - number of bytes loaded at once
     {"verbose", required_argument, 0, 'v'},         //3 verbosity level [1]
     {"help", no_argument, 0, 'h'},                  //4
@@ -69,6 +69,7 @@ static struct option long_options[] = {
     {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
     {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
+    {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
     {0, 0, 0, 0}};
 
 
@@ -80,6 +81,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "\nbasic options:\n");
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
     fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size);
+    fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [%d]\n", opt.gpu_batch_size);
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
     fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
@@ -104,7 +106,7 @@ int basecaller_main(int argc, char* argv[]) {
     double array[] = { 1, 2, 3, 4, 5};
     double realtime0 = realtime();
 
-    const char* optstring = "t:B:K:v:o:x:r:p:c:hV";
+    const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";
 
     int longindex = 0;
     int32_t c = -1;
@@ -129,6 +131,12 @@ int basecaller_main(int argc, char* argv[]) {
             opt.batch_size = atoi(optarg);
             if (opt.batch_size < 1) {
                 ERROR("Batch size should larger than 0. You entered %d",opt.batch_size);
+                exit(EXIT_FAILURE);
+            }
+        } else if (c == 'C') {
+            opt.gpu_batch_size = atoi(optarg);
+            if (opt.gpu_batch_size < 1) {
+                ERROR("Batch size should larger than 0. You entered %d",opt.gpu_batch_size);
                 exit(EXIT_FAILURE);
             }
         } else if (c == 't') {
@@ -224,6 +232,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"device:             %s\n", opt.device);
     fprintf(stderr,"chunk size:         %d\n", opt.chunk_size);
     fprintf(stderr,"batch size:         %d\n", opt.batch_size);
+    fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
     fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);

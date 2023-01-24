@@ -280,9 +280,7 @@ void basecall_db(core_t* core, db_t* db) {
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor> tensors;
 
-    int chunks_pushed = 0;
-
-    // basecall_chunks((*db->tensors)[0], (*db->chunks)[0], opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+    auto cur_basecaller = 0;
 
     for (int read_idx = 0; read_idx < (*db->chunks).size(); ++read_idx) {
         for (int chunk_idx = 0; chunk_idx < (*db->chunks)[read_idx].size(); ++chunk_idx) {
@@ -291,6 +289,10 @@ void basecall_db(core_t* core, db_t* db) {
             tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
 
             if (chunks.size() == opt.batch_size) {
+
+                if (cur_basecaller + 1 < ) {
+
+                }
 
                 #ifdef USE_GPU
                 #ifdef USE_KOI
@@ -460,7 +462,8 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 512;
+    opt->batch_size = 1000;
+    opt->gpu_batch_size = 512;
     opt->batch_size_bytes = 20*1000*1000;
     opt->num_thread = 8;
 

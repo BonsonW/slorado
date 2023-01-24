@@ -26,7 +26,7 @@ CXXFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
 endif
 
 # change the tool name to what you want
-BINARY = slorado_cpu
+BINARY = slorado
 
 OBJ = $(BUILD_DIR)/main.o \
       $(BUILD_DIR)/slorado.o \
