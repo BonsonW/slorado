@@ -68,12 +68,13 @@ ifdef cuda
 ifdef koi
 	CPPFLAGS += -DUSE_KOI=1 -I thirdparty/koi_lib/include
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
+else
+	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif
 	LDFLAGS +=  -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
-# required for CPUDecoder
+else
+	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif
-
-CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 
 .PHONY: clean distclean test
 
