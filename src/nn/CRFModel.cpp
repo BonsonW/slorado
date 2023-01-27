@@ -173,8 +173,8 @@ struct ClampImpl : Module {
         }
     }
 
-    bool active;
     float min, max;
+    bool active;
 };
 
 TORCH_MODULE(LSTMStack);

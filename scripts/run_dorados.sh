@@ -7,8 +7,8 @@ POD5_FILE="/data/slow5-testdata/hg2_prom_lsk114_subsubsample/pod5"
 BLOW5_FILE="/data/slow5-testdata/hg2_prom_lsk114_subsubsample/reads.blow5"
 # POD5_FILE="/data/bonwon/slorado/test/pod5_dir"
 # BLOW5_FILE="/data/bonwon/slorado/test/oneread_r10.blow5"
-MODEL="/data/install/dorado-0.1.1/models/dna_r10.4.1_e8.2_400bps_hac@v4.0.0/"
-DEVICE="cuda:1"
+MODEL="/data/install/dorado-0.1.1/models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0/"
+DEVICE="cuda:0,cuda:1"
 GPU_BATCHSIZE="800"
 
 mkdir ${OUTPUT_DIR}
@@ -21,7 +21,7 @@ for var in "$@"
 do
     clean_fscache
     if [ "$var" = "slorado" ]; then
-        /usr/bin/time -v ./slorado basecaller -o ${OUTPUT_DIR}/slorado_calls.fastq -t 40 -x ${DEVICE} -B500M -C${GPU_BATCHSIZE} -K2000 -c10000 ${MODEL} ${BLOW5_FILE} 2>${OUTPUT_DIR}/slorado_log.txt
+        /usr/bin/time -v ./slorado basecaller -o ${OUTPUT_DIR}/slorado_calls.fastq -t 40 -x ${DEVICE} -B500M -C${GPU_BATCHSIZE} -K2000 -c10000 git${MODEL} ${BLOW5_FILE} 2>${OUTPUT_DIR}/slorado_log.txt
         get_accuracy "slorado_calls.fastq" "slorado_accuracy.txt"
         rm ${OUTPUT_DIR}/slorado_calls.fastq
     elif [ "$var" = "dorado_release" ]; then

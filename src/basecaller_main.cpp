@@ -102,8 +102,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 }
 
 int basecaller_main(int argc, char* argv[]) {
-
-    double array[] = { 1, 2, 3, 4, 5};
     double realtime0 = realtime();
 
     const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";

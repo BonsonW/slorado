@@ -29,7 +29,7 @@ void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::str
         int mid_point = overlap_down_sampled / 2;
 
         int current_chunk_bases_to_trim = 0;
-        for (int i = current_chunk.moves.size() - 1; i > (current_chunk.moves.size() - mid_point); i--){
+        for (int i = current_chunk.moves.size() - 1; i > (int)(current_chunk.moves.size() - mid_point); i--){
             current_chunk_bases_to_trim += (int) current_chunk.moves[i];
         }
 

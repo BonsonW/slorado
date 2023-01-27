@@ -69,34 +69,56 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->runners = new std::vector<Runner>();
 
-    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, "cuda:0", opt.chunk_size, opt.gpu_batch_size));
-    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, "cuda:1", opt.chunk_size, opt.gpu_batch_size));
-    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, "cuda:2", opt.chunk_size, opt.gpu_batch_size));
-    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, "cuda:3", opt.chunk_size, opt.gpu_batch_size));
+#ifdef USE_GPU
+    if (strcmp(opt.device, "cpu") == 0) {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+        }
+    } else {
+        std::string device_args = std::string(opt.device);
+        std::string delimiter = ",";
 
-// #ifdef USE_GPU
-//     if (strcmp(opt.device, "cpu") == 0) {
-//         for (int i = 0; i < opt.num_runners; ++i) {
-//             core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
-//         }
-//     } else {
-//         for (int i = 0; i < opt.num_runners; ++i) {
-//             core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
-//         #ifndef USE_KOI
-//             core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
-//         #endif
-//         }
-//     }
-// #else
-//     if (strcmp(opt.device, "cpu") == 0) {
-//         for (int i = 0; i < opt.num_runners; ++i) {
-//             core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
-//         }
-//     } else {
-//         fprintf(stderr, "Error. Please compile again for GPU\n");
-//         exit(EXIT_FAILURE);
-//     }
-// #endif
+        if (device_args.find(delimiter) != std::string::npos) {
+            size_t pos = 0;
+            std::string device;
+            while ((pos = device_args.find(delimiter)) != std::string::npos) {
+                device = device_args.substr(0, pos);
+                for (int i = 0; i < opt.num_runners; ++i) {
+                    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                #ifndef USE_KOI
+                    core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                #endif
+                }
+                device_args.erase(0, pos + delimiter.length());
+            }
+            device = device_args.substr(0, pos);
+            
+            for (int i = 0; i < opt.num_runners; ++i) {
+                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+            #ifndef USE_KOI
+                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+            #endif
+            }
+
+        } else {
+            for (int i = 0; i < opt.num_runners; ++i) {
+                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            #ifndef USE_KOI
+                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            #endif
+            }
+        }
+    }
+#else
+    if (strcmp(opt.device, "cpu") == 0) {
+        for (int i = 0; i < opt.num_runners; ++i) {
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+        }
+    } else {
+        fprintf(stderr, "Error. Please compile again for GPU\n");
+        exit(EXIT_FAILURE);
+    }
+#endif
 
     //realtime0
     core->realtime0=realtime0;
@@ -327,10 +349,8 @@ void basecall_db(core_t* core, db_t* db) {
 
 
 void postprocess_signal(core_t* core,db_t* db, int32_t i){
-
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
-    opt_t opt = core->opt;
 
     if (len_raw_signal > 0) {
         std::vector<Chunk *> chunks = (*db->chunks)[i];
