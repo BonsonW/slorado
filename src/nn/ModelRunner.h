@@ -54,6 +54,7 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
     m_decoder_options.q_shift = model_config.qbias;
     m_decoder_options.q_scale = model_config.qscale;
     m_decoder = std::make_unique<T>();
+    m_device = device;
 
 #ifdef USE_GPU
     if (device == "cpu") {
@@ -88,7 +89,7 @@ template<typename T> torch::Tensor ModelRunner<T>::call_chunks() {
 }
 
 template<typename T> std::vector<DecodedChunk> ModelRunner<T>::decode_chunks(const torch::Tensor &scores, int num_chunks) {
-    return m_decoder->beam_search(scores, num_chunks, m_decoder_options);
+    return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 }
 
 template<typename T> void ModelRunner<T>::accept_chunk(int num_chunks, at::Tensor slice) {

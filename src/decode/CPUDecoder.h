@@ -8,6 +8,7 @@ class CPUDecoder final : Decoder {
 public:
     std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
                                           int num_chunks,
-                                          const DecoderOptions& options) final;
+                                          const DecoderOptions& options,
+                                          std::string &device) final;
     constexpr static torch::ScalarType dtype = torch::kF32;
 };
