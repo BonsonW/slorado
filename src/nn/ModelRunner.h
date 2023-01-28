@@ -2,6 +2,7 @@
 
 #include "../decode/Decoder.h"
 #include "CRFModel.h"
+#include "../decode/CPUDecoder.h"
 
 #include "toml.h"
 #include "error.h"
@@ -61,28 +62,28 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
 
 #ifdef USE_GPU
     if (device == "cpu") {
-        m_options = torch::TensorOptions().dtype(torch::kF32).device(device); //todo
+        m_options = torch::TensorOptions().dtype(CPUDecoder::dtype).device(device); //todo
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
         chunk_size -= chunk_size % m_model_stride;
-        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(torch::kF32).device(torch::kCPU)); //todo
+        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(CPUDecoder::dtype).device(torch::kCPU)); //todo
     } else {
 #ifdef USE_KOI
-        m_options = torch::TensorOptions().dtype(torch::kF16).device(device); //todo
+        m_options = torch::TensorOptions().dtype(T::dtype).device(device); //todo
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
         chunk_size -= chunk_size % m_model_stride;
-        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(torch::kF16).device(torch::kCPU)); //todo
+        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(T::dtype).device(torch::kCPU)); //todo
 #else
-        m_options = torch::TensorOptions().dtype(torch::kF32).device(device); //todo
+        m_options = torch::TensorOptions().dtype(CPUDecoder::dtype).device(device); //todo
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
         chunk_size -= chunk_size % m_model_stride;
-        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(torch::kF32).device(torch::kCPU)); //todo
+        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(CPUDecoder::dtype).device(torch::kCPU)); //todo
 #endif
     }
 #else
-    m_options = torch::TensorOptions().dtype(torch::kF32).device(device); //todo
+    m_options = torch::TensorOptions().dtype(CPUDecoder::dtype).device(device); //todo
     m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
     chunk_size -= chunk_size % m_model_stride;
-    m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(torch::kF32).device(torch::kCPU)); //todo
+    m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(CPUDecoder::dtype).device(torch::kCPU)); //todo
 #endif
 }
 
@@ -92,6 +93,7 @@ template<typename T> torch::Tensor ModelRunner<T>::call_chunks() {
 }
 
 template<typename T> std::vector<DecodedChunk> ModelRunner<T>::decode_chunks(const torch::Tensor &scores, int num_chunks) {
+    torch::InferenceMode guard;
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 }
 

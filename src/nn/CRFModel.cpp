@@ -232,7 +232,7 @@ struct CRFModelImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        // nvtx3::scoped_range loop{"nn_forward"};
+        // Output is [N, T, C]
         return encoder->forward(x);
     }
 
