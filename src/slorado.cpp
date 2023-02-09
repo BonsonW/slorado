@@ -65,14 +65,21 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         exit(EXIT_FAILURE);
     }
 
+    init_timestamps(&core->ts);
+
     core->opt = opt;
 
     core->runners = new std::vector<Runner>();
+    core->runner_ts = new std::vector<timestamps_t *>();
+
+    core->ts.time_init_runners -= realtime();
 
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
             core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+            init_timestamps((*core->runner_ts).back());
         }
     } else {
         std::string device_args = std::string(opt.device);
@@ -85,6 +92,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
                 device = device_args.substr(0, pos);
                 for (int i = 0; i < opt.num_runners; ++i) {
                     core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                    core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+                    init_timestamps((*core->runner_ts).back());
                 }
                 device_args.erase(0, pos + delimiter.length());
             }
@@ -92,6 +101,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
             
             for (int i = 0; i < opt.num_runners; ++i) {
                 core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+                init_timestamps((*core->runner_ts).back());
             }
             #ifndef USE_KOI
                 core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, "cpu", opt.chunk_size, opt.gpu_batch_size));
@@ -100,6 +111,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         } else {
             for (int i = 0; i < opt.num_runners; ++i) {
                 core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+                core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+                init_timestamps((*core->runner_ts).back());
             }
             // back of the list reserved for CPUDecoder
             #ifndef USE_KOI
@@ -111,12 +124,16 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
             core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+            init_timestamps((*core->runner_ts).back());
         }
     } else {
         fprintf(stderr, "Error. Please compile again for GPU\n");
         exit(EXIT_FAILURE);
     }
 #endif
+
+    core->ts.time_init_runners += realtime();
 
     //realtime0
     core->realtime0=realtime0;
@@ -130,8 +147,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->sum_bytes=0;
     core->total_reads=0; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
-
-    init_timestamps(&core->ts);
 
 #ifdef HAVE_ACC
     if (core->opt.flag & SLORADO_ACC) {
@@ -154,6 +169,7 @@ void free_core(core_t* core,opt_t opt) {
 
     slow5_close(core->sp);
     free(core->runners);
+    free(core->runner_ts);
     free(core);
 }
 
@@ -284,6 +300,9 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 void basecall_db(core_t* core, db_t* db) {
     opt_t opt = core->opt;
     timestamps_t *ts = &(core->ts);
+    ts->time_sync = 0;
+
+    auto timestamps = *core->runner_ts;
 
     bool added_chunks = true;
 
@@ -300,7 +319,9 @@ void basecall_db(core_t* core, db_t* db) {
         size_t n_runners = (*core->runners).size()-1; // last runner reserved for CPUDecoding
     #else
         size_t n_runners = (*core->runners).size();
-    #endif 
+    #endif
+
+        ts->time_assign -= realtime();
 
         while (cur_runner < n_runners) {
             bool called = false;
@@ -321,11 +342,10 @@ void basecall_db(core_t* core, db_t* db) {
                     #else
                         auto& decoder = *((*core->runners)[cur_runner]);
                     #endif
-                    
                         threads.emplace_back(
                             new std::thread(
                                 basecall_chunks,
-                                tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), ts
+                                tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), timestamps[cur_runner]
                             )
                         );
                         called = true;
@@ -351,7 +371,7 @@ void basecall_db(core_t* core, db_t* db) {
                 threads.emplace_back(
                     new std::thread(
                         basecall_chunks,
-                        tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), ts
+                        tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), timestamps[cur_runner]
                     )
                 );
                 called = true;
@@ -359,9 +379,18 @@ void basecall_db(core_t* core, db_t* db) {
             ++cur_runner;
         }
 
-        for (auto& thread : threads) {
-            thread->join();
+        ts->time_assign += realtime();
+        auto time_sync = 0;
+        for (size_t i = 0; i < threads.size(); ++i) {
+            threads[i]->join();
+            if (i == 0) {
+                time_sync -= realtime();
+            }
+            if (i == threads.size()-1) {
+                time_sync += realtime();
+            }
         }
+        ts->time_sync += time_sync;
     }
 }
 
@@ -529,7 +558,8 @@ void init_opt(opt_t* opt) {
 /* initialise timestamps */
 void init_timestamps(timestamps_t* time_stamps) {
     memset(time_stamps, 0, sizeof(timestamps_t));
-
+    
+    time_stamps->time_init_runners = 0;
     time_stamps->time_read = 0;
     time_stamps->time_tens = 0;
     time_stamps->time_trim = 0;
@@ -537,9 +567,11 @@ void init_timestamps(timestamps_t* time_stamps) {
     time_stamps->time_chunk = 0;
     time_stamps->time_copy = 0;
     time_stamps->time_pad = 0;
+    time_stamps->time_assign = 0;
     time_stamps->time_accept = 0;
     time_stamps->time_basecall = 0;
     time_stamps->time_decode = 0;
+    time_stamps->time_sync = 0;
     time_stamps->time_stitch = 0;
     time_stamps->time_write = 0;
     time_stamps->time_total = 0;
