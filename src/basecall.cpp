@@ -42,3 +42,59 @@ void basecall_chunks(
         chunks[i]->moves = decoded_chunks[i].moves;
     }
 }
+
+void basecall_thread(
+    core_t* core,
+    db_t* db,
+    size_t runner_idx,
+    size_t start,
+    size_t end
+) {
+    opt_t opt = core->opt;
+    timestamps_t *ts = (*core->runner_ts)[runner_idx];
+
+    auto& model_runner = *((*core->runners)[runner_idx]);
+                    
+#if defined(USE_GPU) && !defined(USE_KOI)
+    auto& decoder = *(core->runners->back());
+#else
+    auto& decoder = *((*core->runners)[runner_idx]);
+#endif
+    
+    std::vector<Chunk *> chunks;
+    std::vector<torch::Tensor> tensors;
+
+    for (size_t read_idx = start; read_idx < end; ++read_idx) {
+        for (size_t chunk_idx = 0; chunk_idx < (*db->chunks)[read_idx].size(); ++chunk_idx) {
+            chunks.push_back(((*db->chunks)[read_idx])[chunk_idx]);
+            tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
+
+            if (chunks.size() == (size_t)opt.gpu_batch_size) {
+                basecall_chunks(
+                    tensors,
+                    chunks,
+                    opt.chunk_size,
+                    opt.batch_size,
+                    model_runner,
+                    decoder,
+                    ts
+                );
+
+                chunks.clear();
+                tensors.clear();
+            }
+        }
+    }
+
+    if (chunks.size() > 0) {
+        basecall_chunks(
+            tensors,
+            chunks,
+            opt.chunk_size,
+            opt.batch_size,
+            model_runner,
+            decoder,
+            ts
+        );
+    }
+}

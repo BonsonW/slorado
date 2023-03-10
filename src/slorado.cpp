@@ -298,100 +298,54 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 }
 
 void basecall_db(core_t* core, db_t* db) {
-    opt_t opt = core->opt;
     timestamps_t *ts = &(core->ts);
-    ts->time_sync = 0;
 
-    auto timestamps = *core->runner_ts;
+#if defined(USE_GPU) && !defined(USE_KOI)
+    size_t num_threads = (*core->runners).size()-1;
+#else
+    size_t num_threads = (*core->runners).size();
+#endif
+    size_t n_reads = (*db->chunks).size();
 
-    bool added_chunks = true;
+    std::vector<std::unique_ptr<std::thread>> threads;
+    threads.reserve(num_threads);
 
-    // whilst there exists reads and chunks, fill up model runners and execute them on separate threads
-    size_t read_idx = 0;
-    size_t chunk_idx = 0;
-    
-    while (added_chunks) {
-        std::vector<std::unique_ptr<std::thread>> threads;
-        threads.reserve((*core->runners).size());
-        added_chunks = false;
-        size_t cur_runner = 0;
-    #if defined(USE_GPU) && !defined(USE_KOI)
-        size_t n_runners = (*core->runners).size()-1; // last runner reserved for CPUDecoding
-    #else
-        size_t n_runners = (*core->runners).size();
-    #endif
+    size_t reads_per_thread = (n_reads + num_threads - 1) / num_threads;
 
-        ts->time_assign -= realtime();
+    size_t start = 0;
+    size_t end = reads_per_thread;
 
-        while (cur_runner < n_runners) {
-            bool called = false;
-            std::vector<Chunk *> chunks;
-            std::vector<torch::Tensor> tensors;
+    bool last = false;
+    for (size_t runner = 0; runner < (*core->runners).size(); ++runner) {
+        threads.emplace_back(
+            new std::thread(
+                basecall_thread,
+                core,
+                db,
+                runner,
+                start,
+                end
+            )
+        );
+        start = end;
+        end = std::min(end + reads_per_thread, n_reads);
 
-            while (read_idx < (*db->chunks).size() && !called) {
-                while (chunk_idx < (*db->chunks)[read_idx].size() && !called) {
-                    added_chunks = true;
-                    chunks.push_back(((*db->chunks)[read_idx])[chunk_idx]);
-                    tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
-
-                    if (chunks.size() == (size_t)opt.gpu_batch_size) {
-                        auto& model_runner = *((*core->runners)[cur_runner]);
-                        
-                    #if defined(USE_GPU) && !defined(USE_KOI)
-                        auto& decoder = *(core->runners->back());
-                    #else
-                        auto& decoder = *((*core->runners)[cur_runner]);
-                    #endif
-                        threads.emplace_back(
-                            new std::thread(
-                                basecall_chunks,
-                                tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), timestamps[cur_runner]
-                            )
-                        );
-                        called = true;
-                    }
-
-                    ++chunk_idx;
-                }
-
-                if (chunk_idx >= (*db->chunks)[read_idx].size()) {
-                    ++read_idx;
-                    chunk_idx = 0;
-                }
-            }
-
-            if (!called && chunks.size() > 0) {
-                auto& model_runner = *((*core->runners)[cur_runner]);
-                        
-            #if defined(USE_GPU) && !defined(USE_KOI)
-                auto& decoder = *(core->runners->back());
-            #else
-                auto& decoder = *((*core->runners)[cur_runner]);
-            #endif
-                threads.emplace_back(
-                    new std::thread(
-                        basecall_chunks,
-                        tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), timestamps[cur_runner]
-                    )
-                );
-                called = true;
-            }
-            ++cur_runner;
-        }
-
-        ts->time_assign += realtime();
-        auto time_sync = 0;
-        for (size_t i = 0; i < threads.size(); ++i) {
-            threads[i]->join();
-            if (i == 0) {
-                time_sync -= realtime();
-            }
-            if (i == threads.size()-1) {
-                time_sync += realtime();
-            }
-        }
-        ts->time_sync += time_sync;
+        if (last) break;
+        if (end == n_reads) last = true;
     }
+
+    auto time_sync = 0;
+
+    for (size_t i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+        if (i == 0) {
+            time_sync -= realtime();
+        }
+        if (i == threads.size()-1) {
+            time_sync += realtime();
+        }
+    }
+    ts->time_sync += time_sync;
 }
 
 

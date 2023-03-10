@@ -288,7 +288,6 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
             fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
             fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
-            fprintf(stderr, "\n[%s]          - Assignment time: %.3f sec",__func__, core->ts.time_assign);
             fprintf(stderr, "\n[%s]          - Synchronisation time: %.3f sec",__func__, core->ts.time_sync);
 
     auto runner_ts = *core->runner_ts;

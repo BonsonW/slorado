@@ -25,4 +25,12 @@ void basecall_chunks(
     timestamps_t *ts
 );
 
+void basecall_thread(
+    core_t* core,
+    db_t* db,
+    size_t runner_idx,
+    size_t start,
+    size_t end
+);
+
 #endif
