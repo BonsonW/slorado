@@ -41,8 +41,10 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/CPUDecoder.o \
 	  $(BUILD_DIR)/fast_hash.o \
 	  $(BUILD_DIR)/CRFModel.o \
+	  $(BUILD_DIR)/CudaCRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
+	  $(BUILD_DIR)/cuda_utils.o \
 	  $(BUILD_DIR)/toml.o \
 
 
@@ -67,6 +69,8 @@ ifdef cuda
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 ifdef koi
 	CPPFLAGS += -DUSE_KOI=1 -I thirdparty/koi_lib/include
+# temporary for using cuda lstm
+	CPPFLAGS += -DUSE_CUDA_LSTM=1
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
 else
 	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
@@ -123,10 +127,16 @@ $(BUILD_DIR)/fast_hash.o: src/decode/fast_hash.cpp
 $(BUILD_DIR)/CRFModel.o: src/nn/CRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
+$(BUILD_DIR)/CudaCRFModel.o: src/nn/CudaCRFModel.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
 $(BUILD_DIR)/stitch.o: src/utils/stitch.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/tensor_utils.o: src/utils/tensor_utils.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/cuda_utils.o: src/utils/cuda_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
