@@ -7,7 +7,6 @@
 #include <torch/torch.h>
 #include "error.h"
 
-#ifdef USE_KOI
 #include <cuda_runtime.h>
 extern "C" {
 #include "koi.h"
@@ -36,7 +35,6 @@ static inline void gpu_assert(const char* file, uint64_t line) {
 
 #define CUDA_CHK()                                                             \
     { gpu_assert(__FILE__, __LINE__); }
-#endif
 
 std::vector<DecodedChunk> GPUDecoder::beam_search(const torch::Tensor &scores,
                                                   int num_chunks,
@@ -45,7 +43,6 @@ std::vector<DecodedChunk> GPUDecoder::beam_search(const torch::Tensor &scores,
     return cpu_part(gpu_part(scores, num_chunks, options, device));
 }
 torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
-#ifdef USE_KOI
     // nvtx3::scoped_range loop{"gpu_decode"};
     long int N = scores.sizes()[0];
     long int T = scores.sizes()[1];
@@ -117,13 +114,9 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
                     options.beam_cut, options.blank_score, options.move_pad);
 
     return moves_sequence_qstring.reshape({3, N, -1}).to(torch::kCPU);
-#else
-    return torch::empty({1});
-#endif
 }
 
 std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstring_cpu) {
-#ifdef USE_KOI
     // nvtx3::scoped_range loop{"cpu_decode"};
     assert(moves_sequence_qstring_cpu.device() == torch::kCPU);
     auto moves_cpu = moves_sequence_qstring_cpu[0];
@@ -147,9 +140,6 @@ std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstr
     }
 
     return called_chunks;
-#else
-    return std::vector<DecodedChunk>();
-#endif
 }
 
 // int GPUDecoder::get_cuda_device_id_from_device(const c10::Device& device) {

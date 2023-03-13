@@ -770,11 +770,7 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const torch::TensorOptions &options) {
 // expland condition may mess up cuda lstm
 #ifdef USE_GPU
-    #ifdef USE_KOI
-        bool expand_blanks = options.device_opt().value() == torch::kCPU;
-    #else
-        bool expand_blanks = true;
-    #endif
+    bool expand_blanks = true;
 #else // USE_GPU
     bool expand_blanks = options.device_opt().value() == torch::kCPU;
 #endif

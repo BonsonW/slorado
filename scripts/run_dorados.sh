@@ -5,12 +5,11 @@ REFERENC_GENOME="/genome/hg38noAlt.idx" #path to reference genome
 OUTPUT_DIR="logs"
 POD5_FILE="/data/bonwon/hg2_prom_lsk114_subsample_pod5"
 BLOW5_FILE="/data/slow5-testdata/hg2_prom_lsk114_subsample/reads.blow5"
-# BLOW5_FILE="/data/slow5-testdata/NA12878_prom_subsample/reads.blow5"
 # POD5_FILE="/data/bonwon/slorado/test/pod5_dir"
 # BLOW5_FILE="/data/bonwon/slorado/test/oneread_r10.blow5"
 MODEL="/data/install/dorado-0.1.1/models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0/"
-DEVICE="cuda:0,1,2,3"
-GPU_BATCHSIZE="300"
+DEVICE="cuda:0,cuda:1,cuda:2,cuda:3"
+GPU_BATCHSIZE="900"
 
 mkdir ${OUTPUT_DIR}
 

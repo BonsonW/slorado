@@ -7,9 +7,9 @@ extern "C" {
 #include "koi.h"
 }
 
-// #include <ATen/cuda/CUDAContext.h>
+#include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
-// #include <cublas_v2.h>
+#include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 
@@ -19,24 +19,24 @@ extern "C" {
 #include <string>
 #include <vector>
 
-// void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
-//     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
-//     constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
-//     assert(A.dtype() == torch::kF16 && B.dtype() == torch::kF16 && C.dtype() == torch::kF16);
-//     assert(A.stride(1) == 1 && B.stride(1) == 1 && C.stride(1) == 1);
-//     assert(A.size(0) == C.size(0));  // M
-//     assert(B.size(1) == C.size(1));  // N
-//     assert(A.size(1) == B.size(0));  // K
-//     auto res =
-//             cublasGemmEx(at::cuda::getCurrentCUDABlasHandle(), CUBLAS_OP_N, CUBLAS_OP_N, B.size(1),
-//                          A.size(0), A.size(1), &HALF_ONE, B.data_ptr(), CUDA_R_16F, B.stride(0),
-//                          A.data_ptr(), CUDA_R_16F, A.stride(0), &HALF_ZERO, C.data_ptr(),
-//                          CUDA_R_16F, C.stride(0), CUDA_R_16F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-//     if (res != CUBLAS_STATUS_SUCCESS) {
-//         // spdlog::error("CuBLAS error {}", int(res));
-//         exit(EXIT_FAILURE);
-//     }
-// }
+void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
+    constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
+    constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
+    assert(A.dtype() == torch::kF16 && B.dtype() == torch::kF16 && C.dtype() == torch::kF16);
+    assert(A.stride(1) == 1 && B.stride(1) == 1 && C.stride(1) == 1);
+    assert(A.size(0) == C.size(0));  // M
+    assert(B.size(1) == C.size(1));  // N
+    assert(A.size(1) == B.size(0));  // K
+    auto res =
+            cublasGemmEx(at::cuda::getCurrentCUDABlasHandle(), CUBLAS_OP_N, CUBLAS_OP_N, B.size(1),
+                         A.size(0), A.size(1), &HALF_ONE, B.data_ptr(), CUDA_R_16F, B.stride(0),
+                         A.data_ptr(), CUDA_R_16F, A.stride(0), &HALF_ZERO, C.data_ptr(),
+                         CUDA_R_16F, C.stride(0), CUDA_R_16F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    if (res != CUBLAS_STATUS_SUCCESS) {
+        // spdlog::error("CuBLAS error {}", int(res));
+        exit(EXIT_FAILURE);
+    }
+}
 
 void matmul_f16_torch(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
     C.copy_(torch::matmul(A, B));
@@ -78,5 +78,5 @@ void matmul_f16(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C
     //     float const cublas_time = run_N_times(matmul_f16_cublas);
     //     return cublas_time < torch_time ? matmul_f16_cublas : matmul_f16_torch;
     // }();
-    matmul_f16_torch(A, B, C);
+    matmul_f16_cublas(A, B, C);
 }

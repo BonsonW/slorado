@@ -54,12 +54,7 @@ void basecall_thread(
     timestamps_t *ts = (*core->runner_ts)[runner_idx];
 
     auto& model_runner = *((*core->runners)[runner_idx]);
-                    
-#if defined(USE_GPU) && !defined(USE_KOI)
-    auto& decoder = *(core->runners->back());
-#else
     auto& decoder = *((*core->runners)[runner_idx]);
-#endif
     
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor> tensors;

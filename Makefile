@@ -61,21 +61,17 @@ endif
 
 # make accel=1 enables the acceelerator (CUDA,OpenCL,FPGA etc if implemented)
 ifdef cuda
-	CUDA_ROOT = /usr/local/cuda
+# CUDA_ROOT ?= /usr/local/cuda
+	CUDA_ROOT ?= /data/install/cuda-11.3
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)
 	OBJ += $(BUILD_DIR)/GPUDecoder.o
-	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
-ifdef koi
-	CPPFLAGS += -DUSE_KOI=1 -I thirdparty/koi_lib/include
-# temporary for using cuda lstm
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so" -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda_cu.so"
+	CPPFLAGS += -I thirdparty/koi_lib/include
 	CPPFLAGS += -DUSE_CUDA_LSTM=1
-	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
-else
-	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
-endif
-	LDFLAGS +=  -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
+	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl
+	LDFLAGS += -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
 else
 	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif

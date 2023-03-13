@@ -104,20 +104,12 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
             }
-            #ifndef USE_KOI
-                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, "cpu", opt.chunk_size, opt.gpu_batch_size));
-            #endif
-
         } else {
             for (int i = 0; i < opt.num_runners; ++i) {
                 core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
             }
-            // back of the list reserved for CPUDecoder
-            #ifndef USE_KOI
-                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, "cpu", opt.chunk_size, opt.gpu_batch_size));
-            #endif
         }
     }
 #else
@@ -300,11 +292,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 void basecall_db(core_t* core, db_t* db) {
     timestamps_t *ts = &(core->ts);
 
-#if defined(USE_GPU) && !defined(USE_KOI)
-    size_t num_threads = (*core->runners).size()-1;
-#else
     size_t num_threads = (*core->runners).size();
-#endif
     size_t n_reads = (*db->chunks).size();
 
     std::vector<std::unique_ptr<std::thread>> threads;
