@@ -163,18 +163,13 @@ struct LinearCRFImpl : Module {
         {
             scores = activation(linear(x)) * scale;
         }
-        
+
         if (expand_blanks == true) {
             scores = scores.contiguous();
             int C = scores.size(2);
             scores = F::pad(scores.view({N, T, C / 4, 4}),
                             F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
                              .view({N, T, -1});
-        }
-
-        if (x.device() == torch::kCPU) {
-            // Output is [T, N, C]
-            return scores.transpose(0, 1);
         }
 
         // Output is [N, T, C], contiguous
@@ -186,69 +181,6 @@ struct LinearCRFImpl : Module {
     bool expand_blanks;
     Linear linear{nullptr};
     Tanh activation{nullptr};
-};
-
-struct LSTMStackImpl : Module {
-    LSTMStackImpl(int size, int batchsize, int chunksize) {
-        // torch::nn::LSTM expects/produces [N, T, C] with batch_first == true
-        rnn1 = register_module("rnn1", LSTM(LSTMOptions(size, size).batch_first(true)));
-        rnn2 = register_module("rnn2", LSTM(LSTMOptions(size, size).batch_first(true)));
-        rnn3 = register_module("rnn3", LSTM(LSTMOptions(size, size).batch_first(true)));
-        rnn4 = register_module("rnn4", LSTM(LSTMOptions(size, size).batch_first(true)));
-        rnn5 = register_module("rnn5", LSTM(LSTMOptions(size, size).batch_first(true)));
-    };
-
-    torch::Tensor forward(torch::Tensor x) {
-        // Input is [N, T, C], contiguity optional
-
-        // auto [y1, h1] = rnn1(x.flip(1));
-        // auto [y2, h2] = rnn2(y1.flip(1));
-        // auto [y3, h3] = rnn3(y2.flip(1));
-        // auto [y4, h4] = rnn4(y3.flip(1));
-        // auto [y5, h5] = rnn5(y4.flip(1));
-
-        x = x.flip(1);
-
-        // rnn1
-        auto t1 = rnn1(x);
-        auto y1 = std::get<0>(t1);
-        auto h1 = std::get<1>(t1);
-
-        x = y1.flip(1);
-
-        // rnn2
-        auto t2 = rnn2(x);
-        auto y2 = std::get<0>(t2);
-        auto h2 = std::get<1>(t2);
-
-        x = y2.flip(1);
-
-        // rnn3
-        auto t3 = rnn3(x);
-        auto y3 = std::get<0>(t3);
-        auto h3 = std::get<1>(t3);
-
-        x = y3.flip(1);
-
-        // rnn4
-        auto t4 = rnn4(x);
-        auto y4 = std::get<0>(t4);
-        auto h4 = std::get<1>(t4);
-
-        x = y4.flip(1);
-
-        // rnn5
-        auto t5 = rnn5(x);
-        auto y5 = std::get<0>(t5);
-        auto h5 = std::get<1>(t5);
-        
-        x = y5.flip(1);
-
-        // Output is [N, T, C], non-contiguous
-        return x;
-    }
-
-    LSTM rnn1{nullptr}, rnn2{nullptr}, rnn3{nullptr}, rnn4{nullptr}, rnn5{nullptr};
 };
 
 #if USE_CUDA_LSTM
@@ -526,6 +458,69 @@ TORCH_MODULE(CudaLSTMStack);
 
 #endif  // if USE_CUDA_LSTM
 
+struct LSTMStackImpl : Module {
+    LSTMStackImpl(int size, int batchsize, int chunksize) {
+        // torch::nn::LSTM expects/produces [N, T, C] with batch_first == true
+        rnn1 = register_module("rnn1", LSTM(LSTMOptions(size, size).batch_first(true)));
+        rnn2 = register_module("rnn2", LSTM(LSTMOptions(size, size).batch_first(true)));
+        rnn3 = register_module("rnn3", LSTM(LSTMOptions(size, size).batch_first(true)));
+        rnn4 = register_module("rnn4", LSTM(LSTMOptions(size, size).batch_first(true)));
+        rnn5 = register_module("rnn5", LSTM(LSTMOptions(size, size).batch_first(true)));
+    };
+
+    torch::Tensor forward(torch::Tensor x) {
+        // Input is [N, T, C], contiguity optional
+
+        // auto [y1, h1] = rnn1(x.flip(1));
+        // auto [y2, h2] = rnn2(y1.flip(1));
+        // auto [y3, h3] = rnn3(y2.flip(1));
+        // auto [y4, h4] = rnn4(y3.flip(1));
+        // auto [y5, h5] = rnn5(y4.flip(1));
+
+        x = x.flip(1);
+
+        // rnn1
+        auto t1 = rnn1(x);
+        auto y1 = std::get<0>(t1);
+        auto h1 = std::get<1>(t1);
+
+        x = y1.flip(1);
+
+        // rnn2
+        auto t2 = rnn2(x);
+        auto y2 = std::get<0>(t2);
+        auto h2 = std::get<1>(t2);
+
+        x = y2.flip(1);
+
+        // rnn3
+        auto t3 = rnn3(x);
+        auto y3 = std::get<0>(t3);
+        auto h3 = std::get<1>(t3);
+
+        x = y3.flip(1);
+
+        // rnn4
+        auto t4 = rnn4(x);
+        auto y4 = std::get<0>(t4);
+        auto h4 = std::get<1>(t4);
+
+        x = y4.flip(1);
+
+        // rnn5
+        auto t5 = rnn5(x);
+        auto y5 = std::get<0>(t5);
+        auto h5 = std::get<1>(t5);
+        
+        x = y5.flip(1);
+
+        // Output is [N, T, C], non-contiguous
+        return x;
+    }
+
+    LSTM rnn1{nullptr}, rnn2{nullptr}, rnn3{nullptr}, rnn4{nullptr}, rnn5{nullptr};
+};
+
 struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
@@ -537,8 +532,8 @@ struct ClampImpl : Module {
         }
     }
 
-    float min, max;
     bool active;
+    float min, max;
 };
 
 TORCH_MODULE(LSTMStack);
@@ -549,23 +544,12 @@ TORCH_MODULE(Clamp);
 template <class LSTMStackType>
 struct CRFModelImpl : Module {
     CRFModelImpl(const CRFModelConfig &config, bool expand_blanks, int batch_size, int chunk_size) {
-        if (config.insize == 128) {
-            conv1 = register_module("conv1", Convolution(config.num_features, 16, 5, 1));
-            clamp1 = Clamp(-0.5, 3.5, config.clamp);
-            conv2 = register_module("conv2", Convolution(16, 16, 5, 1));
-            clamp2 = Clamp(-0.5, 3.5, config.clamp);
-            conv3 = register_module("conv3",
-                                    Convolution(16, config.insize, 19, config.stride, true));
-            clamp3 = Clamp(-0.5, 3.5, config.clamp);
-        } else {
-            conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
-            clamp1 = Clamp(-0.5, 3.5, config.clamp);
-            conv2 = register_module("conv2", Convolution(config.conv, 16, 5, 1));
-            clamp2 = Clamp(-0.5, 3.5, config.clamp);
-            conv3 = register_module("conv3",
-                                    Convolution(16, config.insize, 19, config.stride, true));
-            clamp3 = Clamp(-0.5, 3.5, config.clamp);
-        }
+        conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
+        clamp1 = Clamp(-0.5, 3.5, config.clamp);
+        conv2 = register_module("conv2", Convolution(config.conv, 16, 5, 1));
+        clamp2 = Clamp(-0.5, 3.5, config.clamp);
+        conv3 = register_module("conv3", Convolution(16, config.insize, 19, config.stride, true));
+        clamp3 = Clamp(-0.5, 3.5, config.clamp);
 
         rnns = register_module(
                 "rnns", LSTMStackType(config.insize, batch_size, chunk_size / config.stride));
@@ -596,6 +580,10 @@ struct CRFModelImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
+        if (x.device() == torch::kCPU) {
+            // Output is [T, N, C], which CPU decoding requires.
+            return encoder->forward(x).transpose(0, 1);
+        }
         // Output is [N, T, C]
         return encoder->forward(x);
     }
@@ -768,13 +756,18 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const int batch_size,
                                        const int chunk_size,
                                        const torch::TensorOptions &options) {
-// expland condition may mess up cuda lstm
-#ifdef USE_GPU
-    bool expand_blanks = true;
-#else // USE_GPU
-    bool expand_blanks = options.device_opt().value() == torch::kCPU;
+#if USE_CUDA_LSTM
+    if (options.device() != torch::kCPU) {
+        const bool expand_blanks = false;
+        auto model = CudaCRFModel(model_config, expand_blanks, batch_size, chunk_size);
+        return populate_model(model, path, options, model_config.decomposition,
+                              model_config.bias);
+    } else
 #endif
-    auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);
-    return populate_model(model, path, options, model_config.decomposition,
-                          model_config.bias);
+    {
+        const bool expand_blanks = true;
+        auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);
+        return populate_model(model, path, options, model_config.decomposition,
+                              model_config.bias);
+    }
 }

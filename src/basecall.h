@@ -21,11 +21,10 @@ void basecall_chunks(
     int chunk_size,
     int batch_size,
     ModelRunnerBase &model_runner,
-    ModelRunnerBase &decoder,
     timestamps_t *ts
 );
 
-void basecall_thread(
+void basecall_loop(
     core_t* core,
     db_t* db,
     size_t runner_idx,

@@ -17,7 +17,6 @@ void basecall_chunks(
     int chunk_size,
     int batch_size,
     ModelRunnerBase &model_runner,
-    ModelRunnerBase &decoder,
     timestamps_t *ts
 ) {
     for (size_t i = 0; i < tensors.size(); ++i) {
@@ -26,14 +25,9 @@ void basecall_chunks(
         ts->time_accept += realtime();
     }
 
-    LOG_TRACE("%s", "basecalling chunks");
-    ts->time_basecall -= realtime();
-    torch::Tensor scores = model_runner.call_chunks();
-    ts->time_basecall += realtime();
-
     LOG_TRACE("%s", "decoding chunks");
     ts->time_decode -= realtime();
-    std::vector<DecodedChunk> decoded_chunks = decoder.decode_chunks(scores, chunks.size());
+    std::vector<DecodedChunk> decoded_chunks = model_runner.call_chunks(chunks.size());
     ts->time_decode += realtime();
 
     for (size_t i = 0; i < chunks.size(); ++i) {
@@ -43,7 +37,7 @@ void basecall_chunks(
     }
 }
 
-void basecall_thread(
+void basecall_loop(
     core_t* core,
     db_t* db,
     size_t runner_idx,
@@ -54,7 +48,6 @@ void basecall_thread(
     timestamps_t *ts = (*core->runner_ts)[runner_idx];
 
     auto& model_runner = *((*core->runners)[runner_idx]);
-    auto& decoder = *((*core->runners)[runner_idx]);
     
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor> tensors;
@@ -71,7 +64,6 @@ void basecall_thread(
                     opt.chunk_size,
                     opt.batch_size,
                     model_runner,
-                    decoder,
                     ts
                 );
 
@@ -88,7 +80,6 @@ void basecall_thread(
             opt.chunk_size,
             opt.batch_size,
             model_runner,
-            decoder,
             ts
         );
     }

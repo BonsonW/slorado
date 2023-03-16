@@ -64,7 +64,7 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset) {
     auto shift = std::get<0>(t1);
     auto scale = std::get<1>(t1);
 
-    signal = (signal - shift) / scale;
+    signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
 
     scale = scaling * scale;
     shift = scaling * (shift + offset);

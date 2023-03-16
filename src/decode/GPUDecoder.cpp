@@ -3,7 +3,6 @@
 #include "Decoder.h"
 
 #include <c10/cuda/CUDAGuard.h>
-// #include <nvtx3/nvtx3.hpp>
 #include <torch/torch.h>
 #include "error.h"
 
@@ -12,38 +11,7 @@ extern "C" {
 #include "koi.h"
 }
 
-static inline void gpu_assert(const char* file, uint64_t line) {
-    cudaError_t code = cudaGetLastError();
-    if (code != cudaSuccess) {
-        fprintf(stderr, "[%s::ERROR]\033[1;31m Cuda error: %s \n in file : %s line number : %lu\033[0m\n",
-                __func__, cudaGetErrorString(code), file, line);
-        if (code == cudaErrorLaunchTimeout) {
-            ERROR("%s", "The kernel timed out. You have to first disable the cuda "
-                        "time out.");
-            fprintf(
-                stderr,
-                "On Ubuntu do the following\nOpen the file /etc/X11/xorg.conf\nYou "
-                "will have a section about your NVIDIA device. Add the following "
-                "line to it.\nOption \"Interactive\" \"0\"\nIf you do not have a "
-                "section about your NVIDIA device in /etc/X11/xorg.conf or you do "
-                "not have a file named /etc/X11/xorg.conf, run the command sudo "
-                "nvidia-xconfig to generate a xorg.conf file and do as above.\n\n");
-        }
-        exit(-1);
-    }
-}
-
-#define CUDA_CHK()                                                             \
-    { gpu_assert(__FILE__, __LINE__); }
-
-std::vector<DecodedChunk> GPUDecoder::beam_search(const torch::Tensor &scores,
-                                                  int num_chunks,
-                                                  const DecoderOptions &options,
-                                                  std::string &device) {
-    return cpu_part(gpu_part(scores, num_chunks, options, device));
-}
 torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
-    // nvtx3::scoped_range loop{"gpu_decode"};
     long int N = scores.sizes()[0];
     long int T = scores.sizes()[1];
     long int C = scores.sizes()[2];
@@ -57,6 +25,7 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
             torch::TensorOptions().dtype(torch::kInt8).device(scores.device()).requires_grad(false);
 
     if (!initialized) {
+
         chunks = torch::empty({N, 4}, tensor_options_int32);
         chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
         chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
@@ -81,17 +50,6 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     auto qstring = moves_sequence_qstring[2];
 
     c10::cuda::CUDAGuard device_guard(scores.device());
-    int cuda_device_num = std::stoi(device.substr(5));
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, cuda_device_num);
-    CUDA_CHK();
-    cudaSetDevice(cuda_device_num);
-    CUDA_CHK();
-    int cuda_device_num_current=-1;
-    cudaGetDevice(&cuda_device_num_current);
-    CUDA_CHK();
-    LOG_TRACE("Running on %s (device id %d)", prop.name, cuda_device_num_current);
-
     host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
@@ -113,11 +71,10 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
                     qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
                     options.beam_cut, options.blank_score, options.move_pad);
 
-    return moves_sequence_qstring.reshape({3, N, -1}).to(torch::kCPU);
+    return moves_sequence_qstring.reshape({3, N, -1});
 }
 
 std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstring_cpu) {
-    // nvtx3::scoped_range loop{"cpu_decode"};
     assert(moves_sequence_qstring_cpu.device() == torch::kCPU);
     auto moves_cpu = moves_sequence_qstring_cpu[0];
     auto sequence_cpu = moves_sequence_qstring_cpu[1];
@@ -142,12 +99,9 @@ std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstr
     return called_chunks;
 }
 
-// int GPUDecoder::get_cuda_device_id_from_device(const c10::Device& device) {
-//     if (!device.is_cuda() || !device.has_index()) {
-//         std::stringstream ss;
-//         ss << "Unable to extract CUDA device ID from device " << device;
-//         throw std::runtime_error(ss.str());
-//     }
-
-//     return device.index();
-// }
+std::vector<DecodedChunk> GPUDecoder::beam_search(const torch::Tensor &scores,
+                                                  int num_chunks,
+                                                  const DecoderOptions &options,
+                                                  std::string &device) {
+    return cpu_part(gpu_part(scores, num_chunks, options, device));
+}

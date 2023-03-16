@@ -41,6 +41,7 @@ SOFTWARE.
 
 #include "decode/GPUDecoder.h"
 #include "decode/CPUDecoder.h"
+#include "nn/CudaCRFModel.h"
 #include "signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
@@ -90,8 +91,9 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
             std::string device;
             while ((pos = device_args.find(delimiter)) != std::string::npos) {
                 device = device_args.substr(0, pos);
+                auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
                 for (int i = 0; i < opt.num_runners; ++i) {
-                    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                    core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
                     core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                     init_timestamps((*core->runner_ts).back());
                 }
@@ -99,14 +101,16 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
             }
             device = device_args.substr(0, pos);
             
+            auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
             for (int i = 0; i < opt.num_runners; ++i) {
-                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
             }
         } else {
+            auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, opt.device);
             for (int i = 0; i < opt.num_runners; ++i) {
-                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+                core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
             }
@@ -124,6 +128,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         exit(EXIT_FAILURE);
     }
 #endif
+
+    LOG_TRACE("%s", "successfully initialized runners");
 
     core->ts.time_init_runners += realtime();
 
@@ -307,7 +313,7 @@ void basecall_db(core_t* core, db_t* db) {
     for (size_t runner = 0; runner < (*core->runners).size(); ++runner) {
         threads.emplace_back(
             new std::thread(
-                basecall_thread,
+                basecall_loop,
                 core,
                 db,
                 runner,
