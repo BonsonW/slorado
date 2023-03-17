@@ -72,20 +72,45 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
         }
     } else {
-        for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
-        #ifndef USE_KOI
-            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
-        #endif
+        std::string device_args = std::string(opt.device);
+        std::string delimiter = ",";
+
+        if (device_args.find(delimiter) != std::string::npos) {
+            size_t pos = 0;
+            std::string device;
+            while ((pos = device_args.find(delimiter)) != std::string::npos) {
+                device = device_args.substr(0, pos);
+                for (int i = 0; i < opt.num_runners; ++i) {
+                    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                }
+                device_args.erase(0, pos + delimiter.length());
+            }
+            device = device_args.substr(0, pos);
+            
+            for (int i = 0; i < opt.num_runners; ++i) {
+                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+            }
+            #ifndef USE_KOI
+                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, "cpu", opt.chunk_size, opt.gpu_batch_size));
+            #endif
+
+        } else {
+            for (int i = 0; i < opt.num_runners; ++i) {
+                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            }
+            // back of the list reserved for CPUDecoder
+            #ifndef USE_KOI
+                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, "cpu", opt.chunk_size, opt.gpu_batch_size));
+            #endif
         }
     }
 #else
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
         }
     } else {
         fprintf(stderr, "Error. Please compile again for GPU\n");
@@ -232,7 +257,6 @@ void mean_single(core_t* core,db_t* db, int32_t i){
 
 }
 
-
 void preprocess_signal(core_t* core,db_t* db, int32_t i){
 
     slow5_rec_t* rec = db->slow5_rec[i];
@@ -240,12 +264,9 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     opt_t opt = core->opt;
 
     if (len_raw_signal>0) {
-        torch::Tensor signal = tensor_from_record(rec);
+        torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
 
-        int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
-        signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-
-        scale_signal(signal);
+        scale_signal(signal, rec->range / rec->digitisation, rec->offset);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         LOG_DEBUG("Read %s has %zu chunks", rec->read_id, chunks.size());
@@ -260,76 +281,94 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     }
 }
 
-
-
-// void basecall_signal(core_t* core,db_t* db, int32_t i){
-
-//     slow5_rec_t* rec = db->slow5_rec[i];
-//     uint64_t len_raw_signal = rec->len_raw_signal;
-//     opt_t opt = core->opt;
-//     timestamps_t ts = core->ts;
-
-//     if (len_raw_signal > 0) {
-//         std::vector<Chunk *> chunks = (*db->chunks)[i];
-//         std::vector<torch::Tensor *> tensors = (*db->tensors)[i];
-//         basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
-//     }
-
-// }
-
 void basecall_db(core_t* core, db_t* db) {
     opt_t opt = core->opt;
     timestamps_t *ts = &(core->ts);
 
-    std::vector<Chunk *> chunks;
-    std::vector<torch::Tensor> tensors;
+    bool added_chunks = true;
 
-    int chunks_pushed = 0;
+    // whilst there exists reads and chunks, fill up model runners and execute them on separate threads
+    size_t read_idx = 0;
+    size_t chunk_idx = 0;
+    
+    while (added_chunks) {
+        std::vector<std::unique_ptr<std::thread>> threads;
+        threads.reserve((*core->runners).size());
+        added_chunks = false;
+        size_t cur_runner = 0;
+    #if defined(USE_GPU) && !defined(USE_KOI)
+        size_t n_runners = (*core->runners).size()-1; // last runner reserved for CPUDecoding
+    #else
+        size_t n_runners = (*core->runners).size();
+    #endif 
 
-    // basecall_chunks((*db->tensors)[0], (*db->chunks)[0], opt.chunk_size, opt.batch_size, *(core->runners[0]), ts);
+        while (cur_runner < n_runners) {
+            bool called = false;
+            std::vector<Chunk *> chunks;
+            std::vector<torch::Tensor> tensors;
 
-    for (int read_idx = 0; read_idx < (*db->chunks).size(); ++read_idx) {
-        for (int chunk_idx = 0; chunk_idx < (*db->chunks)[read_idx].size(); ++chunk_idx) {
+            while (read_idx < (*db->chunks).size() && !called) {
+                while (chunk_idx < (*db->chunks)[read_idx].size() && !called) {
+                    added_chunks = true;
+                    chunks.push_back(((*db->chunks)[read_idx])[chunk_idx]);
+                    tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
 
-            chunks.push_back(((*db->chunks)[read_idx])[chunk_idx]);
-            tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
+                    if (chunks.size() == (size_t)opt.gpu_batch_size) {
+                        auto& model_runner = *((*core->runners)[cur_runner]);
+                        
+                    #if defined(USE_GPU) && !defined(USE_KOI)
+                        auto& decoder = *(core->runners->back());
+                    #else
+                        auto& decoder = *((*core->runners)[cur_runner]);
+                    #endif
+                    
+                        threads.emplace_back(
+                            new std::thread(
+                                basecall_chunks,
+                                tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), ts
+                            )
+                        );
+                        called = true;
+                    }
 
-            if (chunks.size() == opt.batch_size) {
+                    ++chunk_idx;
+                }
 
-                #ifdef USE_GPU
-                #ifdef USE_KOI
-                    basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
-                #else
-                    basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[1]), ts);
-                #endif
-                #else
-                basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
-                #endif
-                chunks.clear();
-                tensors.clear();
+                if (chunk_idx >= (*db->chunks)[read_idx].size()) {
+                    ++read_idx;
+                    chunk_idx = 0;
+                }
             }
-        }
-    }
 
-    if (chunks.size() > 0) {
-        #ifdef USE_GPU
-        #ifdef USE_KOI
-            basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
-        #else
-            basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[1]), ts);
-        #endif
-        #else
-        basecall_chunks(tensors, chunks, opt.chunk_size, opt.batch_size, *((*core->runners)[0]), *((*core->runners)[0]), ts);
-        #endif
+            if (!called && chunks.size() > 0) {
+                auto& model_runner = *((*core->runners)[cur_runner]);
+                        
+            #if defined(USE_GPU) && !defined(USE_KOI)
+                auto& decoder = *(core->runners->back());
+            #else
+                auto& decoder = *((*core->runners)[cur_runner]);
+            #endif
+                threads.emplace_back(
+                    new std::thread(
+                        basecall_chunks,
+                        tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), ts
+                    )
+                );
+                called = true;
+            }
+            ++cur_runner;
+        }
+
+        for (auto& thread : threads) {
+            thread->join();
+        }
     }
 }
 
 
 void postprocess_signal(core_t* core,db_t* db, int32_t i){
-
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
-    opt_t opt = core->opt;
 
     if (len_raw_signal > 0) {
         std::vector<Chunk *> chunks = (*db->chunks)[i];
@@ -464,13 +503,14 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 512;
+    opt->batch_size = 1000;
+    opt->gpu_batch_size = 512;
     opt->batch_size_bytes = 20*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;
 
-    opt->device = "cuda:0";
+    opt->device = "cuda:1";
     opt->chunk_size = 8000;
     opt->overlap = 150;
     opt->num_runners = 1;

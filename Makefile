@@ -64,12 +64,16 @@ ifdef cuda
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)
 	OBJ += $(BUILD_DIR)/GPUDecoder.o
-	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so"
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 ifdef koi
 	CPPFLAGS += -DUSE_KOI=1 -I thirdparty/koi_lib/include
-	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a
+	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
+else
+	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif
 	LDFLAGS +=  -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
+else
+	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif
 
 .PHONY: clean distclean test
@@ -126,7 +130,7 @@ $(BUILD_DIR)/tensor_utils.o: src/utils/tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
+	$(CC) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # follow the main.o above and add more objects here if needed
 

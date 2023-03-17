@@ -43,7 +43,9 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/writer.cpp
         ${CMAKE_SOURCE_DIR}/src/Chunk.h
         ${CMAKE_SOURCE_DIR}/src/utils/tensor_utils.cpp
+        ${CMAKE_SOURCE_DIR}/src/utils/module_utils.cpp
         ${CMAKE_SOURCE_DIR}/src/utils/stitch.cpp
+        ${CMAKE_SOURCE_DIR}/src/utils/cuda_utils.cpp
         ${CMAKE_SOURCE_DIR}/src/nn/CRFModel.cpp
         ${CMAKE_SOURCE_DIR}/src/nn/ModelRunner.h
         ${CMAKE_SOURCE_DIR}/src/decode/beam_search.cpp

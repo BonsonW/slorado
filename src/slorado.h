@@ -57,6 +57,7 @@ typedef struct {
 
     uint64_t flag;              //flags
     int32_t batch_size;         //max reads loaded at once: K
+    int32_t gpu_batch_size;     //max chunks loaded at once: C
     int64_t batch_size_bytes;   //max bytes loaded at once: B
 
     int32_t num_thread;         //number of threads used: t
