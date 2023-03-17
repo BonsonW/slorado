@@ -1,21 +1,21 @@
-#include "CRFModel.h"
-
-#include "../utils/tensor_utils.h"
-#include "../utils/cuda_utils.h"
-#include "error.h"
-
-// #include <ATen/cuda/CUDAContext.h>
-#include <c10/cuda/CUDAGuard.h>
-
 #include <math.h>
-#include "toml.h"
+#include <string>
 #include <torch/torch.h>
 
-#include <string>
+#include "toml.h"
+#include "CRFModel.h"
+#include "error.h"
+#include "../utils/tensor_utils.h"
 
+#ifdef USE_GPU
+// #include <ATen/cuda/CUDAContext.h>
+#include "../utils/cuda_utils.h"
+#include <c10/cuda/CUDAGuard.h>
 extern "C" {
 #include "koi.h"
 }
+#endif
+
 
 #if USE_CUDA_LSTM
 

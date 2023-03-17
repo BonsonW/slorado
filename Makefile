@@ -41,10 +41,8 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/CPUDecoder.o \
 	  $(BUILD_DIR)/fast_hash.o \
 	  $(BUILD_DIR)/CRFModel.o \
-	  $(BUILD_DIR)/CudaCRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
-	  $(BUILD_DIR)/cuda_utils.o \
 	  $(BUILD_DIR)/toml.o \
 
 
@@ -62,11 +60,11 @@ endif
 # make accel=1 enables the acceelerator (CUDA,OpenCL,FPGA etc if implemented)
 ifdef cuda
 # CUDA_ROOT ?= /usr/local/cuda
-	CUDA_ROOT ?= /data/install/cuda-11.3
+	CUDA_ROOT ?= /usr/local/cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)
-	OBJ += $(BUILD_DIR)/GPUDecoder.o
+	OBJ += $(BUILD_DIR)/GPUDecoder.o $(BUILD_DIR)/CudaCRFModel.o $(BUILD_DIR)/cuda_utils.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so" -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda_cu.so"
 	CPPFLAGS += -I thirdparty/koi_lib/include
 	CPPFLAGS += -DUSE_CUDA_LSTM=1

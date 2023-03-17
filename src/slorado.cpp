@@ -41,7 +41,11 @@ SOFTWARE.
 
 #include "decode/GPUDecoder.h"
 #include "decode/CPUDecoder.h"
+
+#ifdef USE_GPU
 #include "nn/CudaCRFModel.h"
+#endif
+
 #include "signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
@@ -100,7 +104,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
                 device_args.erase(0, pos + delimiter.length());
             }
             device = device_args.substr(0, pos);
-            
+
             auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
             for (int i = 0; i < opt.num_runners; ++i) {
                 core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
@@ -506,7 +510,7 @@ void init_opt(opt_t* opt) {
 /* initialise timestamps */
 void init_timestamps(timestamps_t* time_stamps) {
     memset(time_stamps, 0, sizeof(timestamps_t));
-    
+
     time_stamps->time_init_runners = 0;
     time_stamps->time_read = 0;
     time_stamps->time_tens = 0;
