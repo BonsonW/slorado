@@ -1,6 +1,6 @@
-# slow5-template-x
+# slorado
 
-This is a template repository is mostly for my own use, but also demonstrates the advanced use of *slow5lib*. Documentation and comments are thus minimal and code is not so clean. For a simpler example visit [slow5-template](https://github.com/hasindu2008/slow5-template).
+A simplified version of Dorado.
 
 ## Compilation and running
 
@@ -23,14 +23,14 @@ On OS X : brew install zlib
 CPU version:
 
 ```
-scripts/install-torch10.sh
+scripts/install-torch12.sh
 make
 ./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
 ```
 
 CUDA GPU version:
 ```
-scripts/install-torch10.sh
+scripts/install-torch12.sh
 bash scripts/install-koi.sh
 make cuda=1
 ./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5

@@ -12,7 +12,7 @@
 #include <limits>
 #include <numeric>
 
-#define REMOVE_FIXED_BEAM_STAYS
+//#define REMOVE_FIXED_BEAM_STAYS
 
 // 16 bit state supports 7-mers with 4 bases.
 typedef int16_t state_t;

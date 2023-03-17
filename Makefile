@@ -79,7 +79,7 @@ endif
 .PHONY: clean distclean test
 
 $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
-	$(CXX) $(CXXFLAGS) $(OBJ) slow5lib/lib/libslow5.a $(LDFLAGS) -o $@
+	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
@@ -136,7 +136,7 @@ $(BUILD_DIR)/cuda_utils.o: src/utils/cuda_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
-	$(CC) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # follow the main.o above and add more objects here if needed
 
