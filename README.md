@@ -1,6 +1,6 @@
-# slow5-template-x
+# slorado
 
-This is a template repository is mostly for my own use, but also demonstrates the advanced use of *slow5lib*. Documentation and comments are thus minimal and code is not so clean. For a simpler example visit [slow5-template](https://github.com/hasindu2008/slow5-template).
+A simplified version of Dorado.
 
 ## Compilation and running
 

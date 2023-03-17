@@ -41,7 +41,11 @@ SOFTWARE.
 
 #include "decode/GPUDecoder.h"
 #include "decode/CPUDecoder.h"
+
+#ifdef USE_GPU
 #include "nn/CudaCRFModel.h"
+#endif
+
 #include "signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
@@ -494,7 +498,7 @@ void init_opt(opt_t* opt) {
 /* initialise timestamps */
 void init_timestamps(timestamps_t* time_stamps) {
     memset(time_stamps, 0, sizeof(timestamps_t));
-    
+
     time_stamps->time_init_runners = 0;
     time_stamps->time_read = 0;
     time_stamps->time_tens = 0;
