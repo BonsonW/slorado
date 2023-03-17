@@ -152,7 +152,7 @@ struct LSTMStackImpl : Module {
         auto t5 = rnn5(x);
         auto y5 = std::get<0>(t5);
         auto h5 = std::get<1>(t5);
-        
+
         x = y5.flip(1);
 
         // Output is [N, T, C], non-contiguous
@@ -260,7 +260,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     fclose(fp);
 
     if (!config_toml) {
-        ERROR("cannot parse - ", errbuf);
+        ERROR("cannot parse - %s", errbuf);
     }
 
     CRFModelConfig config;
@@ -297,7 +297,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
         for (int i = 0; ; i++) {
             toml_table_t *segment = toml_table_at(sublayers, i);
             if (!segment) break;
-            
+
             char *type = toml_string_in(segment, "type").u.s; // might need to free the char*
             if (strcmp(type, "convolution") == 0) {
                 // Overall stride is the product of all conv layers' strides.
@@ -318,11 +318,11 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             } else if (strcmp(type, "linearcrfencoder") == 0) {
                 config.blank_score = (float)toml_double_in(segment, "blank_score").u.d;
             }
-            
+
             free(type);
             free(segment);
         }
-        
+
         free(sublayers);
 
         config.conv = 16;
