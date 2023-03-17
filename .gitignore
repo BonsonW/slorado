@@ -49,6 +49,7 @@ Thumbs.db
 cmake-build-debug/
 build/
 /models/*
+/minimap2
 
 #Allowed files
 !CMakeLists.txt
