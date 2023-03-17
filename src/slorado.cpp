@@ -83,32 +83,23 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
             init_timestamps((*core->runner_ts).back());
         }
     } else {
+        std::vector<std::string> devices;
+        std::string device_name = "";
         std::string device_args = std::string(opt.device);
-        std::string delimiter = ",";
+        std::string delimiter = ":";
+        size_t pos = device_args.find(delimiter);
+        device_name = device_args.substr(0, pos + delimiter.length());
+        device_args.erase(0, pos + delimiter.length());
 
-        if (device_args.find(delimiter) != std::string::npos) {
-            size_t pos = 0;
-            std::string device;
-            while ((pos = device_args.find(delimiter)) != std::string::npos) {
-                device = device_args.substr(0, pos);
-                auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
-                for (int i = 0; i < opt.num_runners; ++i) {
-                    core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
-                    core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
-                    init_timestamps((*core->runner_ts).back());
-                }
-                device_args.erase(0, pos + delimiter.length());
-            }
-            device = device_args.substr(0, pos);
-            
+        delimiter = ",";
+        while ((pos = device_args.find(delimiter)) != std::string::npos) {
+            devices.push_back(device_name + device_args.substr(0, pos));
+            device_args.erase(0, pos + delimiter.length());
+        }
+        devices.push_back(device_name + device_args.substr(0, pos));
+
+        for (auto device: devices) {
             auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
-            for (int i = 0; i < opt.num_runners; ++i) {
-                core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
-                core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
-                init_timestamps((*core->runner_ts).back());
-            }
-        } else {
-            auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, opt.device);
             for (int i = 0; i < opt.num_runners; ++i) {
                 core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
@@ -277,7 +268,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
 
-    if (len_raw_signal>0) {
+    if (len_raw_signal > 0) {
         torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
 
         scale_signal(signal, rec->range / rec->digitisation, rec->offset);
@@ -362,8 +353,6 @@ void postprocess_signal(core_t* core,db_t* db, int32_t i){
     }
 
 }
-
-
 
 // void work_per_single_read(core_t* core,db_t* db, int32_t i){
 //     parse_single(core,db,i);
@@ -480,14 +469,14 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 1000;
-    opt->gpu_batch_size = 512;
+    opt->batch_size = 2000;
+    opt->gpu_batch_size = 800;
     opt->batch_size_bytes = 20*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;
 
-    opt->device = "cuda:1";
+    opt->device = "cuda:0";
     opt->chunk_size = 8000;
     opt->overlap = 150;
     opt->num_runners = 1;
@@ -501,7 +490,6 @@ void init_opt(opt_t* opt) {
 #endif
 
 }
-
 
 /* initialise timestamps */
 void init_timestamps(timestamps_t* time_stamps) {

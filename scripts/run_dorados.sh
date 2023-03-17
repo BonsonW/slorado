@@ -8,7 +8,7 @@ BLOW5_FILE="/data/slow5-testdata/hg2_prom_lsk114_subsample/reads.blow5"
 # POD5_FILE="/data/bonwon/slorado/test/pod5_dir"
 # BLOW5_FILE="/data/bonwon/slorado/test/oneread_r10.blow5"
 MODEL="/data/install/dorado-0.1.1/models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0/"
-DEVICE="cuda:0,cuda:1,cuda:2,cuda:3"
+DEVICE="cuda:0,1"
 GPU_BATCHSIZE="1900"
 
 mkdir ${OUTPUT_DIR}

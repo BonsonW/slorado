@@ -23,16 +23,16 @@ On OS X : brew install zlib
 CPU version:
 
 ```
-scripts/install-torch10.sh
-make
+scripts/install-torch12.sh
+make -j
 ./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
 ```
 
 CUDA GPU version:
 ```
-scripts/install-torch10.sh
+scripts/install-torch12.sh
 bash scripts/install-koi.sh
-make cuda=1
+make cuda=1 -j
 ./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
 ```
 

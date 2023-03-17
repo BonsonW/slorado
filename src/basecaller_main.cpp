@@ -294,7 +294,6 @@ int basecaller_main(int argc, char* argv[]) {
     for (size_t i = 0; i < runner_ts.size(); ++i) {
             fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f",__func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
-            fprintf(stderr, "\n[%s]             - Basecall time: %.3f sec",__func__, runner_ts[i]->time_basecall);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
