@@ -50,6 +50,8 @@ cmake-build-debug/
 build/
 /models/*
 /minimap2
+test/tmp.fastq
+test/tmp.paf
 
 #Allowed files
 !CMakeLists.txt

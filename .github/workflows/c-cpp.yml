@@ -25,41 +25,41 @@ jobs:
   #     run:  make -j8
   #   - name: test
   #     run: make test
-  ubuntu_16:
-    name: Ubuntu 16
-    runs-on: ubuntu-18.04
-    container: ubuntu:16.04
-    steps:
-    - name: install git
-      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
-    - uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - name: install packages
-      run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind wget datamash unzip bzip2
-    - name: torch
-      run: scripts/install-torch12.sh
-    - name: build
-      run: make -j8
-    - name: test
-      run: make test
-    - name: test mem
-      run: test/test.sh mem
-  ubuntu_18:
-    name: Ubuntu 18
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - name: install packages
-      run: sudo apt-get update && sudo apt-get install -y zlib1g-dev wget datamash unzip bzip2
-    - name: torch
-      run: scripts/install-torch12.sh
-    - name: build
-      run:  make -j8
-    - name: test
-      run: make test
+  # ubuntu_16:
+  #   name: Ubuntu 16
+  #   runs-on: ubuntu-18.04
+  #   container: ubuntu:16.04
+  #   steps:
+  #   - name: install git
+  #     run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+  #   - uses: actions/checkout@v2
+  #     with:
+  #       submodules: recursive
+  #   - name: install packages
+  #     run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind wget datamash unzip bzip2
+  #   - name: torch
+  #     run: scripts/install-torch12.sh
+  #   - name: build
+  #     run: make -j8
+  #   - name: test
+  #     run: make test
+  #   - name: test mem
+  #     run: test/test.sh mem
+  # ubuntu_18:
+  #   name: Ubuntu 18
+  #   runs-on: ubuntu-18.04
+  #   steps:
+  #   - uses: actions/checkout@v2
+  #     with:
+  #       submodules: recursive
+  #   - name: install packages
+  #     run: sudo apt-get update && sudo apt-get install -y zlib1g-dev wget datamash unzip bzip2
+  #   - name: torch
+  #     run: scripts/install-torch12.sh
+  #   - name: build
+  #     run:  make -j8
+  #   - name: test
+  #     run: make test
   ubuntu_20:
     name: Ubuntu 20
     runs-on: ubuntu-20.04
