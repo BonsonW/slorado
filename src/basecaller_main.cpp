@@ -1,6 +1,6 @@
 /**
  * @file basecaller_main.c
- * @brief entry point to subtool 1
+ * @brief entry point to basecaller_main
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
 
 MIT License
@@ -28,17 +28,30 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include "decode/CPUDecoder.h"
+#include "decode/GPUDecoder.h"
+#include "utils/stitch.h"
+#include "nn/ModelRunner.h"
 #include "slorado.h"
 #include "error.h"
 #include "misc.h"
+#include "signal_prep.h"
+#include "basecall.h"
+#include "writer.h"
+#include "misc.h"
+
 #include <assert.h>
+#include <cstddef>
+#include <cstdint>
 #include <getopt.h>
+#include <memory>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
+#include <torch/torch.h>
+#include <vector>
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
@@ -53,7 +66,7 @@ static struct option long_options[] = {
     {"accel",required_argument, 0, 0},              //9 accelerator
     {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
-    {"device", required_argument, 0, 'x'},          //12 device [cuda:0]
+    {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
     {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
     {0, 0, 0, 0}};
@@ -66,14 +79,14 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  data FILE                   the data directory.\n");
     fprintf(fp_help, "\nbasic options:\n");
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
-    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size); 
+    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size);
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
-    fprintf(fp_help, "  -o FILE                     output to file [stdout]\n");
+    fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
-    fprintf(fp_help, "  -h                          shows help message and exits\n");   
+    fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\nadvanced options:\n");
@@ -88,6 +101,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 
 int basecaller_main(int argc, char* argv[]) {
 
+    double array[] = { 1, 2, 3, 4, 5};
     double realtime0 = realtime();
 
     const char* optstring = "t:B:K:v:o:x:r:p:c:hV";
@@ -140,6 +154,13 @@ int basecaller_main(int argc, char* argv[]) {
                 ERROR("Overlap should larger than 0. You entered %d", opt.overlap);
                 exit(EXIT_FAILURE);
             }
+        } else if (c == 'o') {
+            opt.out_path = optarg;
+            opt.out = fopen(opt.out_path, "w");
+            if (opt.out == NULL) {
+                fprintf(stderr,"Error in opening output file\n");
+                exit(EXIT_FAILURE);
+            }
         } else if (c == 'r') {
             opt.num_runners = atoi(optarg);
             if (opt.num_runners < 1) {
@@ -150,7 +171,6 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
         } else if (c == 'h'){
-            fp_help = stdout;
             fp_help = stdout;
         } else if(c == 0 && longindex == 7) { //debug break
             opt.debug_break = atoi(optarg);
@@ -196,8 +216,23 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // print summary
+    fprintf(stderr,"\nslorado base-caller version %s\n", SLORADO_VERSION);
+    fprintf(stderr,"model path:         %s\n", model);
+    fprintf(stderr,"input path:         %s\n", data);
+    fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
+    fprintf(stderr,"device:             %s\n", opt.device);
+    fprintf(stderr,"chunk size:         %d\n", opt.chunk_size);
+    fprintf(stderr,"batch size:         %d\n", opt.batch_size);
+    fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
+    fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
+    fprintf(stderr,"overlap:            %d\n", opt.overlap);
+    fprintf(stderr, "\n");
+
+/////////////////////////////////////////////////////////////////////////////
+
     //initialise the core data structure
-    core_t* core = init_core(data, opt, realtime0);
+    core_t* core = init_core(data, opt, model, realtime0);
 
     int32_t counter=0;
 
@@ -241,16 +276,154 @@ int basecaller_main(int argc, char* argv[]) {
 
     fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
     fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
-    if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
+    //if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
-            fprintf(stderr, "\n[%s]     - Calc time: %.3f sec",__func__, core->calc_time);
-    }
+            fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
+            fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
+            fprintf(stderr, "\n[%s]          - Basecall time: %.3f sec",__func__, core->ts.time_basecall);
+            fprintf(stderr, "\n[%s]          - Decode: %.3f sec",__func__, core->ts.time_decode);
+            fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
+    //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
 
     fprintf(stderr,"\n");
 
     //free the core data structure
     free_core(core,opt);
+
+////////////////////////////////////////////////////////////////////////////
+
+    // // performance vars
+    // timestamps_t ts;
+    // uint64_t n_reads = 0;
+    // uint64_t n_samples = 0;
+
+    // init_timestamps(&ts);
+
+    // // open slow5 file
+    // slow5_file_t *sp = slow5_open(data,"r");
+    // if (sp==NULL) {
+    //    fprintf(stderr,"Error in opening slow5 file\n");
+    //    exit(EXIT_FAILURE);
+    // }
+    // slow5_rec_t *rec = NULL;
+    // int ret=0;
+
+    // create model runner
+    // only one is used for now
+//     std::vector<Runner> runners;
+
+// #ifdef USE_GPU
+//     if (strcmp(opt.device, "cpu") == 0) {
+//         for (int i = 0; i < opt.num_runners; ++i) {
+//             runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+//         }
+//     } else {
+//         for (int i = 0; i < opt.num_runners; ++i) {
+//             runners.push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+//         }
+//     }
+// #else
+//     if (strcmp(opt.device, "cpu") == 0) {
+//         for (int i = 0; i < opt.num_runners; ++i) {
+//             runners.push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.batch_size));
+//         }
+//     } else {
+//         fprintf(stderr, "Error. Please compile again for GPU\n");
+//         exit(EXIT_FAILURE);
+//     }
+// #endif
+
+    // // total time
+    // ts.time_total = -realtime();
+
+    // while (1) {
+    //     ts.time_read -= realtime();
+    //     ret = slow5_get_next(&rec,sp);
+    //     ts.time_read += realtime();
+
+    //     if (ret < 0) {
+    //         if (slow5_errno != SLOW5_ERR_EOF) {
+    //             fprintf(stderr,"Could not reach end of slow5 file. Error code %d\n", slow5_errno);
+    //             return EXIT_FAILURE;
+    //         } else { //EOF file reached
+    //             break;
+    //         }
+    //     }
+    //     VERBOSE("processing signal %zu...", n_reads);
+
+    //     // convert record to tensor
+    //     VERBOSE("converting signal to tensor...%s", "");
+    //     ts.time_tens -= realtime();
+    //     torch::Tensor signal = tensor_from_record(rec);
+    //     ts.time_tens += realtime();
+
+    //     n_samples += signal.size(0);
+
+    //     // trim signal
+    //     VERBOSE("trimming tensor...%s", "");
+    //     ts.time_trim -= realtime();
+    //     int trim_start = trim_signal(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}));
+    //     signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+    //     ts.time_trim += realtime();
+
+    //     // scale signal
+    //     VERBOSE("scaling tensor...%s", "");
+    //     ts.time_scale -= realtime();
+    //     scale_signal(signal);
+    //     ts.time_scale += realtime();
+
+    //     // split signal into chunks
+    //     VERBOSE("splitting signal into chunks...%s", "");
+    //     ts.time_chunk -= realtime();
+    //     std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+    //     ts.time_chunk += realtime();
+
+    //     // decode signal
+    //     basecall_chunks(signal, chunks, opt.chunk_size, opt.batch_size, *runners[0], ts);
+
+    //     // stitch
+    //     VERBOSE("stitching %zu chunks...", chunks.size());
+    //     ts.time_stitch -= realtime();
+    //     std::string sequence;
+    //     std::string qstring;
+    //     stitch_chunks(chunks, sequence, qstring);
+    //     ts.time_stitch += realtime();
+
+    //     // print output
+    //     VERBOSE("writing output into %s", opt.out_path == NULL ? "stdout" : opt.out_path);
+    //     ts.time_write -= realtime();
+    //     write_to_file(opt.out, sequence, qstring, rec->read_id, (opt.flag & SLORADO_EFQ) != 0);
+    //     ts.time_write += realtime();
+
+    //     ++n_reads;
+    // }
+    // ts.time_total += realtime();
+
+    // print perofrmance times
+    // fprintf(stderr, "\npeformance summary\n");
+    // fprintf(stderr, "reads completed:       %zu\n", n_reads);
+    // fprintf(stderr, "samples/s:             %f\n", n_samples / core->ts.time_total);
+    // fprintf(stderr, "time to read:          %f\n", core->ts.time_read);
+    // fprintf(stderr, "time to conv tensor:   %f\n", core->ts.time_tens);
+    // fprintf(stderr, "time to trim:          %f\n", core->ts.time_trim);
+    // fprintf(stderr, "time to scale:         %f\n", core->ts.time_scale);
+    // fprintf(stderr, "time to chunk:         %f\n", core->ts.time_chunk);
+    // fprintf(stderr, "time to copy:          %f\n", core->ts.time_copy);
+    // fprintf(stderr, "time to zero pad:      %f\n", core->ts.time_pad);
+    // fprintf(stderr, "time to accept:        %f\n", core->ts.time_pad);
+    // fprintf(stderr, "time to basecall:      %f\n", core->ts.time_basecall);
+    // fprintf(stderr, "time to decode:        %f\n", core->ts.time_decode);
+    // fprintf(stderr, "time to stitch:        %f\n", core->ts.time_stitch);
+    // fprintf(stderr, "time to write:         %f\n", core->ts.time_write);
+    // fprintf(stderr,"\n");
+
+    // slow5_rec_free(rec);
+    // slow5_close(sp);
+
+    if (opt.out != stdout) {
+        fclose(opt.out);
+    }
 
     return 0;
 }

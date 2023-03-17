@@ -39,6 +39,16 @@ Thumbs.db
 
 # Editor generated files #
 /.vscode
+.idea/
 
 # binaries
-/xyztool
+/slorado
+/thirdparty/torch
+/thirdparty/koi_lib
+cmake-build-debug/
+build/
+/models/*
+
+#Allowed files
+!CMakeLists.txt
+
