@@ -70,9 +70,9 @@ ifdef cuda
 	CPPFLAGS += -DUSE_CUDA_LSTM=1
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl
 	LDFLAGS += -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
-else
-	CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 endif
+
+CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 
 .PHONY: clean distclean test
 
