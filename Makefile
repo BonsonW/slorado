@@ -59,8 +59,8 @@ endif
 
 # make accel=1 enables the acceelerator (CUDA,OpenCL,FPGA etc if implemented)
 ifdef cuda
-# CUDA_ROOT ?= /usr/local/cuda
-	CUDA_ROOT ?= /usr/local/cuda
+	# CUDA_ROOT ?= /usr/local/cuda
+	CUDA_ROOT ?= /data/install/cuda-11.3
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)

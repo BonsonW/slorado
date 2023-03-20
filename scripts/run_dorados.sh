@@ -4,12 +4,12 @@ MINIMAP2=../minimap2-2.24_x64-linux/minimap2 #path to minimpa2 executable if not
 REFERENC_GENOME="/genome/hg38noAlt.idx" #path to reference genome
 OUTPUT_DIR="logs"
 POD5_FILE="/data/bonwon/hg2_prom_lsk114_subsample_pod5"
-BLOW5_FILE="/data/slow5-testdata/hg2_prom_lsk114_subsample/reads.blow5"
+BLOW5_FILE="/data/slow5-testdata/hg2_prom_lsk114_subsubsample/reads.blow5"
 # POD5_FILE="/data/bonwon/slorado/test/pod5_dir"
-# BLOW5_FILE="/data/bonwon/slorado/test/oneread_r10.blow5"
+BLOW5_FILE="/data/bonwon/slorado/test/oneread_r10.blow5"
 MODEL="/data/install/dorado-0.1.1/models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0/"
-DEVICE="cuda:0,1"
-GPU_BATCHSIZE="1900"
+DEVICE="cuda:0"
+GPU_BATCHSIZE="800"
 
 mkdir ${OUTPUT_DIR}
 
@@ -22,7 +22,7 @@ do
     clean_fscache
     if [ "$var" = "slorado" ]; then
         /usr/bin/time -v ./slorado basecaller -o ${OUTPUT_DIR}/slorado_calls.fastq -t 40 -x ${DEVICE} -B500M -C${GPU_BATCHSIZE} -K4000 -c10000 ${MODEL} ${BLOW5_FILE} 2>${OUTPUT_DIR}/slorado_log.txt
-        # get_accuracy "slorado_calls.fastq" "slorado_accuracy.txt"
+        get_accuracy "slorado_calls.fastq" "slorado_accuracy.txt"
         rm ${OUTPUT_DIR}/slorado_calls.fastq
     elif [ "$var" = "dorado_release" ]; then
         /usr/bin/time -v /data/install/dorado-0.1.1/bin/dorado basecaller ${MODEL} ${POD5_FILE} -x ${DEVICE} -r 1 --emit-fastq > ${OUTPUT_DIR}/dorado_release_calls.fastq 2>${OUTPUT_DIR}/dorado_release_log.txt
