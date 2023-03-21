@@ -124,7 +124,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     }
 #endif
 
-    LOG_TRACE("%s", "successfully initialized runners");
+    LOG_DEBUG("%s", "successfully initialized runners");
 
     core->ts.time_init_runners += realtime();
 
@@ -198,7 +198,6 @@ db_t* init_db(core_t* core) {
 
 /* load a data batch from disk */
 ret_status_t load_db(core_t* core, db_t* db) {
-
     double load_start = realtime();
 
     db->n_rec = 0;
@@ -235,10 +234,9 @@ ret_status_t load_db(core_t* core, db_t* db) {
 
 
 void parse_single(core_t* core,db_t* db, int32_t i){
+    assert(db->mem_bytes[i] > 0);
+    assert(db->mem_records[i] != NULL);
 
-    assert(db->mem_bytes[i]>0);
-    assert(db->mem_records[i]!=NULL);
-    //db->slow5_rec[i]=NULL;
     int ret=slow5_decode(&db->mem_records[i], &db->mem_bytes[i], &db->slow5_rec[i], core->sp);
     if(ret<0){
         ERROR("Error parsing the record %d",i);
@@ -278,7 +276,6 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
         scale_signal(signal, rec->range / rec->digitisation, rec->offset);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        LOG_DEBUG("Read %s has %zu chunks", rec->read_id, chunks.size());
 
         (*db->chunks)[i] = chunks;
         LOG_DEBUG("%s","assigned chunks");
@@ -358,61 +355,32 @@ void postprocess_signal(core_t* core,db_t* db, int32_t i){
 
 }
 
-// void work_per_single_read(core_t* core,db_t* db, int32_t i){
-//     parse_single(core,db,i);
-//     preprocess_signal(core,db,i);
-//     mean_single(core,db,i);
-
-// }
-
-// void mean_db(core_t* core, db_t* db) {
-// #ifdef HAVE_ACC
-//     if (core->opt.flag & SLORADO_ACC) {
-//         VERBOSE("%s","Aligning reads with accel");
-//         work_db(core,db,mean_single);
-//     }
-// #endif
-
-//     if (!(core->opt.flag & SLORADO_ACC)) {
-//         fprintf(stderr, "cpu\n");
-//         work_db(core,db,mean_single);
-//     }
-//     VERBOSE("Read %d\n",0);
-// }
-
-
 void process_db(core_t* core,db_t* db){
     double proc_start = realtime();
 
-    // if(core->opt.flag & SLORADO_PRF || core->opt.flag & SLORADO_ACC){
-        double a = realtime();
-        work_db(core,db,parse_single);
-        double b = realtime();
-        core->parse_time += (b-a);
-        LOG_TRACE("%s","Parsed reads");
+    double a = realtime();
+    work_db(core,db,parse_single);
+    double b = realtime();
+    core->parse_time += (b-a);
+    LOG_DEBUG("%s","Parsed reads");
 
-        a = realtime();
-        work_db(core,db,preprocess_signal);
-        b = realtime();
-        core->preproc_time += (b-a);
-        LOG_TRACE("%s","Preprocessed reads");
+    a = realtime();
+    work_db(core,db,preprocess_signal);
+    b = realtime();
+    core->preproc_time += (b-a);
+    LOG_DEBUG("%s","Preprocessed reads");
 
-        a = realtime();
-        basecall_db(core,db);
-        b = realtime();
-        core->basecall_time += (b-a);
-        LOG_TRACE("%s","Basecalled reads");
+    a = realtime();
+    basecall_db(core,db);
+    b = realtime();
+    core->basecall_time += (b-a);
+    LOG_DEBUG("%s","Basecalled reads");
 
-        a = realtime();
-        work_db(core,db,postprocess_signal);
-        b = realtime();
-        core->postproc_time += (b-a);
-        LOG_TRACE("%s","Postprocessed reads");
-
-
-    // } else {
-    //     work_db(core, db, work_per_single_read);
-    // }
+    a = realtime();
+    work_db(core,db,postprocess_signal);
+    b = realtime();
+    core->postproc_time += (b-a);
+    LOG_DEBUG("%s","Postprocessed reads");
 
     double proc_end = realtime();
     core->process_db_time += (proc_end-proc_start);

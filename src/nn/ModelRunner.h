@@ -56,7 +56,7 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
     m_decoder = std::make_unique<T>();
     m_device = device;
 
-    LOG_TRACE("initialized model runner for device %s", device.c_str());
+    LOG_DEBUG("initialized model runner for device %s", device.c_str());
 
 #ifdef USE_GPU
     if (device == "cpu") {

@@ -92,7 +92,6 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     int cuda_device_num_current=-1;
     cudaGetDevice(&cuda_device_num_current);
     CUDA_CHK();
-    LOG_TRACE("Running on %s (device id %d)", prop.name, cuda_device_num_current);
 
     host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
