@@ -103,9 +103,15 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         devices.push_back(device_name + device_args.substr(0, pos));
 
         for (auto device: devices) {
+#ifdef USE_CUDA_LSTM
             auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
+#endif
             for (int i = 0; i < opt.num_runners; ++i) {
+#ifdef USE_CUDA_LSTM
                 core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
+#else
+                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+#endif
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
             }
@@ -146,7 +152,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         VERBOSE("%s","Initialising accelator");
     }
 #endif
-
 
     return core;
 }
@@ -424,7 +429,6 @@ void free_db(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
         slow5_rec_free(db->slow5_rec[i]);
-
         for (Chunk *chunk: (*db->chunks)[i]) free(chunk);
     }
     free(db->slow5_rec);

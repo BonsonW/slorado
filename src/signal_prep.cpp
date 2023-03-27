@@ -76,12 +76,14 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset) {
     signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
 }
 
-int trim(torch::Tensor signal,
-                     int window_size,
-                     float threshold,
-                     int min_elements,
-                     int max_samples,
-                     float max_trim) {
+int trim(
+    torch::Tensor signal,
+    int window_size,
+    float threshold,
+    int min_elements,
+    int max_samples,
+    float max_trim
+) {
     int min_trim = 10;
     bool seen_peak = false;
     int num_samples = std::min(max_samples, static_cast<int>(signal.size(0)) - min_trim);

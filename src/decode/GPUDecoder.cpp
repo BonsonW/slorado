@@ -6,12 +6,15 @@
 #include <torch/torch.h>
 #include "error.h"
 
+#ifdef USE_CUDA_LSTM
 #include <cuda_runtime.h>
 extern "C" {
 #include "koi.h"
 }
+#endif
 
 torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
+#ifdef USE_CUDA_LSTM
     long int N = scores.sizes()[0];
     long int T = scores.sizes()[1];
     long int C = scores.sizes()[2];
@@ -25,7 +28,6 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
             torch::TensorOptions().dtype(torch::kInt8).device(scores.device()).requires_grad(false);
 
     if (!initialized) {
-
         chunks = torch::empty({N, 4}, tensor_options_int32);
         chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
         chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
@@ -49,7 +51,6 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     auto sequence = moves_sequence_qstring[1];
     auto qstring = moves_sequence_qstring[2];
 
-    c10::cuda::CUDAGuard device_guard(scores.device());
     host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
@@ -72,9 +73,13 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
                     options.beam_cut, options.blank_score, options.move_pad);
 
     return moves_sequence_qstring.reshape({3, N, -1});
+#else
+    return torch::empty({1});
+#endif
 }
 
 std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstring_cpu) {
+#ifdef USE_CUDA_LSTM
     assert(moves_sequence_qstring_cpu.device() == torch::kCPU);
     auto moves_cpu = moves_sequence_qstring_cpu[0];
     auto sequence_cpu = moves_sequence_qstring_cpu[1];
@@ -97,6 +102,9 @@ std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstr
     }
 
     return called_chunks;
+#else
+    return std::vector<DecodedChunk>();
+#endif
 }
 
 std::vector<DecodedChunk> GPUDecoder::beam_search(const torch::Tensor &scores,

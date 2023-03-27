@@ -7,8 +7,7 @@
 #include "error.h"
 #include "../utils/tensor_utils.h"
 
-#ifdef USE_GPU
-// #include <ATen/cuda/CUDAContext.h>
+#ifdef USE_CUDA_LSTM
 #include "../utils/cuda_utils.h"
 #include <c10/cuda/CUDAGuard.h>
 extern "C" {
@@ -171,14 +170,6 @@ struct LinearCRFImpl : Module {
                             F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
                              .view({N, T, -1});
         }
-
-#if !USE_CUDA_LSTM
-        if (x.device() == torch::kCPU) {
-            // Output is [T, N, C]
-            return scores.transpose(0, 1);
-        }
-#endif
-
         // Output is [N, T, C], contiguous
         return scores;
     }
