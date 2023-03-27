@@ -25,4 +25,5 @@ int64_t mm_parse_num(const char* str);
 
 void yes_or_no(uint64_t* flag_a, uint64_t flag, const char* opt_name, const char* arg, int yes_to_set);
 
+
 #endif

@@ -7,38 +7,6 @@ on:
     branches: [ '*' ]
 
 jobs:
-  # ubuntu_20:
-  #   name: Ubuntu 20
-  #   runs-on: ubuntu-20.04
-  #   container: ubuntu:20.04
-  #   steps:
-  #   - name: install git
-  #     run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
-  #   - uses: actions/checkout@v2
-  #     with:
-  #       submodules: recursive
-  #   - name: install packages
-  #     run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind cmake wget unzip
-  #   # - name: cuda install
-  #   #   run: wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin && mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600 && wget https://developer.download.nvidia.com/compute/cuda/10.2/Prod/local_installers/cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb && dpkg -i cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb && apt-key add /var/cuda-repo-10-2-local-10.2.89-440.33.01/7fa2af80.pub && apt-get update && apt-get -y install cuda
-  #   - uses: Jimver/cuda-toolkit@v0.2.7
-  #     id: cuda-toolkit
-  #     with:
-  #       cuda: '11.3.0'
-  #   - name: install libtorch
-  #     run: bash scripts/install-torch10.sh
-  #   - name: print pwd
-  #     run: pwd
-  #   - name: print ls
-  #     run: ls
-  #   - name: cmake configuration
-  #     run: cd build && cmake ..
-  #   - name: make build
-  #     run: make -C $PWD/build -j 8
-  #   - name: test
-  #     run: make test
-  #   - name: test mem
-  #     run: test/test.sh mem
   # ubuntu_14:
   #   name: ubuntu_14
   #   runs-on: ubuntu-18.04
@@ -57,40 +25,26 @@ jobs:
   #     run:  make -j8
   #   - name: test
   #     run: make test
-  ubuntu_16:
-    name: Ubuntu 16
-    runs-on: ubuntu-18.04
-    container: ubuntu:16.04
-    steps:
-    - name: install git
-      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
-    - uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - name: install packages
-      run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind cmake wget unzip
-    # - name: cuda install
-    #   run: wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin && mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600 && wget https://developer.download.nvidia.com/compute/cuda/10.2/Prod/local_installers/cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb && dpkg -i cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb && apt-key add /var/cuda-repo-10-2-local-10.2.89-440.33.01/7fa2af80.pub && apt-get update && apt-get -y install cuda
-    - name: cuda repo setup
-      run: wget https://developer.download.nvidia.com/compute/cuda/10.2/Prod/local_installers/cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb && dpkg -i cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb && apt-key add /var/cuda-repo-10-2-local-10.2.89-440.33.01/7fa2af80.pub && apt-get update
-    - name: cuda install
-      run: apt-get install -y cuda
-    # - name: cuda env setup
-    #   run: sudo ln -s /usr/local/cuda-6.5/ /usr/local/cuda
-    - name: install libtorch
-      run: bash scripts/install-torch10.sh
-    - name: print pwd
-      run: pwd
-    - name: print ls
-      run: ls
-    - name: cmake configuration
-      run: cd build && cmake -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda ..
-    - name: make build
-      run: make -C $PWD/build -j 8
-    - name: test
-      run: make test
-    - name: test mem
-      run: test/test.sh mem
+  # ubuntu_16:
+  #   name: Ubuntu 16
+  #   runs-on: ubuntu-18.04
+  #   container: ubuntu:16.04
+  #   steps:
+  #   - name: install git
+  #     run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+  #   - uses: actions/checkout@v2
+  #     with:
+  #       submodules: recursive
+  #   - name: install packages
+  #     run: apt-get update && apt-get install -y zlib1g-dev gcc g++ autoconf automake make valgrind wget datamash unzip bzip2
+  #   - name: torch
+  #     run: scripts/install-torch12.sh
+  #   - name: build
+  #     run: make -j8
+  #   - name: test
+  #     run: make test
+  #   - name: test mem
+  #     run: test/test.sh mem
   # ubuntu_18:
   #   name: Ubuntu 18
   #   runs-on: ubuntu-18.04
@@ -99,28 +53,32 @@ jobs:
   #     with:
   #       submodules: recursive
   #   - name: install packages
-  #     run: sudo apt-get update && sudo apt-get install -y zlib1g-dev
+  #     run: sudo apt-get update && sudo apt-get install -y zlib1g-dev wget datamash unzip bzip2
+  #   - name: torch
+  #     run: scripts/install-torch12.sh
   #   - name: build
   #     run:  make -j8
   #   - name: test
   #     run: make test
-  # ubuntu_20:
-  #   name: Ubuntu 20
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #   - uses: actions/checkout@v2
-  #     with:
-  #       submodules: recursive
-  #   - name: install packages
-  #     run: sudo apt-get update && sudo apt-get install zlib1g-dev
-  #   - name: build-gcc
-  #     run: make -j8
-  #   - name: test-gcc
-  #     run: make test
-  #   - name: build-clang
-  #     run: make clean && make CC=clang -j8
-  #   - name: test-clang
-  #     run: make test
+  ubuntu_20:
+    name: Ubuntu 20
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: torch
+      run: scripts/install-torch12.sh
+    - name: build-gcc
+      run: make -j8
+    - name: test-gcc
+      run: make test
+    # - name: build-clang
+    #   run: make clean && make CC=clang -j8
+    # - name: test-clang
+    #   run: make test
   # ubuntu_20_icc:
   #   name: Ubuntu 20 icc
   #   runs-on: ubuntu-20.04

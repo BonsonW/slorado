@@ -1,6 +1,6 @@
-# slow5-template-x
+# slorado
 
-This is a template repository is mostly for my own use, but also demonstrates the advanced use of *slow5lib*. Documentation and comments are thus minimal and code is not so clean. For a simpler example visit [slow5-template](https://github.com/hasindu2008/slow5-template).
+A simplified version of Dorado.
 
 ## Compilation and running
 
@@ -8,20 +8,6 @@ This is a template repository is mostly for my own use, but also demonstrates th
 sudo apt-get install zlib1g-dev   #install zlib development libraries
 git clone --recursive https://github.com/BonsonW/slorado
 cd slorado
-make
-./slorado basecaller models/dna_r9.4.1_e8.1_hac@v3.3 test/example.blow5
-```
-
-```
-# For CMake
-sudo apt-get install zlib1g-dev   #install zlib development libraries
-git clone --recursive https://github.com/BonsonW/slorado
-cd slorado
-bash scripts/install-torch10.sh
-cd build
-cmake ..
-make
-./slorado basecaller ../models/dna_r9.4.1_e8.1_hac@v3.3 ../test/example.blow5
 ```
 
 The commands to install zlib development libraries on some popular distributions:
@@ -30,6 +16,55 @@ The commands to install zlib development libraries on some popular distributions
 On Debian/Ubuntu : sudo apt-get install zlib1g-dev
 On Fedora/CentOS : sudo dnf/yum install zlib-devel
 On OS X : brew install zlib
+```
+
+### Make
+
+CPU version:
+
+```
+scripts/install-torch12.sh
+make
+./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
+```
+
+CUDA GPU version:
+```
+scripts/install-torch12.sh
+bash scripts/install-koi.sh
+make cuda=1
+./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
+```
+
+advanced options:
+```
+make cuda=1 LIBTORCH_DIR=/path/to/torachlib CUDA_LIB=/path/to/cuda/library/
+```
+
+
+### CMake
+
+```
+# For CMake
+sudo apt-get install zlib1g-dev   #install zlib development libraries
+git clone --recursive https://github.com/BonsonW/slorado
+cd slorado
+bash scripts/install-torch10.sh
+bash scripts/install-koi.sh
+cd build
+rm -r ./* && cmake ..
+make -j && ./slorado basecaller -o one_read.fastq ../models/dna_r9.4.1_e8.1_fast@v3.4 ../test/one_read.slow5 -v 5
+```
+
+if different cuda location, before cmake:
+export PATH=/usr/local/cuda-10.2/bin/:$PATH
+
+
+
+## Calculate basecalling accuracy
+```
+set variables MINIMAP2, REFERENCE_GENOME, FASTQ_FILE in the script and run
+scripts/calculate_basecalling_accuarcy.sh
 ```
 
 ## Acknowledgement

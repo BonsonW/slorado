@@ -1,0 +1,7 @@
+#!/bin/bash
+
+MINIMAP2=../minimap2-2.24_x64-linux/minimap2 #path to minimpa2 executable if not added to $PATH
+REFERENC_GENOME="/genome/hg38noAlt.idx" #path to reference genome
+
+FASTQ_FILE="out.fastq" #path to basecalled fastq file
+${MINIMAP2} -cx map-ont ${REFERENC_GENOME} -t32 --secondary=no ${FASTQ_FILE} | awk '{print $10/$11}' | datamash mean 1 sstdev 1 q1 1 median 1 q3 1

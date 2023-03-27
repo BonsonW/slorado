@@ -1,6 +1,6 @@
 /**
  * @file basecaller_main.c
- * @brief entry point to subtool 1
+ * @brief entry point to basecaller_main
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
 
 MIT License
@@ -28,21 +28,34 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include "decode/CPUDecoder.h"
+#include "decode/GPUDecoder.h"
+#include "utils/stitch.h"
+#include "nn/ModelRunner.h"
 #include "slorado.h"
 #include "error.h"
 #include "misc.h"
+#include "signal_prep.h"
+#include "basecall.h"
+#include "writer.h"
+#include "misc.h"
+
 #include <assert.h>
+#include <cstddef>
+#include <cstdint>
 #include <getopt.h>
+#include <memory>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <torch/torch.h>
+#include <vector>
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
-    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [512]
+    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
     {"max-bytes", required_argument, 0, 'B'},       //2 batchsize - number of bytes loaded at once
     {"verbose", required_argument, 0, 'v'},         //3 verbosity level [1]
     {"help", no_argument, 0, 'h'},                  //4
@@ -53,9 +66,10 @@ static struct option long_options[] = {
     {"accel",required_argument, 0, 0},              //9 accelerator
     {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
-    {"device", required_argument, 0, 'x'},          //12 device [cuda:0]
+    {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
     {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
+    {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
     {0, 0, 0, 0}};
 
 
@@ -66,14 +80,15 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  data FILE                   the data directory.\n");
     fprintf(fp_help, "\nbasic options:\n");
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
-    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size); 
+    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size);
+    fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [%d]\n", opt.gpu_batch_size);
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
-    fprintf(fp_help, "  -o FILE                     output to file [stdout]\n");
+    fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
-    fprintf(fp_help, "  -h                          shows help message and exits\n");   
+    fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\nadvanced options:\n");
@@ -87,16 +102,9 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 }
 
 int basecaller_main(int argc, char* argv[]) {
-
-    double array[] = { 1, 2, 3, 4, 5};
-//    auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCUDA, 0);
-    auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCPU, -1);
-    torch::Tensor tharray = torch::from_blob(array, {5}, options);
-
-
     double realtime0 = realtime();
 
-    const char* optstring = "t:B:K:v:o:x:r:p:c:hV";
+    const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";
 
     int longindex = 0;
     int32_t c = -1;
@@ -123,6 +131,12 @@ int basecaller_main(int argc, char* argv[]) {
                 ERROR("Batch size should larger than 0. You entered %d",opt.batch_size);
                 exit(EXIT_FAILURE);
             }
+        } else if (c == 'C') {
+            opt.gpu_batch_size = atoi(optarg);
+            if (opt.gpu_batch_size < 1) {
+                ERROR("Batch size should larger than 0. You entered %d",opt.gpu_batch_size);
+                exit(EXIT_FAILURE);
+            }
         } else if (c == 't') {
             opt.num_thread = atoi(optarg);
             if (opt.num_thread < 1) {
@@ -146,6 +160,13 @@ int basecaller_main(int argc, char* argv[]) {
                 ERROR("Overlap should larger than 0. You entered %d", opt.overlap);
                 exit(EXIT_FAILURE);
             }
+        } else if (c == 'o') {
+            opt.out_path = optarg;
+            opt.out = fopen(opt.out_path, "w");
+            if (opt.out == NULL) {
+                fprintf(stderr,"Error in opening output file\n");
+                exit(EXIT_FAILURE);
+            }
         } else if (c == 'r') {
             opt.num_runners = atoi(optarg);
             if (opt.num_runners < 1) {
@@ -156,7 +177,6 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
         } else if (c == 'h'){
-            fp_help = stdout;
             fp_help = stdout;
         } else if(c == 0 && longindex == 7) { //debug break
             opt.debug_break = atoi(optarg);
@@ -202,26 +222,85 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // print summary
+    fprintf(stderr,"\nslorado base-caller version %s\n", SLORADO_VERSION);
+    fprintf(stderr,"model path:         %s\n", model);
+    fprintf(stderr,"input path:         %s\n", data);
+    fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
+    fprintf(stderr,"device:             %s\n", opt.device);
+    fprintf(stderr,"chunk size:         %d\n", opt.chunk_size);
+    fprintf(stderr,"batch size:         %d\n", opt.batch_size);
+    fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
+    fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
+    fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
+    fprintf(stderr,"overlap:            %d\n", opt.overlap);
+    fprintf(stderr, "\n");
+
+/////////////////////////////////////////////////////////////////////////////
+
     //initialise the core data structure
-    core_t* core = init_core(data, opt, realtime0);
+    core_t* core = init_core(data, opt, model, realtime0);
 
     int32_t counter=0;
+
+    //initialise a databatch
+    db_t* db = init_db(core);
+
+    ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
+    while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
+
+        //load a databatch
+        status = load_db(core, db);
+
+        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
+                realtime() - realtime0, cputime() / (realtime() - realtime0),
+                status.num_reads,status.num_bytes/(1000.0*1000.0));
+
+        //process a databatch
+        process_db(core, db);
+
+        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) processed\n", __func__,
+                realtime() - realtime0, cputime() / (realtime() - realtime0),
+                status.num_reads,status.num_bytes/(1000.0*1000.0));
+
+        //output print
+        output_db(core, db);
+
+        //free temporary
+        free_db_tmp(db);
+
+        if(opt.debug_break==counter){
+            break;
+        }
+        counter++;
+    }
+
+    //free the databatch
+    free_db(db);
 
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
 
     fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
     fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
-    if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
+    //if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
-            fprintf(stderr, "\n[%s]     - Calc time: %.3f sec",__func__, core->calc_time);
-    }
+            fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
+            fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
+            fprintf(stderr, "\n[%s]          - Basecall time: %.3f sec",__func__, core->ts.time_basecall);
+            fprintf(stderr, "\n[%s]          - Decode: %.3f sec",__func__, core->ts.time_decode);
+            fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
+    //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
 
     fprintf(stderr,"\n");
 
     //free the core data structure
     free_core(core,opt);
+
+    if (opt.out != stdout) {
+        fclose(opt.out);
+    }
 
     return 0;
 }
