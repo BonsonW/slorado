@@ -7,7 +7,7 @@ MODEL="dna_r10.4.1_e8.2_400bps_fast@v4.0.0/"
 MODEL_PATH=/data/install/dorado-0.1.1/models/${MODEL}
 
 OUTPUT_DIR=test_${MODEL}
-DEVICE="cuda:0"
+DEVICE="cpu"
 GPU_BATCHSIZE="200"
 
 POD5_FILE="/data/bonwon/hg2_prom_lsk114_subsample_pod5"

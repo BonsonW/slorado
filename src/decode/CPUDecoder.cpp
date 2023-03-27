@@ -87,7 +87,7 @@ torch::Tensor backward_scores(const torch::Tensor& scores, const float fixed_sta
     return scan(Ms_T.flip(0), fixed_stay_score, idx_T.to(torch::kInt64), vT).flip(0);
 }
 
-std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
+std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
@@ -142,57 +142,9 @@ std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
     return chunk_results;
 }
 
-std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
+std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
-    const auto scores_cpu = scores.to(torch::kCPU).transpose(0, 1);
-    int num_threads = std::min(num_chunks, 4);
-    int chunks_per_thread = num_chunks / num_threads;
-    int num_threads_with_one_more_chunk = num_chunks % num_threads;
-
-    std::vector<DecodedChunk> chunk_results(num_chunks);
-
-    std::vector<std::unique_ptr<std::thread>> threads;
-    threads.reserve(num_threads);
-    for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back(new std::thread(
-                [&](int i) {
-                    int t_first_chunk =
-                            i * chunks_per_thread + std::min(i, num_threads_with_one_more_chunk);
-                    int t_num_chunks = chunks_per_thread + int(i < num_threads_with_one_more_chunk);
-
-                    using Slice = torch::indexing::Slice;
-                    auto t_scores = scores_cpu.index(
-                            {Slice(), Slice(t_first_chunk, t_first_chunk + t_num_chunks)});
-
-                    torch::Tensor fwd = forward_scores(t_scores, options.blank_score);
-                    torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
-
-                    torch::Tensor posts = torch::softmax(fwd + bwd, -1);
-
-                    t_scores = t_scores.transpose(0, 1);
-                    bwd = bwd.transpose(0, 1).contiguous();
-                    posts = posts.transpose(0, 1).contiguous();
-
-                    for (int i = 0; i < t_num_chunks; i++) {
-                        auto decode_result = beam_search_decode(
-                                t_scores[i], bwd[i], posts[i], options.beam_width, options.beam_cut,
-                                options.blank_score, options.q_shift, options.q_scale,
-                                options.temperature, 1.0f);
-                        chunk_results[t_first_chunk + i] = DecodedChunk{
-                                std::get<0>(decode_result),
-                                std::get<1>(decode_result),
-                                std::get<2>(decode_result),
-                        };
-                    }
-                },
-                i));
-    }
-
-    for (auto& thread : threads) {
-        thread->join();
-    }
-
-    return chunk_results;
+    return beam_search_cpu(scores, num_chunks, options, device);
 }
