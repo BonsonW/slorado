@@ -87,7 +87,7 @@ torch::Tensor backward_scores(const torch::Tensor& scores, const float fixed_sta
     return scan(Ms_T.flip(0), fixed_stay_score, idx_T.to(torch::kInt64), vT).flip(0);
 }
 
-std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
+std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
@@ -140,4 +140,11 @@ std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
     }
 
     return chunk_results;
+}
+
+std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
+                                                  const int num_chunks,
+                                                  const DecoderOptions& options,
+                                                  std::string &device) {
+    return beam_search_cpu(scores, num_chunks, options, device);
 }

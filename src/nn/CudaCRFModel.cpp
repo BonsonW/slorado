@@ -1,6 +1,7 @@
 #include "CudaCRFModel.h"
 
 #include "decode/GPUDecoder.h"
+#include "error.h"
 
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
@@ -39,20 +40,25 @@ public:
     }
 
     struct NNTask {
-        NNTask(torch::Tensor input_) : input(input_) {}
+        NNTask(torch::Tensor input_, int num_chunks_) : input(input_), num_chunks(num_chunks_) {}
         torch::Tensor input;
         std::mutex mut;
         std::condition_variable cv;
         torch::Tensor out;
         bool done{false};
+        int num_chunks;
     };
 
-    torch::Tensor call_chunks(torch::Tensor &input,
+    std::vector<DecodedChunk> call_chunks(torch::Tensor &input,
                                           torch::Tensor &output,
+                                          int num_chunks,
                                           c10::cuda::CUDAStream stream) {
         c10::cuda::CUDAStreamGuard stream_guard(stream);
 
-        NNTask task(input.to(m_options.device()));
+        if (num_chunks == 0) {
+            return std::vector<DecodedChunk>();
+        }
+        NNTask task(input.to(m_options.device()), num_chunks);
         {
             std::lock_guard<std::mutex> lock(m_input_lock);
             m_input_queue.push_front(&task);
@@ -65,12 +71,13 @@ public:
         }
 
         output.copy_(task.out);
-        return output;
+
+        return m_decoder->cpu_part(output);
     }
 
     void cuda_thread_fn() {
         torch::InferenceMode guard;
-        // c10::cuda::CUDAGuard device_guard(m_options.device());
+        c10::cuda::CUDAGuard device_guard(m_options.device());
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
 
         while (true) {
@@ -90,7 +97,7 @@ public:
             std::unique_lock<std::mutex> task_lock(task->mut);
             auto scores = m_module->forward(task->input);
             torch::cuda::synchronize();
-            task->out = scores;
+            task->out = m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device);
             stream.synchronize();
             task->done = true;
             task->cv.notify_one();
@@ -136,15 +143,15 @@ CudaModelRunner::CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_s
             {3, batch_size, block_size},
             torch::TensorOptions().dtype(torch::kInt8).device(torch::kCPU).pinned_memory(true));
     // warm up
-    call_chunks();
+    call_chunks(batch_size);
 }
 
 void CudaModelRunner::accept_chunk(int chunk_idx, at::Tensor slice) {
     m_input.index_put_({chunk_idx, torch::indexing::Ellipsis}, slice);
 }
 
-torch::Tensor CudaModelRunner::call_chunks() {
-    return m_caller->call_chunks(m_input, m_output, m_stream);
+std::vector<DecodedChunk> CudaModelRunner::call_chunks(int num_chunks) {
+    return m_caller->call_chunks(m_input, m_output, num_chunks, m_stream);
 }
 
 size_t CudaModelRunner::model_stride() const { return m_caller->m_model_stride; }
