@@ -41,6 +41,11 @@ SOFTWARE.
 
 #include "decode/GPUDecoder.h"
 #include "decode/CPUDecoder.h"
+
+#ifdef USE_GPU
+#include "nn/CudaCRFModel.h"
+#endif
+
 #include "signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
@@ -65,58 +70,69 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         exit(EXIT_FAILURE);
     }
 
+    init_timestamps(&core->ts);
+
     core->opt = opt;
 
     core->runners = new std::vector<Runner>();
+    core->runner_ts = new std::vector<timestamps_t *>();
+
+    core->ts.time_init_runners -= realtime();
 
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
             core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+            init_timestamps((*core->runner_ts).back());
         }
     } else {
+        std::vector<std::string> devices;
+        std::string device_name = "";
         std::string device_args = std::string(opt.device);
-        std::string delimiter = ",";
+        std::string delimiter = ":";
+        size_t pos = device_args.find(delimiter);
+        device_name = device_args.substr(0, pos + delimiter.length());
+        device_args.erase(0, pos + delimiter.length());
 
-        if (device_args.find(delimiter) != std::string::npos) {
-            size_t pos = 0;
-            std::string device;
-            while ((pos = device_args.find(delimiter)) != std::string::npos) {
-                device = device_args.substr(0, pos);
-                for (int i = 0; i < opt.num_runners; ++i) {
-                    core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
-                }
-                device_args.erase(0, pos + delimiter.length());
-            }
-            device = device_args.substr(0, pos);
-            
+        delimiter = ",";
+        while ((pos = device_args.find(delimiter)) != std::string::npos) {
+            devices.push_back(device_name + device_args.substr(0, pos));
+            device_args.erase(0, pos + delimiter.length());
+        }
+        devices.push_back(device_name + device_args.substr(0, pos));
+
+        for (auto device: devices) {
+#ifdef USE_CUDA_LSTM
+            auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
+#endif
             for (int i = 0; i < opt.num_runners; ++i) {
+#ifdef USE_CUDA_LSTM
+                core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
+#else
                 core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+#endif
+                core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+                init_timestamps((*core->runner_ts).back());
             }
-            #ifndef USE_KOI
-                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, "cpu", opt.chunk_size, opt.gpu_batch_size));
-            #endif
-
-        } else {
-            for (int i = 0; i < opt.num_runners; ++i) {
-                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
-            }
-            // back of the list reserved for CPUDecoder
-            #ifndef USE_KOI
-                core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, "cpu", opt.chunk_size, opt.gpu_batch_size));
-            #endif
         }
     }
 #else
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
             core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+            init_timestamps((*core->runner_ts).back());
         }
     } else {
         fprintf(stderr, "Error. Please compile again for GPU\n");
         exit(EXIT_FAILURE);
     }
 #endif
+
+    LOG_DEBUG("%s", "successfully initialized runners");
+
+    core->ts.time_init_runners += realtime();
 
     //realtime0
     core->realtime0=realtime0;
@@ -131,14 +147,11 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->sum_bytes=0;
     core->total_reads=0; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 
-    init_timestamps(&core->ts);
-
 #ifdef HAVE_ACC
     if (core->opt.flag & SLORADO_ACC) {
         VERBOSE("%s","Initialising accelator");
     }
 #endif
-
 
     return core;
 }
@@ -154,6 +167,7 @@ void free_core(core_t* core,opt_t opt) {
 
     slow5_close(core->sp);
     free(core->runners);
+    free(core->runner_ts);
     free(core);
 }
 
@@ -189,7 +203,6 @@ db_t* init_db(core_t* core) {
 
 /* load a data batch from disk */
 ret_status_t load_db(core_t* core, db_t* db) {
-
     double load_start = realtime();
 
     db->n_rec = 0;
@@ -226,10 +239,9 @@ ret_status_t load_db(core_t* core, db_t* db) {
 
 
 void parse_single(core_t* core,db_t* db, int32_t i){
+    assert(db->mem_bytes[i] > 0);
+    assert(db->mem_records[i] != NULL);
 
-    assert(db->mem_bytes[i]>0);
-    assert(db->mem_records[i]!=NULL);
-    //db->slow5_rec[i]=NULL;
     int ret=slow5_decode(&db->mem_records[i], &db->mem_bytes[i], &db->slow5_rec[i], core->sp);
     if(ret<0){
         ERROR("Error parsing the record %d",i);
@@ -263,13 +275,12 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
 
-    if (len_raw_signal>0) {
+    if (len_raw_signal > 0) {
         torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
 
         scale_signal(signal, rec->range / rec->digitisation, rec->offset);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        LOG_DEBUG("Read %s has %zu chunks", rec->read_id, chunks.size());
 
         (*db->chunks)[i] = chunks;
         LOG_DEBUG("%s","assigned chunks");
@@ -282,87 +293,50 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 }
 
 void basecall_db(core_t* core, db_t* db) {
-    opt_t opt = core->opt;
     timestamps_t *ts = &(core->ts);
 
-    bool added_chunks = true;
+    size_t num_threads = (*core->runners).size();
+    size_t n_reads = (*db->chunks).size();
 
-    // whilst there exists reads and chunks, fill up model runners and execute them on separate threads
-    size_t read_idx = 0;
-    size_t chunk_idx = 0;
-    
-    while (added_chunks) {
-        std::vector<std::unique_ptr<std::thread>> threads;
-        threads.reserve((*core->runners).size());
-        added_chunks = false;
-        size_t cur_runner = 0;
-    #if defined(USE_GPU) && !defined(USE_KOI)
-        size_t n_runners = (*core->runners).size()-1; // last runner reserved for CPUDecoding
-    #else
-        size_t n_runners = (*core->runners).size();
-    #endif 
+    std::vector<std::unique_ptr<std::thread>> threads;
+    threads.reserve(num_threads);
 
-        while (cur_runner < n_runners) {
-            bool called = false;
-            std::vector<Chunk *> chunks;
-            std::vector<torch::Tensor> tensors;
+    size_t reads_per_thread = (n_reads + num_threads - 1) / num_threads;
 
-            while (read_idx < (*db->chunks).size() && !called) {
-                while (chunk_idx < (*db->chunks)[read_idx].size() && !called) {
-                    added_chunks = true;
-                    chunks.push_back(((*db->chunks)[read_idx])[chunk_idx]);
-                    tensors.push_back((*db->tensors)[read_idx][chunk_idx]);
+    size_t start = 0;
+    size_t end = reads_per_thread;
 
-                    if (chunks.size() == (size_t)opt.gpu_batch_size) {
-                        auto& model_runner = *((*core->runners)[cur_runner]);
-                        
-                    #if defined(USE_GPU) && !defined(USE_KOI)
-                        auto& decoder = *(core->runners->back());
-                    #else
-                        auto& decoder = *((*core->runners)[cur_runner]);
-                    #endif
-                    
-                        threads.emplace_back(
-                            new std::thread(
-                                basecall_chunks,
-                                tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), ts
-                            )
-                        );
-                        called = true;
-                    }
+    bool last = false;
+    for (size_t runner = 0; runner < (*core->runners).size(); ++runner) {
+        threads.emplace_back(
+            new std::thread(
+                basecall_loop,
+                core,
+                db,
+                runner,
+                start,
+                end
+            )
+        );
+        start = end;
+        end = std::min(end + reads_per_thread, n_reads);
 
-                    ++chunk_idx;
-                }
+        if (last) break;
+        if (end == n_reads) last = true;
+    }
 
-                if (chunk_idx >= (*db->chunks)[read_idx].size()) {
-                    ++read_idx;
-                    chunk_idx = 0;
-                }
-            }
+    auto time_sync = 0;
 
-            if (!called && chunks.size() > 0) {
-                auto& model_runner = *((*core->runners)[cur_runner]);
-                        
-            #if defined(USE_GPU) && !defined(USE_KOI)
-                auto& decoder = *(core->runners->back());
-            #else
-                auto& decoder = *((*core->runners)[cur_runner]);
-            #endif
-                threads.emplace_back(
-                    new std::thread(
-                        basecall_chunks,
-                        tensors, chunks, opt.chunk_size, opt.gpu_batch_size, std::ref(model_runner), std::ref(decoder), ts
-                    )
-                );
-                called = true;
-            }
-            ++cur_runner;
+    for (size_t i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+        if (i == 0) {
+            time_sync -= realtime();
         }
-
-        for (auto& thread : threads) {
-            thread->join();
+        if (i == threads.size()-1) {
+            time_sync += realtime();
         }
     }
+    ts->time_sync += time_sync;
 }
 
 
@@ -386,63 +360,32 @@ void postprocess_signal(core_t* core,db_t* db, int32_t i){
 
 }
 
-
-
-// void work_per_single_read(core_t* core,db_t* db, int32_t i){
-//     parse_single(core,db,i);
-//     preprocess_signal(core,db,i);
-//     mean_single(core,db,i);
-
-// }
-
-// void mean_db(core_t* core, db_t* db) {
-// #ifdef HAVE_ACC
-//     if (core->opt.flag & SLORADO_ACC) {
-//         VERBOSE("%s","Aligning reads with accel");
-//         work_db(core,db,mean_single);
-//     }
-// #endif
-
-//     if (!(core->opt.flag & SLORADO_ACC)) {
-//         fprintf(stderr, "cpu\n");
-//         work_db(core,db,mean_single);
-//     }
-//     VERBOSE("Read %d\n",0);
-// }
-
-
 void process_db(core_t* core,db_t* db){
     double proc_start = realtime();
 
-    // if(core->opt.flag & SLORADO_PRF || core->opt.flag & SLORADO_ACC){
-        double a = realtime();
-        work_db(core,db,parse_single);
-        double b = realtime();
-        core->parse_time += (b-a);
-        LOG_TRACE("%s","Parsed reads");
+    double a = realtime();
+    work_db(core,db,parse_single);
+    double b = realtime();
+    core->parse_time += (b-a);
+    LOG_DEBUG("%s","Parsed reads");
 
-        a = realtime();
-        work_db(core,db,preprocess_signal);
-        b = realtime();
-        core->preproc_time += (b-a);
-        LOG_TRACE("%s","Preprocessed reads");
+    a = realtime();
+    work_db(core,db,preprocess_signal);
+    b = realtime();
+    core->preproc_time += (b-a);
+    LOG_DEBUG("%s","Preprocessed reads");
 
-        a = realtime();
-        basecall_db(core,db);
-        b = realtime();
-        core->basecall_time += (b-a);
-        LOG_TRACE("%s","Basecalled reads");
+    a = realtime();
+    basecall_db(core,db);
+    b = realtime();
+    core->basecall_time += (b-a);
+    LOG_DEBUG("%s","Basecalled reads");
 
-        a = realtime();
-        work_db(core,db,postprocess_signal);
-        b = realtime();
-        core->postproc_time += (b-a);
-        LOG_TRACE("%s","Postprocessed reads");
-
-
-    // } else {
-    //     work_db(core, db, work_per_single_read);
-    // }
+    a = realtime();
+    work_db(core,db,postprocess_signal);
+    b = realtime();
+    core->postproc_time += (b-a);
+    LOG_DEBUG("%s","Postprocessed reads");
 
     double proc_end = realtime();
     core->process_db_time += (proc_end-proc_start);
@@ -486,7 +429,6 @@ void free_db(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
         slow5_rec_free(db->slow5_rec[i]);
-
         for (Chunk *chunk: (*db->chunks)[i]) free(chunk);
     }
     free(db->slow5_rec);
@@ -503,14 +445,14 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 1000;
-    opt->gpu_batch_size = 512;
+    opt->batch_size = 2000;
+    opt->gpu_batch_size = 800;
     opt->batch_size_bytes = 20*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;
 
-    opt->device = "cuda:1";
+    opt->device = "cuda:0";
     opt->chunk_size = 8000;
     opt->overlap = 150;
     opt->num_runners = 1;
@@ -525,11 +467,11 @@ void init_opt(opt_t* opt) {
 
 }
 
-
 /* initialise timestamps */
 void init_timestamps(timestamps_t* time_stamps) {
     memset(time_stamps, 0, sizeof(timestamps_t));
 
+    time_stamps->time_init_runners = 0;
     time_stamps->time_read = 0;
     time_stamps->time_tens = 0;
     time_stamps->time_trim = 0;
@@ -537,9 +479,11 @@ void init_timestamps(timestamps_t* time_stamps) {
     time_stamps->time_chunk = 0;
     time_stamps->time_copy = 0;
     time_stamps->time_pad = 0;
+    time_stamps->time_assign = 0;
     time_stamps->time_accept = 0;
     time_stamps->time_basecall = 0;
     time_stamps->time_decode = 0;
+    time_stamps->time_sync = 0;
     time_stamps->time_stitch = 0;
     time_stamps->time_write = 0;
     time_stamps->time_total = 0;
