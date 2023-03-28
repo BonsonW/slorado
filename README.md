@@ -25,41 +25,34 @@ CPU version:
 ```
 scripts/install-torch12.sh
 make -j
-./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
+./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
 CUDA GPU version:
 ```
 scripts/install-torch12.sh
-bash scripts/install-koi.sh
+make cuda=1 koi=1 -j
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+```
+
+CUDA GPU version (requires cuda 11.3):
+```
+scripts/install-torch12.sh
+make cuda=1 koi=1 -j
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+```
+
+CUDA GPU version without koi library (uses CPU decoder):
+```
+scripts/install-torch12.sh
 make cuda=1 -j
-./slorado basecaller models/dna_r9.4.1_e8.1_fast@v3.4 test/example.blow5
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
 advanced options:
 ```
-make cuda=1 LIBTORCH_DIR=/path/to/torachlib CUDA_LIB=/path/to/cuda/library/
+make cuda=1 LIBTORCH_DIR=/path/to/torachlib CUDA_ROOT=/path/to/cuda/library/
 ```
-
-
-### CMake
-
-```
-# For CMake
-sudo apt-get install zlib1g-dev   #install zlib development libraries
-git clone --recursive https://github.com/BonsonW/slorado
-cd slorado
-bash scripts/install-torch10.sh
-bash scripts/install-koi.sh
-cd build
-rm -r ./* && cmake ..
-make -j && ./slorado basecaller -o one_read.fastq ../models/dna_r9.4.1_e8.1_fast@v3.4 ../test/one_read.slow5 -v 5
-```
-
-if different cuda location, before cmake:
-export PATH=/usr/local/cuda-10.2/bin/:$PATH
-
-
 
 ## Calculate basecalling accuracy
 ```
