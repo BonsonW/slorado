@@ -1,34 +1,4 @@
 
-/**
- * @file signal_prep.c
- * @brief signal preprocessing methods for slorado
- * @author Bonson Wong (bonson.ym@gmail.com)
-
-MIT License
-
-Copyright (c) 2022 Bonson Wong (bonson.ym@gmail.com)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
-******************************************************************************/
-
 #include <cstdint>
 #include <stdlib.h>
 #include <torch/torch.h>
@@ -115,7 +85,7 @@ int trim(
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
     std::vector<int16_t> floatTmp(tmp.begin(), tmp.end());
-    
+
     torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
     return torch::from_blob(floatTmp.data(), floatTmp.size(), options).clone().to("cpu");
 }
@@ -139,7 +109,7 @@ std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, i
 
 std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, size_t chunk_size) {
     std::vector<torch::Tensor> tensors;
-    
+
     for (size_t i = 0; i < chunks.size(); ++i) {
         auto input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks[i]->input_offset, chunks[i]->input_offset + chunk_size)});
         size_t slice_size;

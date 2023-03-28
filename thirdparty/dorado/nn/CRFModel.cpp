@@ -379,7 +379,10 @@ struct CudaLSTMStackImpl : Module {
 
     void quantize_weights() {
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
-            auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
+            // auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
+            auto t0 = quantize_tensor(rnn->named_parameters()["weight_hh"]);
+            auto factors = std::get<0>(t0);
+            auto quantized = std::get<1>(t0);
             _quantization_scale_factors.push_back(factors);
             _quantized_buffers.push_back(quantized);
         }

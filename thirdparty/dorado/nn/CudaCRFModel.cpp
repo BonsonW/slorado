@@ -1,6 +1,6 @@
 #include "CudaCRFModel.h"
 
-#include "decode/GPUDecoder.h"
+#include "dorado/decode/GPUDecoder.h"
 #include "error.h"
 
 #include <c10/cuda/CUDAGuard.h>
