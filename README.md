@@ -1,8 +1,10 @@
 # slorado
 
-A simplified version of Dorado.
+A simplified version of [Dorado](https://github.com/nanoporetech/dorado) that can be easily compiled (relatively). Minimum g++ version required is 5.4. Not all the features in Dorado are implemented. Performance is not the key criteria.
 
 ## Compilation and running
+
+### Dependencies
 
 ```
 sudo apt-get install zlib1g-dev   #install zlib development libraries
@@ -20,7 +22,38 @@ On OS X : brew install zlib
 
 ### Make
 
-CPU version:
+### Option 1:
+
+CUDA GPU version that uses ONT's closed-source koi library binaries (minimum requirement: CUDA 11.3). This is the fastest:
+```
+scripts/install-torch12.sh
+make cuda=1 koi=1 -j
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+```
+
+If you do not have CUDA 11.3 or higher installed system wide, you can install CUDA 11.7 using following commands:
+```
+wget https://developer.download.nvidia.com/compute/cuda/11.3.0/local_installers/cuda_11.3.0_465.19.01_linux.run
+chmod +x cuda_11.3.0_465.19.01_linux.run
+/cuda_11.3.0_465.19.01_linux.run --toolkit --toolkitpath=/local/path/cuda/
+```
+Then compile slorado by specifying the custom CUDA location to CUDA_ROOT variable as:
+```
+make cuda=1 koi=1 -j CUDA_ROOT=/local/path/cuda/
+```
+
+### Option 2:
+
+CUDA GPU version without close-source koi library (uses CPU decoder, thus considerably slower). CUDA 10.2 or higher is adequate for this:
+```
+scripts/install-torch12.sh
+make cuda=1 -j
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+```
+
+### Option 3:
+
+CPU-only version (horribly slow):
 
 ```
 scripts/install-torch12.sh
@@ -28,60 +61,31 @@ make -j
 ./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
-CUDA GPU version:
+### advanced options
+
+- Custom libtorch path:
 ```
-scripts/install-torch12.sh
-make cuda=1 koi=1 -j
-./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+make cuda=1 LIBTORCH_DIR=/path/to/torchlib
 ```
 
-CUDA GPU version (requires cuda 11.3):
+- C++11 ABI:
 ```
-scripts/install-torch12.sh
-make cuda=1 koi=1 -j
-./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+make cxx11_abi=1
 ```
 
-CUDA GPU version without koi library (uses CPU decoder):
-```
-scripts/install-torch12.sh
-make cuda=1 -j
-./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
-```
+- You can optionally enable zstd support for builtin slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
 
-advanced options:
-```
-make cuda=1 LIBTORCH_DIR=/path/to/torachlib CUDA_ROOT=/path/to/cuda/library/
-```
 
 ## Calculate basecalling accuracy
 ```
-set variables MINIMAP2, REFERENCE_GENOME, FASTQ_FILE in the script and run
-scripts/calculate_basecalling_accuarcy.sh
+set variables MINIMAP2 if not in PATH.
+scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ```
 
 ## Acknowledgement
-Code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
 
-## Walkthrough
-
-The repository contains the following:
-1. slow5lib as a git submodule
-1. A [Makefile](Makefile)
-2. C programme[source files](src/)
-3. [shell script](test/test.sh) for testing
-4. [GitHub actions workflow](.github/workflows/c-cpp.yml)
-5. Miscellaneous files such as license, .gitignore, etc
-
-
-## Links
-
-SLOW5 specification: https://hasindu2008.github.io/slow5specs<br/>
-slow5lib: https://hasindu2008.github.io/slow5lib/<br/>
-slow5tools: https://hasindu2008.github.io/slow5tools<br/>
-Pre-print: https://www.biorxiv.org/content/10.1101/2021.06.29.450255v1<br/>
-Publication: https://www.nature.com/articles/s41587-021-01147-4<br/>
-
+A lot of code is coming from [Dorado](https://github.com/nanoporetech/dorado).
+Some code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
 
 
 
