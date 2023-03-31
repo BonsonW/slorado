@@ -102,37 +102,37 @@ $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/signal_prep.o: src/signal_prep.cpp
+$(BUILD_DIR)/signal_prep.o: src/dorado/signal_prep.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/writer.o: src/writer.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/beam_search.o: src/decode/beam_search.cpp
+$(BUILD_DIR)/beam_search.o: src/dorado/decode/beam_search.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CPUDecoder.o: src/decode/CPUDecoder.cpp
+$(BUILD_DIR)/CPUDecoder.o: src/dorado/decode/CPUDecoder.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/GPUDecoder.o: src/decode/GPUDecoder.cpp
+$(BUILD_DIR)/GPUDecoder.o: src/dorado/decode/GPUDecoder.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/fast_hash.o: src/decode/fast_hash.cpp
+$(BUILD_DIR)/fast_hash.o: src/dorado/decode/fast_hash.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: src/nn/CRFModel.cpp
+$(BUILD_DIR)/CRFModel.o: src/dorado/nn/CRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CudaCRFModel.o: src/nn/CudaCRFModel.cpp
+$(BUILD_DIR)/CudaCRFModel.o: src/dorado/nn/CudaCRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/stitch.o: src/utils/stitch.cpp
+$(BUILD_DIR)/stitch.o: src/dorado/utils/stitch.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/tensor_utils.o: src/utils/tensor_utils.cpp
+$(BUILD_DIR)/tensor_utils.o: src/dorado/utils/tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/cuda_utils.o: src/utils/cuda_utils.cpp
+$(BUILD_DIR)/cuda_utils.o: src/dorado/utils/cuda_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c

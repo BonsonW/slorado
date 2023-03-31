@@ -39,17 +39,17 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
-#include "decode/GPUDecoder.h"
-#include "decode/CPUDecoder.h"
+#include "dorado/decode/GPUDecoder.h"
+#include "dorado/decode/CPUDecoder.h"
 
 #ifdef USE_GPU
-#include "nn/CudaCRFModel.h"
+#include "dorado/nn/CudaCRFModel.h"
 #endif
 
-#include "signal_prep.h"
+#include "dorado/signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
-#include "utils/stitch.h"
+#include "dorado/utils/stitch.h"
 
 #include <slow5/slow5.h>
 

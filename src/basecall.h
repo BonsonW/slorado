@@ -7,10 +7,10 @@
 #ifndef BASECALL
 #define BASECALL
 
-#include "decode/Decoder.h"
+#include "dorado/decode/Decoder.h"
 #include "misc.h"
-#include "nn/ModelRunner.h"
-#include "Chunk.h"
+#include "dorado/nn/ModelRunner.h"
+#include "dorado/Chunk.h"
 #include "slorado.h"
 
 #include <vector>

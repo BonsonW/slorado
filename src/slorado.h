@@ -36,8 +36,8 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <vector>
 #include <memory>
-#include "nn/ModelRunner.h"
-#include "Chunk.h"
+#include "dorado/nn/ModelRunner.h"
+#include "dorado/Chunk.h"
 
 #define SLORADO_VERSION "0.1.0"
 

@@ -28,14 +28,14 @@ SOFTWARE.
 
 ******************************************************************************/
 
-#include "decode/CPUDecoder.h"
-#include "decode/GPUDecoder.h"
-#include "utils/stitch.h"
-#include "nn/ModelRunner.h"
+#include "dorado/decode/CPUDecoder.h"
+#include "dorado/decode/GPUDecoder.h"
+#include "dorado/utils/stitch.h"
+#include "dorado/nn/ModelRunner.h"
 #include "slorado.h"
 #include "error.h"
 #include "misc.h"
-#include "signal_prep.h"
+#include "dorado/signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
 #include "misc.h"

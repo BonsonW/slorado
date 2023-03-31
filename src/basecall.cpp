@@ -4,9 +4,9 @@
 #include <slow5/slow5.h>
 #include <torch/torch.h>
 
-#include "decode/CPUDecoder.h"
-#include "Chunk.h"
-#include "nn/ModelRunner.h"
+#include "dorado/decode/CPUDecoder.h"
+#include "dorado/Chunk.h"
+#include "dorado/nn/ModelRunner.h"
 #include "slorado.h"
 #include "misc.h"
 #include "error.h"
