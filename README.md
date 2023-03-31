@@ -20,6 +20,15 @@ On Fedora/CentOS : sudo dnf/yum install zlib-devel
 On OS X : brew install zlib
 ```
 
+### Downloading Models
+
+Download fast, high accuracy, and super accuracy models.
+
+```
+scripts/download-models.sh
+
+```
+
 ### Make
 
 ### Option 1:
