@@ -1,6 +1,8 @@
 # slorado
 
-A simplified version of [Dorado](https://github.com/nanoporetech/dorado) that can be easily compiled (relatively). Minimum g++ version required is 5.4. Not all the features in Dorado are implemented. Performance is not the key criteria.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of SLOW5 format and reduced dependecies so that it can be easily compiled (relatively). A minimum g++ version required is 5.4.
+
+Not all the features in Dorado are implemented and performance is not the key goal of slorado. The purpose of slorado is mainly for learning purposes. For a feature rich version of Dorado that supports SLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
 
 ## Compilation and running
 
@@ -22,11 +24,10 @@ On OS X : brew install zlib
 
 ### Downloading Models
 
-Download fast, high accuracy, and super accuracy models.
+Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.0.0, dna_r10.4.1_e8.2_400bps_hac@v4.0.0 and dna_r10.4.1_e8.2_400bps_sup@v4.0.0).
 
 ```
 scripts/download-models.sh
-
 ```
 
 ### Make
@@ -87,14 +88,19 @@ make cxx11_abi=1
 
 ## Calculate basecalling accuracy
 ```
-set variables MINIMAP2 if not in PATH.
+set environment variable MINIMAP2 if not in PATH.
 scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ```
 
 ## Acknowledgement
 
-A lot of code is coming from [Dorado](https://github.com/nanoporetech/dorado).
-Some code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
+- A lot of code is coming from [Dorado](https://github.com/nanoporetech/dorado) which is licensed under [Oxford Nanopore Technologies PLC. Public License Version 1.0](src/dorado/LICENCE). Those files are located at [src/dorado](src/dorado).
+
+- [tomlc99](https://github.com/cktan/tomlc99) library under [thirdparty/tomlc99](thirdparty/tomlc99), is licensed under [MIT license](thirdparty/tomlc99/LICENSE).
+
+- [koi_lib] library under [thirdparty/koi_lib](thirdparty/koi_lib) are proprietary binaries from Oxford Nanopore Technologies.
+
+- Some code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
 
 
 
