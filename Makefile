@@ -78,6 +78,8 @@ CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 
 .PHONY: clean distclean test
 
+# slorado
+
 $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
 	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a $(LDFLAGS) -o $@
 
@@ -102,38 +104,45 @@ $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/signal_prep.o: src/dorado/signal_prep.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/writer.o: src/writer.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/beam_search.o: src/dorado/decode/beam_search.cpp
+
+# dorado
+
+$(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CPUDecoder.o: src/dorado/decode/CPUDecoder.cpp
+$(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/GPUDecoder.o: src/dorado/decode/GPUDecoder.cpp
+$(BUILD_DIR)/CPUDecoder.o: thirdparty/dorado/decode/CPUDecoder.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/fast_hash.o: src/dorado/decode/fast_hash.cpp
+$(BUILD_DIR)/GPUDecoder.o: thirdparty/dorado/decode/GPUDecoder.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: src/dorado/nn/CRFModel.cpp
+$(BUILD_DIR)/fast_hash.o: thirdparty/dorado/decode/fast_hash.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CudaCRFModel.o: src/dorado/nn/CudaCRFModel.cpp
+$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/nn/CRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/stitch.o: src/dorado/utils/stitch.cpp
+$(BUILD_DIR)/CudaCRFModel.o: thirdparty/dorado/nn/CudaCRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/tensor_utils.o: src/dorado/utils/tensor_utils.cpp
+$(BUILD_DIR)/stitch.o: thirdparty/dorado/utils/stitch.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/cuda_utils.o: src/dorado/utils/cuda_utils.cpp
+$(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/cuda_utils.o: thirdparty/dorado/utils/cuda_utils.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+
+#toml
 
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
