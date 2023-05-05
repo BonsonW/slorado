@@ -1,8 +1,8 @@
-# slorado
+# Slorado
 
 Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of SLOW5 format and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required.
 
-The purpose of Slorado is mainly for learning purposes. Slorado is slower than Dorado and not all features are implemented. A feature rich version of Dorado that supports SLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
+Slorado is mainly for research purposes and still under development. Slorado is slower than Dorado and not all features are implemented. A feature rich version of Dorado that supports SLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
 
 ## Compilation and running
 
