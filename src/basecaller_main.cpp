@@ -1,11 +1,13 @@
 /**
- * @file basecaller_main.c
+ * @file basecaller_main.cpp
  * @brief entry point to basecaller_main
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
+ * @author Bonson Wong (bonson.ym@gmail.com)
 
 MIT License
 
 Copyright (c) 2019 Hasindu Gamaarachchi (hasindu@unsw.edu.au)
+Copyright (c) 2023 Bonson Wong (bonson.ym@gmail.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -28,16 +30,8 @@ SOFTWARE.
 
 ******************************************************************************/
 
-#include "dorado/decode/CPUDecoder.h"
-#include "dorado/decode/GPUDecoder.h"
-#include "dorado/utils/stitch.h"
-#include "dorado/nn/ModelRunner.h"
 #include "slorado.h"
-#include "error.h"
-#include "misc.h"
 #include "dorado/signal_prep.h"
-#include "basecall.h"
-#include "writer.h"
 #include "misc.h"
 
 #include <assert.h>
@@ -50,8 +44,6 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <torch/torch.h>
-#include <vector>
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]

@@ -7,13 +7,14 @@
 #ifndef BASECALL
 #define BASECALL
 
-#include "dorado/decode/Decoder.h"
+#include <vector>
+
+#include "slorado.h"
 #include "misc.h"
+
+#include "dorado/decode/Decoder.h"
 #include "dorado/nn/ModelRunner.h"
 #include "dorado/Chunk.h"
-#include "slorado.h"
-
-#include <vector>
 
 void basecall_chunks(
     std::vector<torch::Tensor> tensors,
