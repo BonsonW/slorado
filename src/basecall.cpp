@@ -15,7 +15,6 @@ void basecall_chunks(
     std::vector<torch::Tensor> tensors,
     std::vector<Chunk *> chunks,
     int chunk_size,
-    int batch_size,
     ModelRunnerBase &model_runner,
     timestamps_t *ts
 ) {
@@ -37,7 +36,7 @@ void basecall_chunks(
     }
 }
 
-void basecall_loop(
+void basecall_thread(
     core_t* core,
     db_t* db,
     size_t runner_idx,
@@ -62,7 +61,6 @@ void basecall_loop(
                     tensors,
                     chunks,
                     opt.chunk_size,
-                    opt.batch_size,
                     model_runner,
                     ts
                 );
@@ -78,7 +76,6 @@ void basecall_loop(
             tensors,
             chunks,
             opt.chunk_size,
-            opt.batch_size,
             model_runner,
             ts
         );

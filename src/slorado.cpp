@@ -310,7 +310,7 @@ void basecall_db(core_t* core, db_t* db) {
     for (size_t runner = 0; runner < (*core->runners).size(); ++runner) {
         threads.emplace_back(
             new std::thread(
-                basecall_loop,
+                basecall_thread,
                 core,
                 db,
                 runner,
