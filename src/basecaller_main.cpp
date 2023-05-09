@@ -53,6 +53,28 @@ SOFTWARE.
 #include <torch/torch.h>
 #include <vector>
 
+extern double time_1;
+extern double time_2;
+extern double time_3;
+extern double time_4;
+extern double time_5;
+extern double time_forward;
+extern double time_decode_cpu;
+extern double time_decode;
+extern double time_forward_quantized;
+extern double time_forward_convolution_lstm;
+extern double time_waiting;
+extern double time_host_window_ntcw;
+extern double time_matmul;
+extern double time_host_bias_swish;
+extern double time_activation;
+extern double time_backstep;
+extern double time_beamsearch;
+extern double time_poststep;
+extern double time_run_decode;
+extern double time_clamp;
+extern double time_linear;
+
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
     {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
@@ -300,6 +322,29 @@ int basecaller_main(int argc, char* argv[]) {
     //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
 
+    fprintf(stderr,"\n");
+    fprintf(stderr,"\nforward: %.3f", time_forward);
+    fprintf(stderr,"\n    cuda lstm stack module: %.3f", time_forward_quantized);
+    fprintf(stderr,"\n        rnn1: %.3f", time_1);
+    fprintf(stderr,"\n        rnn2: %.3f", time_2);
+    fprintf(stderr,"\n        rnn3: %.3f", time_3);
+    fprintf(stderr,"\n        rnn4: %.3f", time_4);
+    fprintf(stderr,"\n        rnn5: %.3f", time_5);
+    fprintf(stderr,"\n    convolution module: %.3f", time_forward_convolution_lstm);
+    fprintf(stderr,"\n        host_window_ntcw: %.3f", time_host_window_ntcw);
+    fprintf(stderr,"\n        matmul: %.3f", time_matmul);
+    fprintf(stderr,"\n        host_bias_swish: %.3f", time_host_bias_swish);
+    fprintf(stderr,"\n    activation: %.3f", time_activation);
+    fprintf(stderr,"\n    clamp module: %.3f", time_clamp);
+    fprintf(stderr,"\n    linear module: %.3f", time_linear);
+    fprintf(stderr,"\ndecode (cpu): %.3f", time_decode_cpu);
+    fprintf(stderr,"\ndecode (gpu): %.3f", time_decode);
+    fprintf(stderr,"\n    backstep;: %.3f", time_backstep);
+    fprintf(stderr,"\n    beamsearch: %.3f", time_beamsearch);
+    fprintf(stderr,"\n    poststep: %.3f", time_poststep);
+    fprintf(stderr,"\n    run_decode: %.3f", time_run_decode);
+
+    fprintf(stderr,"\n");
     fprintf(stderr,"\n");
 
     //free the core data structure

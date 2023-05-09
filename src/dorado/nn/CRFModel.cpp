@@ -5,7 +5,23 @@
 #include "toml.h"
 #include "CRFModel.h"
 #include "error.h"
+#include "misc.h"
 #include "../utils/tensor_utils.h"
+
+double time_forward_quantized = 0;
+double time_1 = 0;
+double time_2 = 0;
+double time_3 = 0;
+double time_4 = 0;
+double time_5 = 0;
+
+double time_forward_convolution_lstm = 0;
+double time_host_window_ntcw = 0;
+double time_matmul = 0;
+double time_host_bias_swish = 0;
+double time_activation = 0;
+double time_linear = 0;
+double time_clamp = 0;
 
 #ifdef USE_CUDA_LSTM
 #include "../utils/cuda_utils.h"
@@ -15,6 +31,7 @@ extern "C" {
 }
 #endif
 
+#include <unistd.h>
 
 #if USE_CUDA_LSTM
 
@@ -66,6 +83,8 @@ struct ConvolutionImpl : Module {
                 c10::cuda::CUDAGuard device_guard(x.device());
                 auto stream = at::cuda::getCurrentCUDAStream().stream();
 
+                time_forward_convolution_lstm -= realtime();
+
                 int batch_size = x.size(0);
                 int chunk_size_in = x.size(2);
                 int chunk_size_out = chunk_size_in / stride;
@@ -80,14 +99,28 @@ struct ConvolutionImpl : Module {
                     auto res_2D = res.view({-1, out_size});
                     auto ntcw_mat = torch::empty({batch_size, chunk_size_out, in_size, window_size},
                                                  x.options());
+
+                    time_host_window_ntcw -= realtime();
                     host_window_ntcw_f16(stream, x.stride(0), x.stride(2), x.stride(1), batch_size,
                                          chunk_size_in, in_size, window_size, stride,
                                          ntcw_mat.stride(0), ntcw_mat.stride(1), ntcw_mat.stride(2),
                                          ntcw_mat.stride(3), x.data_ptr(), ntcw_mat.data_ptr());
+                    torch::cuda::synchronize();
+                    time_host_window_ntcw += realtime();
+
+                    time_matmul -= realtime();
                     matmul_f16(ntcw_mat.view({-1, in_size * window_size}), w_device,
                                               res_2D);
+                    torch::cuda::synchronize();
+                    time_matmul += realtime();
+
+                    time_host_bias_swish -= realtime();
                     host_bias_swish_f16(stream, res_2D.size(0), res_2D.size(1), res_2D.stride(0),
                                         res_2D.data_ptr(), b_device.data_ptr());
+                    torch::cuda::synchronize();
+                    time_host_bias_swish += realtime();
+
+                    time_forward_convolution_lstm += realtime();
 
                     // Output is [N, T_out, C_out], contiguous
                     return res;
@@ -121,8 +154,13 @@ struct ConvolutionImpl : Module {
                 return activation(conv(x)).transpose(1, 2);
             }
         }
+
+        time_activation -= realtime();
+        auto ret = activation(conv(x));
+        time_activation += realtime();
+
         // Output is [N, C_out, T_out], contiguous
-        return activation(conv(x));
+        return ret;
     }
 
     Conv1d conv{nullptr};
@@ -141,6 +179,7 @@ struct LinearCRFImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
+        time_linear -= realtime();
         // Input x is [N, T, C], contiguity optional
         auto N = x.size(0);
         auto T = x.size(1);
@@ -154,6 +193,7 @@ struct LinearCRFImpl : Module {
 
             x = x.contiguous().reshape({N * T, -1});
             scores = torch::matmul(x, linear->weight.t());
+
             host_bias_tanh_scale_f16(stream, N * T, scores.size(1), scale, scores.data_ptr(),
                                      linear->bias.data_ptr());
             scores = scores.view({N, T, -1});
@@ -170,6 +210,7 @@ struct LinearCRFImpl : Module {
                             F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
                              .view({N, T, -1});
         }
+        time_linear += realtime();
         // Output is [N, T, C], contiguous
         return scores;
     }
@@ -391,6 +432,7 @@ struct CudaLSTMStackImpl : Module {
     torch::Tensor forward_quantized(torch::Tensor x) {
         // Input x is [N, T, C], contiguity optional
         c10::cuda::CUDAGuard device_guard(x.device());
+        time_forward_quantized -= realtime();
 
         x = x.contiguous();
 
@@ -402,38 +444,55 @@ struct CudaLSTMStackImpl : Module {
         }
         auto buffer = torch::matmul(x, _r_wih[0]);
 
+        time_1 -= realtime();
         _host_run_lstm_rev_quantized(
                 _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[0].data_ptr(),
                 rnn1->named_parameters()["bias_ih"].data_ptr(),
                 _quantization_scale_factors[0].data_ptr(), x.data_ptr(), _chunks.size(0));
+        torch::cuda::synchronize();
+        time_1 += realtime();
 
         buffer = torch::matmul(x, _r_wih[1]);
-
+        
+        time_2 -= realtime();
         _host_run_lstm_fwd_quantized(
                 _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[1].data_ptr(),
                 rnn2->named_parameters()["bias_ih"].data_ptr(),
                 _quantization_scale_factors[1].data_ptr(), x.data_ptr(), _chunks.size(0));
+        torch::cuda::synchronize();
+        time_2 += realtime();
 
         buffer = torch::matmul(x, _r_wih[2]);
 
+        time_3 -= realtime();
         _host_run_lstm_rev_quantized(
                 _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[2].data_ptr(),
                 rnn3->named_parameters()["bias_ih"].data_ptr(),
                 _quantization_scale_factors[2].data_ptr(), x.data_ptr(), _chunks.size(0));
+        torch::cuda::synchronize();
+        time_3 += realtime();
 
         buffer = torch::matmul(x, _r_wih[3]);
 
+        time_4 -= realtime();
         _host_run_lstm_fwd_quantized(
                 _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[3].data_ptr(),
                 rnn4->named_parameters()["bias_ih"].data_ptr(),
                 _quantization_scale_factors[3].data_ptr(), x.data_ptr(), _chunks.size(0));
-
+        torch::cuda::synchronize();
+        time_4 += realtime();
+        
         buffer = torch::matmul(x, _r_wih[4]);
-
+        
+        time_5 -= realtime();
         _host_run_lstm_rev_quantized(
                 _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[4].data_ptr(),
                 rnn5->named_parameters()["bias_ih"].data_ptr(),
                 _quantization_scale_factors[4].data_ptr(), x.data_ptr(), _chunks.size(0));
+        torch::cuda::synchronize();
+        time_5 += realtime();
+
+        time_forward_quantized += realtime();
 
         // Output is [N, T, C], contiguous
         return x;
@@ -527,7 +586,10 @@ struct ClampImpl : Module {
 
     torch::Tensor forward(torch::Tensor x) {
         if (active) {
-            return x.clamp(min, max);
+            time_clamp -= realtime();
+            auto ret = x.clamp(min, max);
+            time_clamp += realtime();
+            return ret;
         } else {
             return x;
         }

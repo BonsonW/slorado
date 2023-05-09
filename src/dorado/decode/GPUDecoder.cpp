@@ -5,6 +5,7 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <torch/torch.h>
 #include "error.h"
+#include "misc.h"
 
 #ifdef USE_CUDA_LSTM
 #include <cuda_runtime.h>
@@ -12,6 +13,11 @@ extern "C" {
 #include "koi.h"
 }
 #endif
+
+double time_backstep = 0;
+double time_beamsearch = 0;
+double time_poststep = 0;
+double time_run_decode = 0;
 
 torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
 #ifdef USE_CUDA_LSTM
@@ -51,26 +57,38 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     auto sequence = moves_sequence_qstring[1];
     auto qstring = moves_sequence_qstring[2];
 
+    time_backstep -= realtime();
     host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
                          options.beam_width, options.beam_cut, options.blank_score);
+    torch::cuda::synchronize();
+    time_backstep += realtime();
 
+    time_beamsearch -= realtime();
     host_beam_search_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                           aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                           sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
                           options.beam_width, options.beam_cut, options.blank_score);
+    torch::cuda::synchronize();
+    time_beamsearch += realtime();
 
+    time_poststep -= realtime();
     host_compute_posts_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                             aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                             sequence.data_ptr(), qstring.data_ptr(), options.q_scale,
                             options.q_shift, options.beam_width, options.beam_cut,
                             options.blank_score);
+    torch::cuda::synchronize();
+    time_poststep += realtime();
 
+    time_run_decode -= realtime();
     host_run_decode(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                     aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
                     qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
                     options.beam_cut, options.blank_score, options.move_pad);
+    torch::cuda::synchronize();
+    time_run_decode += realtime();
 
     return moves_sequence_qstring.reshape({3, N, -1});
 #else

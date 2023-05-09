@@ -2,6 +2,7 @@
 
 #include "dorado/decode/GPUDecoder.h"
 #include "error.h"
+#include "misc.h"
 
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
@@ -9,6 +10,10 @@
 #include <torch/torch.h>
 
 using namespace std::chrono_literals;
+
+double time_forward = 0;
+double time_decode = 0;
+double time_decode_cpu = 0;
 
 class CudaCaller {
 public:
@@ -72,7 +77,11 @@ public:
 
         output.copy_(task.out);
 
-        return m_decoder->cpu_part(output);
+        time_decode_cpu -= realtime();
+        auto ret = m_decoder->cpu_part(output);
+        time_decode_cpu += realtime();
+
+        return ret;
     }
 
     void cuda_thread_fn() {
@@ -94,11 +103,18 @@ public:
             m_input_queue.pop_back();
             input_lock.unlock();
 
+            time_forward -= realtime();
             std::unique_lock<std::mutex> task_lock(task->mut);
             auto scores = m_module->forward(task->input);
             torch::cuda::synchronize();
+            time_forward += realtime();
+
+            time_decode -= realtime();
             task->out = m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device);
             stream.synchronize();
+            torch::cuda::synchronize();
+            time_decode += realtime();
+
             task->done = true;
             task->cv.notify_one();
             task_lock.unlock();
