@@ -3,28 +3,11 @@ name: C/C++ CI
 on:
   push:
     branches: [ 'main' ]
+    branches: [ 'compilation_tests' ]
   pull_request:
     branches: [ '*' ]
 
 jobs:
-  # ubuntu_14:
-  #   name: ubuntu_14
-  #   runs-on: ubuntu-18.04
-  #   container: ubuntu:14.04
-  #   steps:
-  #   - name: install git
-  #     run: sudo apt-get install -y software-properties-common && sudo add-apt-repository ppa:git-core/ppa && sudo apt-get update -y && sudo apt-get install git -y
-  #   - uses: actions/checkout@v2
-  #     with:
-  #       submodules: recursive
-  #   - name: install packages
-  #     run: sudo apt-get update && sudo apt-get install -y zlib1g-dev gcc g++ autoconf automake make
-  #   - name: env
-  #     run: lsb_release -a &&  ldd --version && gcc --version && g++ --version
-  #   - name: build
-  #     run:  make -j8
-  #   - name: test
-  #     run: make test
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-18.04
@@ -43,21 +26,6 @@ jobs:
       run: make -j8
     - name: test-gcc
       run: make test
-  # ubuntu_18:
-  #   name: Ubuntu 18
-  #   runs-on: ubuntu-18.04
-  #   steps:
-  #   - uses: actions/checkout@v2
-  #     with:
-  #       submodules: recursive
-  #   - name: install packages
-  #     run: sudo apt-get update && sudo apt-get install -y zlib1g-dev wget datamash unzip bzip2
-  #   - name: torch
-  #     run: scripts/install-torch12.sh
-  #   - name: build
-  #     run:  make -j8
-  #   - name: test
-  #     run: make test
   ubuntu_20:
     name: Ubuntu 20
     runs-on: ubuntu-20.04
@@ -73,6 +41,15 @@ jobs:
       run: make -j8
     - name: test-gcc
       run: make test
+    - name: build-gcc koi
+      - name: install packages
+        run: wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+        run: sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        run: sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
+        run: sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
+        run: sudo apt-get update
+        run: sudo apt-get -y install cuda
+      run: make cuda=1 koi=1 -j8
     # - name: build-clang
     #   run: make clean && make CC=clang -j8
     # - name: test-clang
