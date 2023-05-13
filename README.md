@@ -41,7 +41,7 @@ make cuda=1 koi=1 -j
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
-If you do not have CUDA 11.3 or higher installed system wide, you can install CUDA 11.7 using following commands:
+If you do not have CUDA 11.3 or higher installed system wide, you can install CUDA 11.3 using following commands:
 ```
 wget https://developer.download.nvidia.com/compute/cuda/11.3.0/local_installers/cuda_11.3.0_465.19.01_linux.run
 chmod +x cuda_11.3.0_465.19.01_linux.run
