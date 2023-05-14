@@ -18,14 +18,14 @@ jobs:
       with:
         submodules: recursive
     - name: install packages
-      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ gcc
     - name: torch
       run: scripts/install-torch12.sh
     - name: build-gcc
       run: make -j8
     - name: test-gcc
       run: make test
-    - name: install cuda
+    - name: cuda
       run: |
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin
         sudo mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
