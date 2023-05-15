@@ -10,7 +10,7 @@ jobs:
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-18.04
-    container: ubuntu:16.04
+    container: ubuntu-20.04
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
@@ -18,7 +18,7 @@ jobs:
       with:
         submodules: recursive
     - name: install packages
-      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+      run: apt-get update sudo apt-get install zlib1g-dev wget datamash unzip bzip2 make g++
     - name: torch
       run: scripts/install-torch12.sh
     - name: build-gcc
