@@ -1,6 +1,6 @@
 # Slorado
 
-Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required. CUrrently, slorado only supports Linux on x86_64 architecture.
 
 Slorado is mainly for research and educational purposes and performance is currently not the key goal. Slorado will only support a minimal set of features and may not be up to date with Dorado.
 A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).

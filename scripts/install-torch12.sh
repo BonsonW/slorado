@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# MIT License
+# Copyright (c) 2019 Hasindu Gamaarachchi (hasindu@unsw.edu.au)
+# Copyright (c) 2023 Bonson Wong (bonson.ym@gmail.com)
+
 set -e
 set -x
 test -e torch.zip && rm torch.zip
