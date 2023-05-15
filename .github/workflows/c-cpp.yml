@@ -22,7 +22,7 @@ jobs:
     - name: torch
       run: scripts/install-torch12.sh
     - name: build-gcc
-      run: make -j8
+      run: make -j4
     - name: test-gcc
       run: make test
   ubuntu_20:
