@@ -21,6 +21,7 @@ jobs:
       run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https
     - name: cuda
       run: |
+        export DEBIAN_FRONTEND=noninteractive
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin
         mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
         apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
