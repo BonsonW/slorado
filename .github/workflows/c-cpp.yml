@@ -10,7 +10,7 @@ jobs:
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-20.04
-    container: ubuntu-16.04
+    container: ubuntu:16.04
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
