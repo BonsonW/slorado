@@ -18,24 +18,24 @@ jobs:
       with:
         submodules: recursive
     - name: install packages
-      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ gcc
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++
     - name: torch
       run: scripts/install-torch12.sh
-    - name: build-gcc
-      run: make -j8
-    - name: test-gcc
+    - name: build
+      run: make -j4
+    - name: test
       run: make test
     - name: cuda
       run: |
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin
-        sudo mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
         wget https://developer.download.nvidia.com/compute/cuda/10.2/Prod/local_installers/cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb
-        sudo dpkg -i cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb
-        sudo apt-key add /var/cuda-repo-10-2-local-10.2.89-440.33.01/7fa2af80.pub
-        sudo apt-get update
-        sudo apt-get -y install cuda
-    - name: build cuda enabled
-      run: make cuda=1 -j8
+        dpkg -i cuda-repo-ubuntu1604-10-2-local-10.2.89-440.33.01_1.0-1_amd64.deb
+        apt-key add /var/cuda-repo-10-2-local-10.2.89-440.33.01/7fa2af80.pub
+        apt-get update
+        apt-get -y install cuda
+    - name: build cuda=1
+      run: make cuda=1 -j4
   # ubuntu_20:
   #   name: Ubuntu 20
   #   runs-on: ubuntu-20.04
