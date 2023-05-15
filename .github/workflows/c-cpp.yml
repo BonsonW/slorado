@@ -7,6 +7,30 @@ on:
     branches: [ '*' ]
 
 jobs:
+  ubuntu_16_cuda:
+    name: Ubuntu 16
+    runs-on: ubuntu-20.04
+    container: ubuntu:16.04
+    steps:
+    - name: install git
+      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https
+    - name: cuda
+      run: |
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin
+        mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
+        add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/ /"
+        apt-get update
+        apt-get -y --allow-unauthenticated install cuda
+    - name: torch
+      run: scripts/install-torch12.sh
+    - name: build cuda=1
+      run: make cuda=1 -j4
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-20.04
@@ -25,16 +49,6 @@ jobs:
       run: make -j4
     - name: test
       run: make test
-    - name: cuda
-      run: |
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin
-        mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
-        apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
-        add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/ /"
-        apt-get update
-        apt-get -y install cuda
-    - name: build cuda=1
-      run: make cuda=1 -j4
   # ubuntu_20:
   #   name: Ubuntu 20
   #   runs-on: ubuntu-20.04
