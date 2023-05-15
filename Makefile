@@ -79,7 +79,6 @@ CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 .PHONY: clean distclean test
 
 # slorado
-
 $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
 	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a $(LDFLAGS) -o $@
 
@@ -108,9 +107,7 @@ $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 $(BUILD_DIR)/writer.o: src/writer.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-
 # dorado
-
 $(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
@@ -143,11 +140,9 @@ $(BUILD_DIR)/cuda_utils.o: thirdparty/dorado/utils/cuda_utils.cpp
 
 
 #toml
-
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
-# follow the main.o above and add more objects here if needed
 
 slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a

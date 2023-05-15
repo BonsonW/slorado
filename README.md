@@ -1,8 +1,9 @@
 # Slorado
 
-Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of SLOW5 format and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required.
 
-Slorado is mainly for research purposes and still under development. Slorado is slower than Dorado and not all features are implemented. A feature rich version of Dorado that supports SLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
+Slorado is mainly for research and educational purposes and performance is currently not the key goal. Slorado will only support a minimal set of features and may not be up to date with Dorado.
+A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
 
 ## Compilation and running
 
@@ -24,7 +25,7 @@ On OS X : brew install zlib
 
 ### Downloading Models
 
-Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.0.0, dna_r10.4.1_e8.2_400bps_hac@v4.0.0 and dna_r10.4.1_e8.2_400bps_sup@v4.0.0).
+Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.0.0, dna_r10.4.1_e8.2_400bps_hac@v4.0.0 and dna_r10.4.1_e8.2_400bps_sup@v4.0.0). We have tested slorado only on these models.
 
 ```
 scripts/download-models.sh
@@ -45,7 +46,7 @@ If you do not have CUDA 11.3 or higher installed system wide, you can install CU
 ```
 wget https://developer.download.nvidia.com/compute/cuda/11.3.0/local_installers/cuda_11.3.0_465.19.01_linux.run
 chmod +x cuda_11.3.0_465.19.01_linux.run
-/cuda_11.3.0_465.19.01_linux.run --toolkit --toolkitpath=/local/path/cuda/
+./cuda_11.3.0_465.19.01_linux.run --toolkit --toolkitpath=/local/path/cuda/
 ```
 Then compile slorado by specifying the custom CUDA location to CUDA_ROOT variable as:
 ```
@@ -88,7 +89,7 @@ make cxx11_abi=1
 
 ## Calculate basecalling accuracy
 ```
-set environment variable MINIMAP2 if not in PATH.
+set environment variable MINIMAP2 if minimap2 is not in PATH.
 scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ```
 
