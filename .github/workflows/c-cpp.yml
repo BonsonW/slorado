@@ -18,7 +18,7 @@ jobs:
       with:
         submodules: recursive
     - name: install packages
-      run: apt-get update sudo apt-get -y install zlib1g-dev wget datamash unzip bzip2 make g++
+      run: apt-get update && apt-get -y install zlib1g-dev wget datamash unzip bzip2 make g++
     - name: torch
       run: scripts/install-torch12.sh
     - name: build-gcc
