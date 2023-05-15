@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "signal_prep.h"
-#include "utils/tensor_utils.h"
 
 #define EPS 1e-9f;
 

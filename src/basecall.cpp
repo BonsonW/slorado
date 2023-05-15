@@ -32,7 +32,6 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <slow5/slow5.h>
-#include <torch/torch.h>
 
 #include "basecall.h"
 #include "error.h"

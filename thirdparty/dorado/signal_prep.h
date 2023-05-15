@@ -8,8 +8,8 @@
 #define SIGNAL_PREP_H
 
 #include <slow5/slow5.h>
-#include <torch/torch.h>
 
+#include "utils/tensor_utils.h"
 #include "Chunk.h"
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec);

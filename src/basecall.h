@@ -12,10 +12,6 @@
 #include "slorado.h"
 #include "misc.h"
 
-#include "dorado/decode/Decoder.h"
-#include "dorado/nn/ModelRunner.h"
-#include "dorado/Chunk.h"
-
 void basecall_chunks(
     std::vector<torch::Tensor> tensors,
     std::vector<Chunk *> chunks,

@@ -3,7 +3,6 @@
 #include "fast_hash.h"
 
 #include <math.h>
-#include <torch/torch.h>
 
 #include <algorithm>
 #include <array>
