@@ -2,11 +2,36 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ 'main' ]
+    branches: [ 'main', 'compilation_tests' ]
   pull_request:
     branches: [ '*' ]
 
 jobs:
+  ubuntu_16_cuda:
+    name: Ubuntu 16 CUDA
+    runs-on: ubuntu-20.04
+    container: ubuntu:16.04
+    steps:
+    - name: install git
+      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https
+    - name: cuda
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin
+        mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
+        add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/ /"
+        apt-get update
+        apt-get -y --allow-unauthenticated install cuda
+    - name: torch
+      run: scripts/install-torch12.sh
+    - name: build cuda=1
+      run: make cuda=1 -j4
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-20.04
@@ -18,12 +43,12 @@ jobs:
       with:
         submodules: recursive
     - name: install packages
-      run: apt-get update && apt-get -y install zlib1g-dev wget datamash unzip bzip2 make g++
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https
     - name: torch
       run: scripts/install-torch12.sh
-    - name: build-gcc
+    - name: build
       run: make -j4
-    - name: test-gcc
+    - name: test
       run: make test
   ubuntu_20:
     name: Ubuntu 20
@@ -36,65 +61,33 @@ jobs:
       run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
     - name: torch
       run: scripts/install-torch12.sh
-    - name: build-gcc
+    - name: build
       run: make -j8
-    - name: test-gcc
+    - name: test
       run: make test
-    # - name: build-clang
-    #   run: make clean && make CC=clang -j8
-    # - name: test-clang
-    #   run: make test
-  # ubuntu_20_icc:
-  #   name: Ubuntu 20 icc
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #   - uses: actions/checkout@v2
-  #     with:
-  #       submodules: recursive
-  #   - name: Intel Apt repository
-  #     timeout-minutes: 1
-  #     run: |
-  #       wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
-  #       sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
-  #       rm GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
-  #       echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-  #       sudo apt-get update
-  #   - name: install packages
-  #     run: sudo apt-get install -y zlib1g-dev libzstd-dev intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic
-  #   - name: Setup Intel oneAPI environment
-  #     run: |
-  #       source /opt/intel/oneapi/setvars.sh
-  #       printenv >> $GITHUB_ENV
-  #   - name: build
-  #     run: make CC=icc -j8
-  #   - name: test
-  #     run: make test
-  # os_x_11:
-  #   name: OSX 11
-  #   runs-on: macos-11
-  #   steps:
-  #   - uses: actions/checkout@v2
-  #     with:
-  #       submodules: recursive
-  #   - name: build
-  #     run: make -j8
-  #   - name: test
-  #     run: make test
-  # arm64:
-  #   name: ubuntu arm
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - run: docker run --rm --privileged multiarch/qemu-user-static:register --reset
-  #   - uses: docker://multiarch/ubuntu-core:arm64-bionic
-  #     with:
-  #       args: 'uname -a'
-  #   - uses: actions/checkout@v1
-  #     with:
-  #       submodules: recursive
-  #   - uses: docker://multiarch/ubuntu-core:arm64-bionic
-  #     with:
-  #       args: >
-  #         bash -c "apt-get update &&
-  #         apt-get install -y zlib1g-dev gcc make &&
-  #         ldd --version && gcc --version &&
-  #         make && make test
+  ubuntu_20_koi:
+    name: Ubuntu 20 CUDA KOI
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: cuda
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.0-1_all.deb
+        sudo dpkg -i cuda-keyring_1.0-1_all.deb
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+        sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
+        sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
+        sudo apt-get update
+        sudo apt-get -y install cuda
+    - name: koi
+      run: scripts/install-koi.sh
+    - name: torch
+      run: scripts/install-torch12.sh
+    - name: build koi=1 cuda=1
+      run: make -j8 koi=1 cuda=1
