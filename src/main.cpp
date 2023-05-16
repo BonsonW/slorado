@@ -42,8 +42,7 @@ int basecaller_main(int argc, char* argv[]);
 int print_usage(FILE *fp_help){
     fprintf(fp_help,"Usage: slorado <command> [options]\n\n");
     fprintf(fp_help,"command:\n");
-    fprintf(fp_help,"         basecaller      do something\n");
-    fprintf(fp_help,"         subtool2      do something\n");
+    fprintf(fp_help,"         basecaller      basecall S/BLOW5 file\n");
 
     if(fp_help==stderr){
         return(EXIT_FAILURE);
