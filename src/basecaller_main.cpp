@@ -90,7 +90,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 #ifdef HAVE_ACC
     fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
 #endif
-
 }
 
 int basecaller_main(int argc, char* argv[]) {
@@ -240,7 +239,6 @@ int basecaller_main(int argc, char* argv[]) {
 
     ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
-
         //load a databatch
         status = load_db(core, db);
 

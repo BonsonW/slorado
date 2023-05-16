@@ -56,7 +56,6 @@ SOFTWARE.
 
 /* user specified options */
 typedef struct {
-
     uint64_t flag;              //flags
     int32_t batch_size;         //max reads loaded at once: K
     int32_t gpu_batch_size;     //max chunks loaded at once: C
@@ -77,7 +76,6 @@ typedef struct {
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
-
     int32_t n_rec;
     int32_t capacity_rec;
 
@@ -97,7 +95,6 @@ typedef struct {
     //stats
     int64_t sum_bytes;
     int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
-
 } db_t;
 
 /* time stamps */
@@ -123,7 +120,6 @@ typedef struct {
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
-
     //slow5
     slow5_file_t *sp;
 
@@ -150,9 +146,7 @@ typedef struct {
     //stats //set by output_db
     int64_t sum_bytes;
     int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
-
 } core_t;
-
 
 /* argument wrapper for the multithreaded framework used for data processing */
 typedef struct {

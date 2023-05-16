@@ -627,7 +627,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
         config.qscale = (float)toml_double_in(qscore, "scale").u.d;
         free(qscore);
     } else {
-        // spdlog::debug("> no qscore calibration found");
+        ERROR("no qscore calibration found");
     }
 
     config.conv = 4;
@@ -713,7 +713,6 @@ std::vector<torch::Tensor> load_crf_model_weights(const std::string &dir,
                                                   bool decomposition,
                                                   bool bias) {
     auto tensors = std::vector<std::string>{
-
             "0.conv.weight.tensor",      "0.conv.bias.tensor",
 
             "1.conv.weight.tensor",      "1.conv.bias.tensor",

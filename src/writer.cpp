@@ -32,7 +32,6 @@ SOFTWARE.
 #include <iostream>
 
 void write_to_file(FILE *out, char *sequence, char *qstring, char *read_id, bool emit_fastq) {
-
     if (emit_fastq) {
         fprintf(out, "@%s\n", read_id);
         fprintf(out, "%s\n", sequence);

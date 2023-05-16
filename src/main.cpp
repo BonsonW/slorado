@@ -37,11 +37,9 @@ SOFTWARE.
 #include "misc.h"
 #include "slorado.h"
 
-
 int basecaller_main(int argc, char* argv[]);
 
 int print_usage(FILE *fp_help){
-
     fprintf(fp_help,"Usage: slorado <command> [options]\n\n");
     fprintf(fp_help,"command:\n");
     fprintf(fp_help,"         basecaller      do something\n");
@@ -54,11 +52,9 @@ int print_usage(FILE *fp_help){
     } else {
         return(EXIT_FAILURE);
     }
-
 }
 
 int main(int argc, char* argv[]){
-
     double realtime0 = realtime();
 
     int ret=1;

@@ -28,22 +28,10 @@ SOFTWARE.
 
 ******************************************************************************/
 
-
 #include <pthread.h>
 #include "slorado.h"
 #include "error.h"
 #include "misc.h"
-
-
-/**********************************
- * what you may have to modify *
- * - core_t struct
- * - db_t struct
- * - work_per_single_read function
- * - main function
- * compile as *
- * - gcc -Wall thread.c -lpthread
- **********************************/
 
 static inline int32_t steal_work(pthread_arg_t* all_args, int32_t n_threads) {
 	int32_t i, c_i = -1;
@@ -64,7 +52,6 @@ static inline int32_t steal_work(pthread_arg_t* all_args, int32_t n_threads) {
     //fprintf(stderr,"k : %d, end %d, start %d\n",k,all_args[c_i].endi,all_args[c_i].starti);
 	return k >= all_args[c_i].endi ? -1 : k;
 }
-
 
 void* pthread_single(void* voidargs) {
     int32_t i;
@@ -122,7 +109,6 @@ void pthread_db(core_t* core, db_t* db, void (*func)(core_t*,db_t*,int)){
         pt_args[t].all_pthread_args =  (void *)pt_args;
     #endif
         //fprintf(stderr,"t%d : %d-%d\n",t,pt_args[t].starti,pt_args[t].endi);
-
     }
 
     //create threads
@@ -141,13 +127,11 @@ void pthread_db(core_t* core, db_t* db, void (*func)(core_t*,db_t*,int)){
 
 /* process all reads in the given batch db */
 void work_db(core_t* core, db_t* db, void (*func)(core_t*,db_t*,int)){
-
     if (core->opt.num_thread == 1) {
         int32_t i=0;
         for (i = 0; i < db->n_rec; i++) {
             func(core,db,i);
         }
-
     }
 
     else {

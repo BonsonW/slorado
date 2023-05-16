@@ -62,7 +62,6 @@ SOFTWARE.
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
-
     core_t* core = (core_t*)malloc(sizeof(core_t));
     MALLOC_CHK(core);
 
@@ -160,7 +159,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
 /* free the core data structure */
 void free_core(core_t* core,opt_t opt) {
-
 #ifdef HAVE_ACC
     if (core->opt.flag & SLORADO_ACC) {
         VERBOSE("%s","Freeing accelator");
@@ -239,7 +237,6 @@ ret_status_t load_db(core_t* core, db_t* db) {
     return status;
 }
 
-
 void parse_single(core_t* core,db_t* db, int32_t i){
     assert(db->mem_bytes[i] > 0);
     assert(db->mem_records[i] != NULL);
@@ -249,13 +246,11 @@ void parse_single(core_t* core,db_t* db, int32_t i){
         ERROR("Error parsing the record %d",i);
         exit(EXIT_FAILURE);
     }
-
 }
 
 #define TO_PICOAMPS(RAW_VAL,DIGITISATION,OFFSET,RANGE) (((RAW_VAL)+(OFFSET))*((RANGE)/(DIGITISATION)))
 
 void mean_single(core_t* core,db_t* db, int32_t i){
-
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 
@@ -268,11 +263,9 @@ void mean_single(core_t* core,db_t* db, int32_t i){
         double mean = sum/len_raw_signal;
         db->means[i]=mean;
     }
-
 }
 
 void preprocess_signal(core_t* core,db_t* db, int32_t i){
-
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
@@ -359,7 +352,6 @@ void postprocess_signal(core_t* core,db_t* db, int32_t i){
         (*db->qstring)[i] = strdup(qstring.c_str());
         assert((*db->qstring)[i] != NULL);
     }
-
 }
 
 void process_db(core_t* core,db_t* db){
@@ -393,10 +385,8 @@ void process_db(core_t* core,db_t* db){
     core->process_db_time += (proc_end-proc_start);
 }
 
-
 /* write the output for a processed data batch */
 void output_db(core_t* core, db_t* db) {
-
     double output_start = realtime();
 
     int32_t i = 0;
@@ -412,7 +402,6 @@ void output_db(core_t* core, db_t* db) {
     //core->read_index = core->read_index + db->n_rec;
     double output_end = realtime();
     core->output_time += (output_end-output_start);
-
 }
 
 /* partially free a data batch - only the read dependent allocations are freed */
@@ -427,7 +416,6 @@ void free_db_tmp(db_t* db) {
 
 /* completely free a data batch */
 void free_db(db_t* db) {
-
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
         slow5_rec_free(db->slow5_rec[i]);
@@ -466,7 +454,6 @@ void init_opt(opt_t* opt) {
 #ifdef HAVE_ACC
     opt->flag |= SLORADO_ACC;
 #endif
-
 }
 
 /* initialise timestamps */
