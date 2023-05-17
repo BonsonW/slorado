@@ -627,7 +627,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
         config.qscale = (float)toml_double_in(qscore, "scale").u.d;
         free(qscore);
     } else {
-        fprintf(stderr, "%s\n", "no qscore calibration found");
+        // no qscore calibration found
     }
 
     config.conv = 4;
