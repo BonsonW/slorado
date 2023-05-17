@@ -90,4 +90,4 @@ jobs:
     - name: torch
       run: scripts/install-torch12.sh
     - name: build koi=1 cuda=1
-      run: make -j8 koi=1 cuda=1
+      run: make -j4 koi=1 cuda=1
