@@ -1,6 +1,6 @@
 # Slorado
 
-Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required. Currently slorado only supports Linux on x86_64 architecture.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required. Currently slorado only supports Linux on x86_64 architecture or aarm64 Jetson-based devices.
 
 Slorado is mainly for research and educational purposes and performance is currently not the key goal. Slorado will only support a minimal set of features and may not be up to date with Dorado.
 A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
@@ -72,21 +72,21 @@ make -j
 ./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
-### Building for ARM
+### Building for ARM64 Jetson-based devices
 
 1. Install and activate python venv.
 
     ```
     sudo apt install python3.8-venv
-    python3 -m venv  pytorch_venv
+    python3 -m venv pytorch_venv
     source pytorch_venv/bin/activate
     ```
 
-2. Update pip and install pytorch for your specific Nvidia Jetpack version. You can find this by running `sudo apt-cache show nvidia-jetpack | grep "Version"`, or browse https://developer.download.nvidia.com/compute/redist/jp/ to find a suitable version of pytroch.
+2. Update pip and install pytorch for your specific Nvidia Jetpack version. You can find this by running `sudo apt-cache show nvidia-jetpack | grep "Version"`, or browse https://developer.download.nvidia.com/compute/redist/jp/ to find a suitable version of pytorch. We tested on a Jetson Xavier board with Jetpack 5.0 installed and the commands used were:
 
     ```
     pip3 install --upgrade pip
-    pip3 install --no-cache https://your/pytorch/version
+    pip3 install --no-cache  https://developer.download.nvidia.com/compute/redist/jp/v50/pytorch/torch-1.12.0a0+8a1a93a9.nv22.5-cp38-cp38-linux_aarch64.whl
     ```
 
 3. Clone and build.
@@ -94,7 +94,7 @@ make -j
     ```
     git clone --recursive https://github.com/BonsonW/slorado.git
     cd slorado
-    make -j cuda=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/libtorch
+    make -j cuda=1 jetson=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/pytorch_venv/lib64/python3.8/site-packages/torch/
     ```
 
 ### advanced options
