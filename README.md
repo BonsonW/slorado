@@ -76,26 +76,26 @@ make -j
 
 1. Install and activate python venv.
 
-```
-sudo apt install python3.8-venv
-python3 -m venv  pytorch_venv
-source pytorch_venv/bin/activate
-```
+    ```
+    sudo apt install python3.8-venv
+    python3 -m venv  pytorch_venv
+    source pytorch_venv/bin/activate
+    ```
 
 2. Update pip and install pytorch for your specific Nvidia Jetpack version. You can find this by running `sudo apt-cache show nvidia-jetpack | grep "Version"`, or browse https://developer.download.nvidia.com/compute/redist/jp/ to find a suitable version of pytroch.
 
-```
-pip3 install --upgrade pip
-pip3 install --no-cache https://your/pytorch/version
-```
+    ```
+    pip3 install --upgrade pip
+    pip3 install --no-cache https://your/pytorch/version
+    ```
 
 3. Clone and build.
 
-```
-git clone --recursive https://github.com/BonsonW/slorado.git
-cd slorado
-make -j cuda=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/libtorch
-```
+    ```
+    git clone --recursive https://github.com/BonsonW/slorado.git
+    cd slorado
+    make -j cuda=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/libtorch
+    ```
 
 ### advanced options
 
