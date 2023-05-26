@@ -100,14 +100,14 @@ make -j
 ### advanced options
 
 - Custom libtorch path:
-```
-make cuda=1 LIBTORCH_DIR=/path/to/libtorch
-```
+    ```
+    make cuda=1 LIBTORCH_DIR=/path/to/libtorch
+    ```
 
 - C++11 ABI:
-```
-make cxx11_abi=1
-```
+    ```
+    make cxx11_abi=1
+    ```
 
 - You can optionally enable zstd support for builtin slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
 
