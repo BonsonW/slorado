@@ -297,6 +297,7 @@ int basecaller_main(int argc, char* argv[]) {
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
+    printf("Elapsed time1 = %.3f\n",realtime_1*100/(realtime() - realtime0));
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
     fprintf(stderr, "[%s]\t- elapsed time 1: %.3f %\n",__func__,realtime_1*100/(realtime() - realtime0));
     fprintf(stderr, "[%s]\t- elapsed time 2: %.3f %\n",__func__,realtime_2*100/(realtime() - realtime0));
