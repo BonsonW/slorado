@@ -95,6 +95,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 int basecaller_main(int argc, char* argv[]) {
     double realtime0 = realtime();
 
+    double realtime_1_start = realtime0;
     const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";
 
     int longindex = 0;
@@ -212,7 +213,7 @@ int basecaller_main(int argc, char* argv[]) {
         }
         exit(EXIT_FAILURE);
     }
-
+    
     // print summary
     fprintf(stderr,"\nslorado base-caller version %s\n", SLORADO_VERSION);
     fprintf(stderr,"model path:         %s\n", model);
@@ -227,8 +228,9 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
 
+    double realtime_1 = realtime() - realtime_1_start;
 /////////////////////////////////////////////////////////////////////////////
-
+    double realtime_2_start = realtime();
     //initialise the core data structure
     core_t* core = init_core(data, opt, model, realtime0);
 
@@ -238,6 +240,11 @@ int basecaller_main(int argc, char* argv[]) {
     db_t* db = init_db(core);
 
     ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
+
+    double realtime_2 = realtime() - realtime_2_start;
+/////////////////////////////////////////////////////////////////////////////
+    double realtime_3_start = realtime();
+
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
         //load a databatch
         status = load_db(core, db);
@@ -268,6 +275,8 @@ int basecaller_main(int argc, char* argv[]) {
     //free the databatch
     free_db(db);
 
+    double realtime_3 = realtime() - realtime_3_start;
+    
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
 
@@ -289,7 +298,9 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
-
+    fprintf(stderr, "[%s]\t- elapsed time 1: %.3f %\n",__func__,realtime_1*100/(realtime() - realtime0));
+    fprintf(stderr, "[%s]\t- elapsed time 2: %.3f %\n",__func__,realtime_2*100/(realtime() - realtime0));
+    fprintf(stderr, "[%s]\t- elapsed time 3: %.3f %\n",__func__,realtime_3*100/(realtime() - realtime0));
     fprintf(stderr,"\n");
 
     //free the core data structure
