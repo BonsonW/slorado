@@ -29,7 +29,7 @@ public:
                 int chunk_size,
                 int batch_size);
     void accept_chunk(int chunk_idx, at::Tensor slice) final;
-    std::vector<DecodedChunk> call_chunks(int num_chunks) final;
+    std::vector<DecodedChunk> call_chunks(int num_chunks,timestamps_t* ts) final;
     size_t model_stride() const final { return m_model_stride; }
     size_t chunk_size() const final { return m_input.size(2); }
 
