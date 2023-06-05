@@ -1,5 +1,5 @@
 #include "CPUDecoder.h"
-#include "../../../src/slorado.h"
+#include "src/slorado.h"
 #include "beam_search.h"
 
 #include <math.h>

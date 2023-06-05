@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../src/slorado.h"
+#include "src/slorado.h"
 #include "../decode/Decoder.h"
 #include "CRFModel.h"
 #include "../decode/CPUDecoder.h"
