@@ -115,7 +115,7 @@ typedef struct {
     double_t time_sync;
     double_t time_write;
     double_t time_total;
-
+    double_t time_beam_search_emplace;
 } timestamps_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
