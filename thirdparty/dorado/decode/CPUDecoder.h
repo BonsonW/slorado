@@ -1,7 +1,6 @@
 #pragma once
-
-#include "Decoder.h"
 #include "../../../src/slorado.h"
+#include "Decoder.h"
 #include <torch/torch.h>
 
 class CPUDecoder final : Decoder {

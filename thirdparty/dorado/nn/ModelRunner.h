@@ -22,14 +22,14 @@ public:
 using Runner = std::shared_ptr<ModelRunnerBase>;
 
 template <typename T>
-class ModelRunner : public ModelRunnerBase {
+class ModelRunner : public ModelRunnerBase { //ModelRunner is a derived class from ModelRunnerBase
 public:
     ModelRunner(const std::string &model_path,
                 const std::string &device,
                 int chunk_size,
                 int batch_size);
     void accept_chunk(int chunk_idx, at::Tensor slice) final;
-    std::vector<DecodedChunk> call_chunks(int num_chunks,timestamps_t* ts) final;
+    std::vector<DecodedChunk> call_chunks(int num_chunks,timestamps_t* ts) final; //to prevent overriding of virtual function
     size_t model_stride() const final { return m_model_stride; }
     size_t chunk_size() const final { return m_input.size(2); }
 
