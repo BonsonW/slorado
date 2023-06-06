@@ -9,7 +9,8 @@ public:
     std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
                                           int num_chunks,
                                           const DecoderOptions& options,
-                                          std::string &device) final;
+                                          std::string &device,
+                                          timestamps_t* ts) final;
     constexpr static torch::ScalarType dtype = torch::kF32;
 };
 

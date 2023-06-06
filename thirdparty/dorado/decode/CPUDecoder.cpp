@@ -146,6 +146,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
 std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
-                                                  std::string &device) {
-    return beam_search_cpu(scores, num_chunks, options, device);
+                                                  std::string &device,
+                                                  timestamps_t* ts) {
+    return beam_search_cpu(scores, num_chunks, options, device,ts);
 }
