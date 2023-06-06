@@ -100,7 +100,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
 
     std::vector<std::unique_ptr<std::thread>> threads;
     threads.reserve(num_threads);
-    ts->time_beam_search_emplace -= realtime();
+    //ts->time_beam_search_emplace -= realtime();
     for (int i = 0; i < num_threads; ++i) {
         threads.emplace_back(new std::thread(
                 [&](int i) {
