@@ -3,6 +3,7 @@
  * @brief timestamp related implementations for slorado
  * @author Aminda Amarasinghe
  * */
+#pragma once
 #ifndef TIMESTAMPS_H
 #define TiMESTAMPS_H
 
