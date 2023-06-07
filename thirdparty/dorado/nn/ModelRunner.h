@@ -79,7 +79,7 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
 #endif
 }
 
-template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks,timestamps_t* ts) {
+template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks) {
     torch::InferenceMode guard;
     auto scores = m_module->forward(m_input.to(m_options.device_opt().value()));
 #ifdef USE_KOI
