@@ -38,6 +38,7 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <vector>
 #include <memory>
+#include "timestamps.h"
 #include "dorado/nn/ModelRunner.h"
 #include "dorado/Chunk.h"
 
@@ -96,27 +97,6 @@ typedef struct {
     int64_t sum_bytes;
     int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } db_t;
-
-/* time stamps */
-typedef struct {
-    double_t time_init_runners;
-    double_t time_read;
-    double_t time_tens;
-    double_t time_trim;
-    double_t time_scale;
-    double_t time_chunk;
-    double_t time_copy;
-    double_t time_pad;
-    double_t time_assign;
-    double_t time_accept;
-    double_t time_basecall;
-    double_t time_decode;
-    double_t time_stitch;
-    double_t time_sync;
-    double_t time_write;
-    double_t time_total;
-    double_t time_beam_search_emplace;
-} timestamps_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {

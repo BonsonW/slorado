@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../src/slorado.h"
+#include "../../../src/timestamps.h"
 #include "../decode/Decoder.h"
 #include "CRFModel.h"
 #include "../decode/CPUDecoder.h"
@@ -11,6 +11,7 @@
 
 #include <string>
 
+timestamps_t *ts;
 class ModelRunnerBase {
 public:
     virtual void accept_chunk(int chunk_idx, at::Tensor slice) = 0;
@@ -41,6 +42,7 @@ private:
     DecoderOptions m_decoder_options;
     torch::nn::ModuleHolder<torch::nn::AnyModule> m_module{nullptr};
     size_t m_model_stride;
+    timestamps_t* ts2;
 };
 
 template <typename T>

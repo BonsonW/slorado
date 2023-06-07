@@ -1,4 +1,4 @@
-#include "../../../src/slorado.h"
+#include "../../../src/timestamps.h"
 #include "CPUDecoder.h"
 #include "beam_search.h"
 
@@ -7,6 +7,7 @@
 
 #include <vector>
 
+timestamps_t *ts;
 at::Tensor scan(const torch::Tensor& Ms,
                 const float fixed_stay_score,
                 const torch::Tensor& idx,
