@@ -7,7 +7,6 @@
 
 #include <vector>
 
-timestamps_t *ts;
 at::Tensor scan(const torch::Tensor& Ms,
                 const float fixed_stay_score,
                 const torch::Tensor& idx,
