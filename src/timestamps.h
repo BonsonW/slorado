@@ -5,7 +5,7 @@
  * */
 #pragma once
 #ifndef TIMESTAMPS_H
-#define TiMESTAMPS_H
+#define TIMESTAMPS_H
 
 #include <stdlib.h>
 #include <stdint.h>
