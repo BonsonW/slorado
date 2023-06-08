@@ -26,5 +26,6 @@ public:
     virtual std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
                                                   int num_chunks,
                                                   const DecoderOptions& options,
-                                                  std::string& device) = 0;
+                                                  std::string& device,
+                                                  timestamps_t* ts) = 0;
 };

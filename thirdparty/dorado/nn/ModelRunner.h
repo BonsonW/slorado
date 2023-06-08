@@ -84,7 +84,7 @@ template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int n
 #ifdef USE_KOI
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 #else
-    return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device);
+    return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device,ts);
 #endif
 }
 
