@@ -3,15 +3,12 @@
  * @brief timestamp related implementations for slorado
  * @author Aminda Amarasinghe
  * */
-#pragma once
+
 #ifndef TIMESTAMPS_H
 #define TIMESTAMPS_H
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <slow5/slow5.h>
-#include <vector>
-#include <memory>
 /* time stamps */
 typedef struct {
     double_t time_init_runners;
