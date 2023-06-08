@@ -95,7 +95,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 int basecaller_main(int argc, char* argv[]) {
     double realtime0 = realtime();
 
-    double realtime_1_start = realtime0;
     const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";
 
     int longindex = 0;
@@ -228,9 +227,6 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
 
-    double realtime_1 = realtime() - realtime_1_start;
-/////////////////////////////////////////////////////////////////////////////
-    double realtime_2_start = realtime();
     //initialise the core data structure
     core_t* core = init_core(data, opt, model, realtime0);
 
@@ -240,10 +236,6 @@ int basecaller_main(int argc, char* argv[]) {
     db_t* db = init_db(core);
 
     ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
-
-    double realtime_2 = realtime() - realtime_2_start;
-/////////////////////////////////////////////////////////////////////////////
-    double realtime_3_start = realtime();
 
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
         //load a databatch
