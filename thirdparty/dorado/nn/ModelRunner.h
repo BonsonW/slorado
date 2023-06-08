@@ -2,7 +2,7 @@
 #include "../decode/Decoder.h"
 #include "CRFModel.h"
 #include "../decode/CPUDecoder.h"
-
+#include "../../../src/timestamps.h"
 #include "toml.h"
 #include "error.h"
 #include <torch/torch.h>

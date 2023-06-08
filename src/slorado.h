@@ -38,7 +38,6 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <vector>
 #include <memory>
-#include "timestamps.h"
 #include "dorado/nn/ModelRunner.h"
 #include "dorado/Chunk.h"
 
