@@ -95,7 +95,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
 int basecaller_main(int argc, char* argv[]) {
     double realtime0 = realtime();
 
-    double realtime_1_start = realtime0;
     const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";
 
     int longindex = 0;
@@ -228,9 +227,6 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
 
-    double realtime_1 = realtime() - realtime_1_start;
-/////////////////////////////////////////////////////////////////////////////
-    double realtime_2_start = realtime();
     //initialise the core data structure
     core_t* core = init_core(data, opt, model, realtime0);
 
@@ -240,10 +236,6 @@ int basecaller_main(int argc, char* argv[]) {
     db_t* db = init_db(core);
 
     ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
-
-    double realtime_2 = realtime() - realtime_2_start;
-/////////////////////////////////////////////////////////////////////////////
-    double realtime_3_start = realtime();
 
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
         //load a databatch
@@ -275,14 +267,12 @@ int basecaller_main(int argc, char* argv[]) {
     //free the databatch
     free_db(db);
 
-    double realtime_3 = realtime() - realtime_3_start;
-    
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
     fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
-
-    fprintf(stderr, "\n[%s] Model initialization time: %.3f sec", __func__,core->ts.time_init_runners);
-    fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
-    fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
+    double total_time = core->ts.time_init_runners + core->load_db_time + core->process_db_time + core->output_time;
+    fprintf(stderr, "\n[%s] Model initialization time: %.3f sec : %.2f %", __func__,core->ts.time_init_runners,core->ts.time_init_runners * 100 / total_time);
+    fprintf(stderr, "\n[%s] Data loading time: %.3f sec : %.2f %", __func__,core->load_db_time,core->load_db_time*100/total_time);
+    fprintf(stderr, "\n[%s] Data processing time: %.3f sec : %.2f %", __func__,core->process_db_time,core->process_db_time*100/total_time);
     //if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
             fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
@@ -294,13 +284,12 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f",__func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
+            fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
-    fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
-    fprintf(stderr, "[%s]\t- elapsed time 1: %.3f %\n",__func__,realtime_1*100/(realtime() - realtime0));
-    fprintf(stderr, "[%s]\t- elapsed time 2: %.3f %\n",__func__,realtime_2*100/(realtime() - realtime0));
-    fprintf(stderr, "[%s]\t- elapsed time 3: %.3f %\n",__func__,realtime_3*100/(realtime() - realtime0));
+   
+    fprintf(stderr, "\n[%s] Data output time: %.3f sec : %.2f %\n", __func__,core->output_time,core->output_time*100/total_time);
     fprintf(stderr,"\n");
 
     //free the core data structure

@@ -1,5 +1,5 @@
 #pragma once
-
+#include "../../../src/timestamps.h"
 #include "../decode/Decoder.h"
 #include "CRFModel.h"
 #include "../decode/CPUDecoder.h"
@@ -13,7 +13,7 @@
 class ModelRunnerBase {
 public:
     virtual void accept_chunk(int chunk_idx, at::Tensor slice) = 0;
-    virtual std::vector<DecodedChunk> call_chunks(int num_chunks) = 0;
+    virtual std::vector<DecodedChunk> call_chunks(int num_chunks,timestamps_t* ts) = 0;
     virtual size_t model_stride() const = 0;
     virtual size_t chunk_size() const = 0;
 };
@@ -21,14 +21,14 @@ public:
 using Runner = std::shared_ptr<ModelRunnerBase>;
 
 template <typename T>
-class ModelRunner : public ModelRunnerBase {
+class ModelRunner : public ModelRunnerBase { //ModelRunner is a derived class from ModelRunnerBase
 public:
     ModelRunner(const std::string &model_path,
                 const std::string &device,
                 int chunk_size,
                 int batch_size);
     void accept_chunk(int chunk_idx, at::Tensor slice) final;
-    std::vector<DecodedChunk> call_chunks(int num_chunks) final;
+    std::vector<DecodedChunk> call_chunks(int num_chunks,timestamps_t *ts) final; //to prevent overriding of virtual function
     size_t model_stride() const final { return m_model_stride; }
     size_t chunk_size() const final { return m_input.size(2); }
 
@@ -40,6 +40,7 @@ private:
     DecoderOptions m_decoder_options;
     torch::nn::ModuleHolder<torch::nn::AnyModule> m_module{nullptr};
     size_t m_model_stride;
+
 };
 
 template <typename T>
@@ -78,13 +79,13 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
 #endif
 }
 
-template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks) {
+template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks,timestamps_t *ts) {
     torch::InferenceMode guard;
     auto scores = m_module->forward(m_input.to(m_options.device_opt().value()));
 #ifdef USE_KOI
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 #else
-    return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device);
+    return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device,ts);
 #endif
 }
 
