@@ -254,7 +254,7 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
-
+        double realtime_p = realtime();
         //process a databatch
         process_db(core, db);
 
@@ -272,6 +272,7 @@ int basecaller_main(int argc, char* argv[]) {
             break;
         }
         fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_d, counter);
+        fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_p, counter);
         counter++;
     }
 
