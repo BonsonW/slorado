@@ -362,24 +362,29 @@ void process_db(core_t* core,db_t* db){
     double b = realtime();
     core->parse_time += (b-a);
     LOG_DEBUG("%s","Parsed reads");
+    fprintf(stderr, "[%.3f]  Parsed signal  \n", b - a);
+       
 
     a = realtime();
     work_db(core,db,preprocess_signal);
     b = realtime();
     core->preproc_time += (b-a);
     LOG_DEBUG("%s","Preprocessed reads");
+    fprintf(stderr, "[%.3f]  Preprocessed signal  \n", b - a);
 
     a = realtime();
     basecall_db(core,db);
     b = realtime();
     core->basecall_time += (b-a);
     LOG_DEBUG("%s","Basecalled reads");
+    fprintf(stderr, "[%.3f]  Basecalled reads \n", b - a);
 
     a = realtime();
     work_db(core,db,postprocess_signal);
     b = realtime();
     core->postproc_time += (b-a);
     LOG_DEBUG("%s","Postprocessed reads");
+    fprintf(stderr, "[%.3f]  Postprocessed reads \n", b - a);
 
     double proc_end = realtime();
     core->process_db_time += (proc_end-proc_start);
