@@ -247,6 +247,8 @@ int basecaller_main(int argc, char* argv[]) {
 
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
         //load a databatch
+        double realtime_d = realtime();
+        
         status = load_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
@@ -269,6 +271,7 @@ int basecaller_main(int argc, char* argv[]) {
         if(opt.debug_break==counter){
             break;
         }
+        fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_d, counter);
         counter++;
     }
 
