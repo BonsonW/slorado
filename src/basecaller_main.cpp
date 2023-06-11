@@ -302,7 +302,7 @@ int basecaller_main(int argc, char* argv[]) {
     //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
 
-    fprintf(stderr, "\n[%s] Basecaller DB time: %.6f sec", __func__,core->basecall_db); //new
+ //   fprintf(stderr, "\n[%s] Basecaller DB time: %.6f sec", __func__,core->basecall_db); //new
 
     fprintf(stderr, "\n[%s] Data output time: %.3f sec : %.2f %\n", __func__,core->output_time,core->output_time*100/total_time);
     fprintf(stderr,"\n");
