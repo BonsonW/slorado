@@ -12,6 +12,9 @@
 #include <slow5/slow5.h>
 #include <vector>
 #include <memory>
+
+#include "misc.h"
+
 /* time stamps */
 typedef struct {
     double_t time_init_runners;
