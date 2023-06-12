@@ -551,7 +551,7 @@ struct LSTMStackImpl : Module {
 };
 
 struct ClampImpl : Module {
-    ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
+    // ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
     torch::Tensor forward(torch::Tensor x, timestamps_t *ts = nullptr) {
         if (ts != nullptr) {
