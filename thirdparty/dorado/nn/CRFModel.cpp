@@ -59,6 +59,7 @@ struct ConvolutionImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
+        std::cout << "\n Forward in CRFModel line 61\n" << std::endl;   //For test
         // Input x is [N, C_in, T_in], contiguity optional
         if (to_lstm) {
 #if USE_CUDA_LSTM
@@ -141,6 +142,7 @@ struct LinearCRFImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
+        std::cout << "\n Forward in CRFModel line 144\n" << std::endl;  //For test
         // Input x is [N, T, C], contiguity optional
         auto N = x.size(0);
         auto T = x.size(1);
@@ -441,6 +443,7 @@ struct CudaLSTMStackImpl : Module {
 
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
     torch::Tensor forward(torch::Tensor x) {
+        std::cout << "\n Forward in CRFModel line 445\n" << std::endl;  //For test
         // Input x is [N, T, C], contiguity optional
         if (m_quantize) {
             // Output is [N, T, C], contiguous
@@ -470,6 +473,7 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
+        std::cout << "\n Forward in CRFModel line 475\n" << std::endl;  //For test
         // Input is [N, T, C], contiguity optional
 
         // auto [y1, h1] = rnn1(x.flip(1));
@@ -526,6 +530,7 @@ struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
     torch::Tensor forward(torch::Tensor x) {
+    std::cout << "\n Forward in CRFModel line 532\n" << std::endl;  //For test
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -581,6 +586,7 @@ struct CRFModelImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
+        std::cout << "\n Forward in CRFModel line \n" << std::endl; //For test
         // Output is [N, T, C]
         return encoder->forward(x);
     }
