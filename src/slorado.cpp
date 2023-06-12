@@ -302,6 +302,7 @@ void basecall_db(core_t* core, db_t* db) {
     size_t end = reads_per_thread;
 
     bool last = false;
+    ts->time_threads_emplace_back -= realtime();
     for (size_t runner = 0; runner < (*core->runners).size(); ++runner) {
         threads.emplace_back(
             new std::thread(
@@ -319,7 +320,8 @@ void basecall_db(core_t* core, db_t* db) {
         if (last) break;
         if (end == n_reads) last = true;
     }
-
+    ts->time_threads_emplace_back += realtime();
+    
     auto time_sync = 0;
 
     for (size_t i = 0; i < threads.size(); ++i) {
@@ -476,4 +478,6 @@ void init_timestamps(timestamps_t* time_stamps) {
     time_stamps->time_stitch = 0;
     time_stamps->time_write = 0;
     time_stamps->time_total = 0;
+    time_stamps->time_threads_emplace_back = 0;
+    time_stamps->time_score = 0;
 }

@@ -1,7 +1,7 @@
 
 #include "CPUDecoder.h"
 #include "beam_search.h"
-
+#include "misc.h"
 #include <math.h>
 #include <torch/torch.h>
 

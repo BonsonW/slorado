@@ -31,6 +31,14 @@ typedef struct {
     double_t time_write;
     double_t time_total;
     double_t time_beam_search_emplace;
+    double_t time_threads_emplace_back;
+    double_t time_score;
 } timestamps_t;
 
+typedef struct {
+    double_t LinearCRFImpl;
+    double_t ConvolutionImpl;
+} timestamps_CRF;
+
+extern timestamps_CRF * ts_CRF;
 #endif

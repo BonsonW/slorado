@@ -45,6 +45,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <unistd.h>
 
+timestamps_CRF * ts_CRF;
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
     {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
@@ -285,6 +286,10 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
             fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
+	    fprintf(stderr, "\n[%s]                 - threads emplace time: %.3f sec",__func__, runner_ts[i]->time_threads_emplace_back);
+	    fprintf(stderr, "\n[%s]                 - score time: %.3f sec",__func__, runner_ts[i]->time_score);
+	    fprintf(stderr, "\n[%s]                 	- convolutionCRF time: %.3f sec",__func__, ts_CRF->ConvolutionImpl);
+
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}

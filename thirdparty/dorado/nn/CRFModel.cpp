@@ -1,7 +1,8 @@
 #include <math.h>
 #include <string>
 #include <torch/torch.h>
-
+#include "../../../src/timestamps.h"
+#include "../../../src/misc.h"
 #include "toml.h"
 #include "CRFModel.h"
 #include "error.h"
@@ -32,7 +33,7 @@ using namespace torch::nn;
 namespace F = torch::nn::functional;
 using Slice = torch::indexing::Slice;
 using quantized_lstm = std::function<int(void *, void *, void *, void *, void *, void *, int)>;
-
+//timestamps_CRF * ts_CRF;
 template <class Model>
 ModuleHolder<AnyModule> populate_model(Model &&model,
                                        const std::string &path,
@@ -58,9 +59,11 @@ struct ConvolutionImpl : Module {
         activation = register_module("activation", SiLU());
     }
 
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x,timestamps_t *ts) {
         // Input x is [N, C_in, T_in], contiguity optional
-        if (to_lstm) {
+        // ts_CRF->ConvolutionImpl -= realtime();
+	printf("ConvolutionImpl module\n");    
+	if (to_lstm) {
 #if USE_CUDA_LSTM
             if (x.device() != torch::kCPU) {
                 c10::cuda::CUDAGuard device_guard(x.device());
@@ -122,6 +125,7 @@ struct ConvolutionImpl : Module {
             }
         }
         // Output is [N, C_out, T_out], contiguous
+	// ts_CRF->ConvolutionImpl += realtime();
         return activation(conv(x));
     }
 
@@ -140,7 +144,9 @@ struct LinearCRFImpl : Module {
         activation = register_module("activation", Tanh());
     };
 
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x,timestamps_t *ts) {
+	printf("LinearCRFImpl module\n");
+	// ts_CRF->LinearCRFImpl -= realtime();
         // Input x is [N, T, C], contiguity optional
         auto N = x.size(0);
         auto T = x.size(1);
@@ -171,7 +177,8 @@ struct LinearCRFImpl : Module {
                              .view({N, T, -1});
         }
         // Output is [N, T, C], contiguous
-        return scores;
+        // ts_CRF->LinearCRFImpl += realtime();
+	return scores;
     }
 
     int scale;
@@ -388,7 +395,7 @@ struct CudaLSTMStackImpl : Module {
         }
     }
 
-    torch::Tensor forward_quantized(torch::Tensor x) {
+    torch::Tensor forward_quantized(torch::Tensor x,timestamps_t *ts) {
         // Input x is [N, T, C], contiguity optional
         c10::cuda::CUDAGuard device_guard(x.device());
 
@@ -440,8 +447,9 @@ struct CudaLSTMStackImpl : Module {
     }
 
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x,timestamps_t *ts) {
         // Input x is [N, T, C], contiguity optional
+	printf("CudaLSTMImpl module\n");
         if (m_quantize) {
             // Output is [N, T, C], contiguous
             return forward_quantized(x);
@@ -469,9 +477,9 @@ struct LSTMStackImpl : Module {
         rnn5 = register_module("rnn5", LSTM(LSTMOptions(size, size).batch_first(true)));
     };
 
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x,timestamps_t *ts) {
         // Input is [N, T, C], contiguity optional
-
+	printf("LSTMStackImpl module\n");
         // auto [y1, h1] = rnn1(x.flip(1));
         // auto [y2, h2] = rnn2(y1.flip(1));
         // auto [y3, h3] = rnn3(y2.flip(1));
@@ -525,7 +533,8 @@ struct LSTMStackImpl : Module {
 struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x,timestamps_t *ts) {
+	printf("ClampImpl module\n");
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -580,8 +589,9 @@ struct CRFModelImpl : Module {
         module_load_state_dict(*this, weights);
     }
 
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x,timestamps_t *ts) {
         // Output is [N, T, C]
+	printf("CRFModelImpl module\n");
         return encoder->forward(x);
     }
 

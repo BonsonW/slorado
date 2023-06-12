@@ -3,7 +3,7 @@
 #include "../decode/Decoder.h"
 #include "CRFModel.h"
 #include "../decode/CPUDecoder.h"
-
+#include "../../../src/misc.h"
 #include "toml.h"
 #include "error.h"
 #include <torch/torch.h>
@@ -81,7 +81,9 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
 
 template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks,timestamps_t *ts) {
     torch::InferenceMode guard;
-    auto scores = m_module->forward(m_input.to(m_options.device_opt().value()));
+    ts->time_score -= realtime();
+    auto scores = m_module->forward(m_input.to(m_options.device_opt().value()),timestamps_t *ts);
+    ts->time_score += realtime();
 #ifdef USE_KOI
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 #else
