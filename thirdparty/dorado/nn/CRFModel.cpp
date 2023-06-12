@@ -624,7 +624,7 @@ struct CRFModelImpl : Module {
             ts->time_forward += realtime();
         }
         // Output is [N, T, C]
-        return encoder->forward(x);
+        return encoder->forward(x, ts);
     }
 
     LSTMStackType rnns{nullptr};

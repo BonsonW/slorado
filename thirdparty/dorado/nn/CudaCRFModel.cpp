@@ -95,7 +95,8 @@ public:
             input_lock.unlock();
 
             std::unique_lock<std::mutex> task_lock(task->mut);
-            auto scores = m_module->forward(task->input);
+            timestamps_t *ts = nullptr;
+            auto scores = m_module->forward(task->input, ts);
             torch::cuda::synchronize();
             task->out = m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device);
             stream.synchronize();
