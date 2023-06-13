@@ -7,7 +7,7 @@
 // Declaration of global variables
 extern double startTime;
 extern double endTime;
-extern double time_copy;
+extern double time_forward;
 
 // Function to measure time difference
 double getTimeDifference();

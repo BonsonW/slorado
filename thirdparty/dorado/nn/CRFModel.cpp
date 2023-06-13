@@ -69,7 +69,7 @@ struct ConvolutionImpl : Module {
         //     ts->time_forward -= realtime();
         // }
     
-        std::cout << "\n Forward in CRFModel line 61\n" << std::endl;   //For test
+        // std::cout << "\n Forward in CRFModel line 61\n" << std::endl;   //For test
         // Input x is [N, C_in, T_in], contiguity optional
         if (to_lstm) {
 #if USE_CUDA_LSTM
@@ -136,7 +136,7 @@ struct ConvolutionImpl : Module {
         //     ts->time_forward += realtime();
         // }
         endTime = realtime();
-        time_copy += getTimeDifference();
+        time_forward += getTimeDifference();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
@@ -161,7 +161,7 @@ struct LinearCRFImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
-        std::cout << "\n Forward in CRFModel line 144\n" << std::endl;  //For test
+        // std::cout << "\n Forward in CRFModel line 144\n" << std::endl;  //For test
         // Input x is [N, T, C], contiguity optional
         auto N = x.size(0);
         auto T = x.size(1);
@@ -192,7 +192,7 @@ struct LinearCRFImpl : Module {
                              .view({N, T, -1});
         }
         endTime = realtime();
-        time_copy += getTimeDifference();
+        time_forward += getTimeDifference();
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
@@ -471,17 +471,19 @@ struct CudaLSTMStackImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
-        std::cout << "\n Forward in CRFModel line 445\n" << std::endl;  //For test
+        // std::cout << "\n Forward in CRFModel line 445\n" << std::endl;  //For test
         // Input x is [N, T, C], contiguity optional
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
-        endTime = realtime();
-        time_copy += getTimeDifference();
+        
+        time_forward += getTimeDifference();
         if (m_quantize) {
+            endTime = realtime();
             // Output is [N, T, C], contiguous
             return forward_quantized(x);
         } else {
+            endTime = realtime();
             // Output is [N, T, C], non-contiguous
             return forward_cublas(x);
         }
@@ -510,7 +512,7 @@ struct LSTMStackImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
-        std::cout << "\n Forward in CRFModel line 475\n" << std::endl;  //For test
+        // std::cout << "\n Forward in CRFModel line 475\n" << std::endl;  //For test
         // Input is [N, T, C], contiguity optional
 
         // auto [y1, h1] = rnn1(x.flip(1));
@@ -560,7 +562,7 @@ struct LSTMStackImpl : Module {
         //     ts->time_forward += realtime();
         // }
         endTime = realtime();
-        time_copy += getTimeDifference();
+        time_forward += getTimeDifference();
 
         // Output is [N, T, C], non-contiguous
         return x;
@@ -577,12 +579,12 @@ struct ClampImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
-    std::cout << "\n Forward in CRFModel line 532\n" << std::endl;  //For test
+    // std::cout << "\n Forward in CRFModel line 532\n" << std::endl;  //For test
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
         endTime = realtime();
-        time_copy += getTimeDifference();
+        time_forward += getTimeDifference();
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -642,12 +644,12 @@ struct CRFModelImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
-        std::cout << "\n Forward in CRFModel line 588\n" << std::endl; //For test
+        // std::cout << "\n Forward in CRFModel line 588\n" << std::endl; //For test
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
         endTime = realtime();
-        time_copy += getTimeDifference();
+        time_forward += getTimeDifference();
         // Output is [N, T, C]
         return encoder->forward(x);
     }
