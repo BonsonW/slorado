@@ -550,14 +550,14 @@ struct LSTMStackImpl : Module {
     LSTM rnn1{nullptr}, rnn2{nullptr}, rnn3{nullptr}, rnn4{nullptr}, rnn5{nullptr};
 };
 
-struct ClampImpl : torch::nn::Module {
-    ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active) {}
+struct ClampImpl : Module {
+    ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
-    torch::Tensor forward(torch::Tensor x, timestamps_t* ts = nullptr) FORWARD_HAS_DEFAULT_ARGS(nullptr) {
+    torch::Tensor forward(torch::Tensor x, timestamps_t *ts = nullptr) {
         if (ts != nullptr) {
             ts->time_forward -= realtime();
         }
-        std::cout << "\n Forward in CRFModel line 532\n" << std::endl;  //For test
+    std::cout << "\n Forward in CRFModel line 532\n" << std::endl;  //For test
         if (ts != nullptr) {
             ts->time_forward += realtime();
         }
