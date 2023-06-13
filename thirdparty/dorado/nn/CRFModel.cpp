@@ -553,7 +553,7 @@ struct LSTMStackImpl : Module {
 struct ClampImpl : torch::nn::Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active) {}
 
-    torch::Tensor forward(torch::Tensor x, timestamps_t* ts = nullptr) {
+    torch::Tensor forward(torch::Tensor x, timestamps_t* ts = nullptr) FORWARD_HAS_DEFAULT_ARGS(nullptr) {
         if (ts != nullptr) {
             ts->time_forward -= realtime();
         }
