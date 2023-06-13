@@ -12,6 +12,8 @@
 #include <slow5/slow5.h>
 #include <vector>
 #include <memory>
+#include <atomic>
+
 /* time stamps */
 typedef struct {
     double_t time_init_runners;
@@ -36,8 +38,8 @@ typedef struct {
 } timestamps_t;
 
 typedef struct {
-    double_t LinearCRFImpl;
-    double_t ConvolutionImpl;
+	std::atomic<double_t> linearCRFImpl {0};
+    	std::atomic<double_t> convolutionImpl {0};
 } timestamps_CRF;
 
 extern timestamps_CRF * ts_CRF;
