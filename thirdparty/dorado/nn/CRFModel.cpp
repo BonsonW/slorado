@@ -60,7 +60,7 @@ struct ConvolutionImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
-        startTime = std::chrono::system_clock::now();
+        startTime = realtime();
 
     // Perform some task
 
@@ -135,7 +135,7 @@ struct ConvolutionImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
-        endTime = std::chrono::system_clock::now();
+        endTime = realtime();
         time_copy += getTimeDifference();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
@@ -157,7 +157,7 @@ struct LinearCRFImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
-        startTime = std::chrono::system_clock::now();
+        startTime = realtime();
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
@@ -191,7 +191,7 @@ struct LinearCRFImpl : Module {
                             F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
                              .view({N, T, -1});
         }
-        endTime = std::chrono::system_clock::now();
+        endTime = realtime();
         time_copy += getTimeDifference();
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
@@ -467,7 +467,7 @@ struct CudaLSTMStackImpl : Module {
 
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
     torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
-        startTime = std::chrono::system_clock::now();
+        startTime = realtime();
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
@@ -476,7 +476,7 @@ struct CudaLSTMStackImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
-        endTime = std::chrono::system_clock::now();
+        endTime = realtime();
         time_copy += getTimeDifference();
         if (m_quantize) {
             // Output is [N, T, C], contiguous
@@ -506,7 +506,7 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
-        startTime = std::chrono::system_clock::now();
+        startTime = realtime();
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
@@ -559,7 +559,7 @@ struct LSTMStackImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
-        endTime = std::chrono::system_clock::now();
+        endTime = realtime();
         time_copy += getTimeDifference();
 
         // Output is [N, T, C], non-contiguous
@@ -573,7 +573,7 @@ struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
     torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) { 
-        startTime = std::chrono::system_clock::now();
+        startTime = realtime();
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
@@ -581,7 +581,7 @@ struct ClampImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
-        endTime = std::chrono::system_clock::now();
+        endTime = realtime();
         time_copy += getTimeDifference();
         if (active) {
             return x.clamp(min, max);
@@ -638,7 +638,7 @@ struct CRFModelImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
-        startTime = std::chrono::system_clock::now();
+        startTime = realtime();
         // if (ts != nullptr) {
         //     ts->time_forward -= realtime();
         // }
@@ -646,7 +646,7 @@ struct CRFModelImpl : Module {
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
-        endTime = std::chrono::system_clock::now();
+        endTime = realtime();
         time_copy += getTimeDifference();
         // Output is [N, T, C]
         return encoder->forward(x);
