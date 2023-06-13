@@ -2,6 +2,8 @@
 #include <string>
 #include <torch/torch.h>
 
+
+#include "../../../src/globals.h"
 #include "toml.h"
 #include "CRFModel.h"
 #include "error.h"
@@ -17,7 +19,6 @@ extern "C" {
 
 
 #if USE_CUDA_LSTM
-
 static bool cuda_lstm_is_quantized(int layer_size) {
 #ifdef DORADO_TX2
     return false;
@@ -58,8 +59,15 @@ struct ConvolutionImpl : Module {
         activation = register_module("activation", SiLU());
     }
 
-    torch::Tensor forward(torch::Tensor x) {
-        ts->time_forward -= realtime();
+    torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
+        startTime = std::chrono::system_clock::now();
+
+    // Perform some task
+
+        
+        // if (ts != nullptr) {
+        //     ts->time_forward -= realtime();
+        // }
     
         std::cout << "\n Forward in CRFModel line 61\n" << std::endl;   //For test
         // Input x is [N, C_in, T_in], contiguity optional
@@ -124,7 +132,11 @@ struct ConvolutionImpl : Module {
                 return activation(conv(x)).transpose(1, 2);
             }
         }
-        ts->time_forward += realtime();
+        // if (ts != nullptr) {
+        //     ts->time_forward += realtime();
+        // }
+        endTime = std::chrono::system_clock::now();
+        time_copy += getTimeDifference();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
@@ -144,8 +156,11 @@ struct LinearCRFImpl : Module {
         activation = register_module("activation", Tanh());
     };
 
-    torch::Tensor forward(torch::Tensor x) {
-        ts->time_forward -= realtime();
+    torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
+        startTime = std::chrono::system_clock::now();
+        // if (ts != nullptr) {
+        //     ts->time_forward -= realtime();
+        // }
         std::cout << "\n Forward in CRFModel line 144\n" << std::endl;  //For test
         // Input x is [N, T, C], contiguity optional
         auto N = x.size(0);
@@ -176,7 +191,11 @@ struct LinearCRFImpl : Module {
                             F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
                              .view({N, T, -1});
         }
-        ts->time_forward += realtime();
+        endTime = std::chrono::system_clock::now();
+        time_copy += getTimeDifference();
+        // if (ts != nullptr) {
+        //     ts->time_forward += realtime();
+        // }
         // Output is [N, T, C], contiguous
         return scores;
     }
@@ -447,16 +466,22 @@ struct CudaLSTMStackImpl : Module {
     }
 
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
-    torch::Tensor forward(torch::Tensor x) {
-        ts->time_forward -= realtime();
+    torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
+        startTime = std::chrono::system_clock::now();
+        // if (ts != nullptr) {
+        //     ts->time_forward -= realtime();
+        // }
         std::cout << "\n Forward in CRFModel line 445\n" << std::endl;  //For test
         // Input x is [N, T, C], contiguity optional
+        // if (ts != nullptr) {
+        //     ts->time_forward += realtime();
+        // }
+        endTime = std::chrono::system_clock::now();
+        time_copy += getTimeDifference();
         if (m_quantize) {
-            ts->time_forward += realtime();
             // Output is [N, T, C], contiguous
             return forward_quantized(x);
         } else {
-            ts->time_forward += realtime();
             // Output is [N, T, C], non-contiguous
             return forward_cublas(x);
         }
@@ -480,8 +505,11 @@ struct LSTMStackImpl : Module {
         rnn5 = register_module("rnn5", LSTM(LSTMOptions(size, size).batch_first(true)));
     };
 
-    torch::Tensor forward(torch::Tensor x) {
-        ts->time_forward -= realtime();
+    torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
+        startTime = std::chrono::system_clock::now();
+        // if (ts != nullptr) {
+        //     ts->time_forward -= realtime();
+        // }
         std::cout << "\n Forward in CRFModel line 475\n" << std::endl;  //For test
         // Input is [N, T, C], contiguity optional
 
@@ -528,7 +556,12 @@ struct LSTMStackImpl : Module {
 
         x = y5.flip(1);
 
-        ts->time_forward += realtime();
+        // if (ts != nullptr) {
+        //     ts->time_forward += realtime();
+        // }
+        endTime = std::chrono::system_clock::now();
+        time_copy += getTimeDifference();
+
         // Output is [N, T, C], non-contiguous
         return x;
     }
@@ -539,10 +572,17 @@ struct LSTMStackImpl : Module {
 struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
-    torch::Tensor forward(torch::Tensor x) {
-    ts->time_forward -= realtime();
+    torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) { 
+        startTime = std::chrono::system_clock::now();
+        // if (ts != nullptr) {
+        //     ts->time_forward -= realtime();
+        // }
     std::cout << "\n Forward in CRFModel line 532\n" << std::endl;  //For test
-    ts->time_forward += realtime();
+        // if (ts != nullptr) {
+        //     ts->time_forward += realtime();
+        // }
+        endTime = std::chrono::system_clock::now();
+        time_copy += getTimeDifference();
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -597,10 +637,17 @@ struct CRFModelImpl : Module {
         module_load_state_dict(*this, weights);
     }
 
-    torch::Tensor forward(torch::Tensor x) {
-        ts->time_forward -= realtime();
+    torch::Tensor forward(torch::Tensor x) { //, timestamps_t *ts = nullptr) {
+        startTime = std::chrono::system_clock::now();
+        // if (ts != nullptr) {
+        //     ts->time_forward -= realtime();
+        // }
         std::cout << "\n Forward in CRFModel line 588\n" << std::endl; //For test
-        ts->time_forward += realtime();
+        // if (ts != nullptr) {
+        //     ts->time_forward += realtime();
+        // }
+        endTime = std::chrono::system_clock::now();
+        time_copy += getTimeDifference();
         // Output is [N, T, C]
         return encoder->forward(x);
     }
