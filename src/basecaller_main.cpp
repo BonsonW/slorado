@@ -30,10 +30,10 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include "globals.h"
 #include "slorado.h"
 #include "dorado/signal_prep.h"
 #include "misc.h"
-#include "globals.h"
 
 #include <assert.h>
 #include <cstddef>
