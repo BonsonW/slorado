@@ -299,6 +299,14 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
             fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
             fprintf(stderr, "\n[%s]                 - Forward time: %.3f sec",__func__, time_forward);
+
+            fprintf(stderr, "\n\n[%s]                 - Forward time 62: %.3f sec",__func__, forward_l62);
+            fprintf(stderr, "\n[%s]                 - Forward time 159: %.3f sec",__func__, forward_l159);
+            fprintf(stderr, "\n[%s]                 - Forward time 469: %.3f sec",__func__, forward_l469);
+            fprintf(stderr, "\n[%s]                 - Forward time 510: %.3f sec",__func__, forward_l510);
+            fprintf(stderr, "\n[%s]                 - Forward time 577: %.3f sec",__func__, forward_l577);
+            fprintf(stderr, "\n[%s]                 - Forward time 642: %.3f sec",__func__, forward_l642);
+
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}

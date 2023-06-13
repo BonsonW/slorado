@@ -137,6 +137,7 @@ struct ConvolutionImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
+        forward_l62 += getTimeDifference();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
@@ -193,6 +194,7 @@ struct LinearCRFImpl : Module {
         }
         endTime = realtime();
         time_forward += getTimeDifference();
+        forward_l159 += getTimeDifference();
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
@@ -478,6 +480,7 @@ struct CudaLSTMStackImpl : Module {
         // }
         
         time_forward += getTimeDifference();
+        forward_l469 += getTimeDifference();
         if (m_quantize) {
             endTime = realtime();
             // Output is [N, T, C], contiguous
@@ -563,6 +566,7 @@ struct LSTMStackImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
+        forward_l510 += getTimeDifference();
 
         // Output is [N, T, C], non-contiguous
         return x;
@@ -585,6 +589,7 @@ struct ClampImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
+        forward_l577 += getTimeDifference();
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -650,6 +655,7 @@ struct CRFModelImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
+        forward_l642 += getTimeDifference();
         // Output is [N, T, C]
         return encoder->forward(x);
     }
