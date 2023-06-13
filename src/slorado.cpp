@@ -478,6 +478,11 @@ void init_timestamps(timestamps_t* time_stamps) {
     time_stamps->time_stitch = 0;
     time_stamps->time_write = 0;
     time_stamps->time_total = 0;
+<<<<<<< HEAD
     time_stamps->time_threads_emplace_back = 0;
     time_stamps->time_score = 0;
 }
+=======
+    time_stamps->time_forward = 0;
+}
+>>>>>>> 07e37c48ff466d6879fee2cb110f23ee94bd85dd

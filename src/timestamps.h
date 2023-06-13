@@ -12,7 +12,12 @@
 #include <slow5/slow5.h>
 #include <vector>
 #include <memory>
+<<<<<<< HEAD
 #include <atomic>
+=======
+
+#include "misc.h"
+>>>>>>> 07e37c48ff466d6879fee2cb110f23ee94bd85dd
 
 /* time stamps */
 typedef struct {
@@ -33,8 +38,12 @@ typedef struct {
     double_t time_write;
     double_t time_total;
     double_t time_beam_search_emplace;
+<<<<<<< HEAD
     double_t time_threads_emplace_back;
     double_t time_score;
+=======
+    double_t time_forward;
+>>>>>>> 07e37c48ff466d6879fee2cb110f23ee94bd85dd
 } timestamps_t;
 
 typedef struct {

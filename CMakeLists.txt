@@ -34,6 +34,7 @@ install(FILES ${TORCH_DLLS} DESTINATION lib)
 
 set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/misc.cpp
+        ${CMAKE_SOURCE_DIR}/src/globals.cpp
         ${CMAKE_SOURCE_DIR}/src/thread.cpp
         ${CMAKE_SOURCE_DIR}/src/error.cpp
         ${CMAKE_SOURCE_DIR}/src/slorado.cpp
