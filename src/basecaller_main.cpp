@@ -33,6 +33,7 @@ SOFTWARE.
 #include "slorado.h"
 #include "dorado/signal_prep.h"
 #include "misc.h"
+#include "globals.h"
 
 #include <assert.h>
 #include <cstddef>
@@ -44,6 +45,9 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+//std::string generateSplitBar(const long* values, int size);   ////////////////////////////////
+void generateSplitBar(const long* values, const std::string* names, int size);
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
@@ -212,7 +216,7 @@ int basecaller_main(int argc, char* argv[]) {
         }
         exit(EXIT_FAILURE);
     }
-    
+
     // print summary
     fprintf(stderr,"\nslorado base-caller version %s\n", SLORADO_VERSION);
     fprintf(stderr,"model path:         %s\n", model);
@@ -226,6 +230,8 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
+
+/////////////////////////////////////////////////////////////////////////////
 
     //initialise the core data structure
     core_t* core = init_core(data, opt, model, realtime0);
@@ -280,17 +286,38 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]          - Synchronisation time: %.3f sec",__func__, core->ts.time_sync);
 
     auto runner_ts = *core->runner_ts;
+
+    ////Visualization////
+    long values[20] = {(long)core->ts.time_init_runners, (long)core->load_db_time, (long)core->process_db_time, (long)core->parse_time, (long)core->preproc_time, (long)core->basecall_time, (long)core->ts.time_sync, (long)core->postproc_time, (long)core->output_time};
+
+    std::string valueNames[20] = {"Model initialization time", "Data loading time", "Data processing time", "Parse time", "Preprocess time", "Basecall+decode time", "Synchronisation time", "Postprocess time", "Data output time:"};
+
+    int count = 9;
     for (size_t i = 0; i < runner_ts.size(); ++i) {
             fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f",__func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
             fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
+            fprintf(stderr, "\n[%s]                 - Forward time: %.3f sec",__func__, time_copy);
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
-   
+    fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
+
+ //   fprintf(stderr, "\n[%s] Basecaller DB time: %.6f sec", __func__,core->basecall_db); //new
+
     fprintf(stderr, "\n[%s] Data output time: %.3f sec : %.2f %\n", __func__,core->output_time,core->output_time*100/total_time);
     fprintf(stderr,"\n");
+
+    std::cout << "\n" << std::endl;
+    std::cout << "---------------------------------------- Time Distribution -----------------------------------------" << std::endl;
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+////    long values[] = {(long)core->ts.time_init_runners, (long)core->load_db_time, (long)core->process_db_time, (long)core->parse_time, (long)core->preproc_time, (long)core->basecall_time, (long)core->ts.time_sync, (long)core->postproc_time, (long)core->output_time};
+
+
+
+    generateSplitBar(values, valueNames, 12);
 
     //free the core data structure
     free_core(core,opt);
@@ -301,3 +328,68 @@ int basecaller_main(int argc, char* argv[]) {
 
     return 0;
 }
+
+void generateSplitBar(const long* values, const std::string* names, int size) {
+    int barLength = 100; // Length of the bar
+
+    // Calculate the sum of all values
+    long sum = 0;
+    for (int i = 0; i < size; ++i) {
+        sum += values[i];
+    }
+
+    std::string bar;
+
+    // Append colored portions represented by colored spaces
+    int currentPosition = 0;
+    for (int i = 0; i < size; ++i) {
+
+        int j;
+        if(i > 6){
+                j = i - 7;
+        }
+        else{
+                j = i;
+        }
+
+        int coloredLength = (values[i] * barLength) / sum; // Calculate length of colored portion
+        std::string colorCode = "\033[" + std::to_string(41 + j) + "m"; // Set background color dynamically
+
+        // Append colored portion with the respective color
+        bar += colorCode;
+        bar.append(coloredLength, ' ');
+        bar += "\033[0m"; // Reset color to default
+
+        currentPosition += coloredLength;
+    }
+
+    // Append remaining spaces
+    bar.append(barLength - currentPosition, ' ');
+
+    // Print the space bar
+    std::cout << bar << std::endl;
+
+    std::cout << "\n" << std::endl;
+    // Print the value names with two spaces in the respective color in front
+    for (int i = 0; i < size; ++i) {
+        int j;
+        if(i > 6){
+                j = i - 7;
+        }
+        else{
+                j = i;
+        }
+        std::string colorCode = "\033[" + std::to_string(41 + j) + "m"; // Set background color dynamically
+
+        // Print two spaces with the color code
+        std::cout << colorCode << "  ";
+
+        // Reset the color code
+        std::cout << "\033[0m";
+
+        // Print the value name
+        std::cout << " : " << names[i] <<  std::endl;
+    }
+    std::cout << "\n" << std::endl;
+}
+

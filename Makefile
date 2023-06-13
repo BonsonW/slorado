@@ -34,6 +34,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/basecall.o \
       $(BUILD_DIR)/thread.o \
 	  $(BUILD_DIR)/misc.o \
+	  $(BUILD_DIR)/globals.o \
 	  $(BUILD_DIR)/error.o \
 	  $(BUILD_DIR)/signal_prep.o \
 	  $(BUILD_DIR)/writer.o \
@@ -85,19 +86,22 @@ $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h src/globals.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/basecall.o: src/basecall.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h
+$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h src/globals.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/globals.o: src/globals.cpp src/globals.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
