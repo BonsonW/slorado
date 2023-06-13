@@ -101,7 +101,7 @@ $(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
 $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/globals.o: src/globals.cpp src/globals.h
+$(BUILD_DIR)/globals.o: src/globals.cpp src/globals.h src/misc.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
