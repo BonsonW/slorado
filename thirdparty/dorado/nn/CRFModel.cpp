@@ -524,49 +524,72 @@ struct LSTMStackImpl : Module {
         // auto [y4, h4] = rnn4(y3.flip(1));
         // auto [y5, h5] = rnn5(y4.flip(1));
 
+        subStartTime = realtime();
         x = x.flip(1);
+        subEndTime = realtime();
+        x_flip += getSubTimeDifference();
 
+
+
+        subStartTime = realtime();
         // rnn1
         auto t1 = rnn1(x);
         auto y1 = std::get<0>(t1);
         auto h1 = std::get<1>(t1);
 
         x = y1.flip(1);
+        subEndTime = realtime();
+        rnn1 += getSubTimeDifference();
 
+        subStartTime = realtime();
         // rnn2
         auto t2 = rnn2(x);
         auto y2 = std::get<0>(t2);
         auto h2 = std::get<1>(t2);
 
         x = y2.flip(1);
+        subEndTime = realtime();
+        rnn2 += getSubTimeDifference();
 
+        subStartTime = realtime();
         // rnn3
         auto t3 = rnn3(x);
         auto y3 = std::get<0>(t3);
         auto h3 = std::get<1>(t3);
 
         x = y3.flip(1);
+        subEndTime = realtime();
+        rnn3 += getSubTimeDifference();
 
+        subStartTime = realtime();
         // rnn4
         auto t4 = rnn4(x);
         auto y4 = std::get<0>(t4);
         auto h4 = std::get<1>(t4);
 
         x = y4.flip(1);
+        subEndTime = realtime();
+        rnn4 += getSubTimeDifference();
 
+
+        subStartTime = realtime();
         // rnn5
         auto t5 = rnn5(x);
         auto y5 = std::get<0>(t5);
         auto h5 = std::get<1>(t5);
 
         x = y5.flip(1);
+        subEndTime = realtime();
+        rnn5 += getSubTimeDifference();
+
+
 
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
-        forward_l510 += getTimeDifference();
+        forward_l5136 += getTimeDifference();
 
         // Output is [N, T, C], non-contiguous
         return x;

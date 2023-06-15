@@ -303,11 +303,17 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n\n[%s]                 - Forward time 62: %.3f sec",__func__, forward_l62);
             fprintf(stderr, "\n[%s]                 - Forward time 159: %.3f sec",__func__, forward_l159);
             fprintf(stderr, "\n[%s]                 - Forward time 469: %.3f sec",__func__, forward_l469);
-            fprintf(stderr, "\n[%s]                 - Forward time 510: %.3f sec",__func__, forward_l510);
+            fprintf(stderr, "\n[%s]                 - Forward time 513: %.3f sec",__func__, forward_l5136);
             fprintf(stderr, "\n[%s]                 - Forward time 577: %.3f sec",__func__, forward_l577);
             fprintf(stderr, "\n[%s]                 - Forward time 642: %.3f sec",__func__, forward_l642);
 
-    }
+    }       fprintf(stderr, "\n\n[%s]                 - x_flip time 62: %.3f sec",__func__, x_flip);
+            fprintf(stderr, "\n[%s]                 - rnn1 time: %.3f sec",__func__, rnn1);
+            fprintf(stderr, "\n[%s]                 - rnn2 time: %.3f sec",__func__, rnn2);
+            fprintf(stderr, "\n[%s]                 - rnn3 time: %.3f sec",__func__, rnn3);
+            fprintf(stderr, "\n[%s]                 - rnn4 time: %.3f sec",__func__, rnn4);
+            fprintf(stderr, "\n[%s]                 - rnn5 time: %.3f sec",__func__, rnn5);
+
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
