@@ -527,7 +527,7 @@ struct LSTMStackImpl : Module {
         subStartTime = realtime();
         x = x.flip(1);
         subEndTime = realtime();
-        x_flip = x_flip + subEndTime - subStartTime;
+        x_flip = subEndTime - subStartTime;
 
         subStartTime = realtime();
         // rnn1
@@ -537,7 +537,7 @@ struct LSTMStackImpl : Module {
 
         x = y1.flip(1);
         subEndTime = realtime();
-        rnn1 = rnn1 + subEndTime - subStartTime;
+        rnn1 = subEndTime - subStartTime;
 
         subStartTime = realtime();
         // rnn2
@@ -547,7 +547,7 @@ struct LSTMStackImpl : Module {
 
         x = y2.flip(1);
         subEndTime = realtime();
-        rnn2 = rnn2 + subEndTime - subStartTime;
+        rnn2 = subEndTime - subStartTime;
 
         subStartTime = realtime();
         // rnn3
@@ -557,7 +557,7 @@ struct LSTMStackImpl : Module {
 
         x = y3.flip(1);
         subEndTime = realtime();
-        rnn3 = rnn3 + subEndTime - subStartTime;
+        rnn3 = subEndTime - subStartTime;
 
         subStartTime = realtime();
         // rnn4
@@ -567,7 +567,7 @@ struct LSTMStackImpl : Module {
 
         x = y4.flip(1);
         subEndTime = realtime();
-        rnn4 = rnn4 + subEndTime - subStartTime;
+        rnn4 = subEndTime - subStartTime;
 
         subStartTime = realtime();
         // rnn5
@@ -577,7 +577,7 @@ struct LSTMStackImpl : Module {
 
         x = y5.flip(1);
         subEndTime = realtime();
-        rnn5 = rnn5 + subEndTime - subStartTime;
+        rnn5 = subEndTime - subStartTime;
 
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
