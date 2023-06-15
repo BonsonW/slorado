@@ -314,6 +314,11 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                 - rnn4 time: %.3f sec",__func__, rnn4t);
             fprintf(stderr, "\n[%s]                 - rnn5 time: %.3f sec",__func__, rnn5t);
 
+            fprintf(stderr, "\n\n[%s]                 - rnn1 t1 time: %.3f sec",__func__, rnn1tt1);
+            fprintf(stderr, "\n[%s]                 - rnn1 h1 time: %.3f sec",__func__, rnn1th1);
+            fprintf(stderr, "\n[%s]                 - rnn1 y1 time: %.3f sec",__func__, rnn1ty1);
+            fprintf(stderr, "\n[%s]                 - rnn1 flip time: %.3f sec",__func__, rnn1tflip);
+
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);

@@ -11,6 +11,9 @@ extern double endTime;
 extern double subStartTime;
 extern double subEndTime;
 
+extern double subStartTimev2;
+extern double subEndTimev2;
+
 extern double time_forward;
 extern double forward_l62;
 extern double forward_l159;
@@ -26,10 +29,16 @@ extern double rnn3t;
 extern double rnn4t;
 extern double rnn5t;
 
+extern double rnn1tt1;
+extern double rnn1th1;
+extern double rnn1ty1;
+extern double rnn1tflip;
 
 // Function to measure time difference
 double getTimeDifference();
 
 double getSubTimeDifference();
+
+double getSubTimeDifferencev2();
 
 #endif

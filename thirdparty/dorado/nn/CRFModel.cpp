@@ -531,11 +531,26 @@ struct LSTMStackImpl : Module {
 
         subStartTime = realtime();
         // rnn1
+        subStartTimev2 = realtime();
         auto t1 = rnn1(x);
-        auto y1 = std::get<0>(t1);
-        auto h1 = std::get<1>(t1);
+        subEndTimev2 = realtime();
+        rnn1tt1 += getSubTimeDifferencev2();
 
+        subStartTimev2 = realtime();
+        auto y1 = std::get<0>(t1);
+        subEndTimev2 = realtime();
+        rnn1ty1 += getSubTimeDifferencev2();
+
+        subStartTimev2 = realtime();
+        auto h1 = std::get<1>(t1);
+        subEndTimev2 = realtime();
+        rnn1th1 += getSubTimeDifferencev2();
+
+        subStartTimev2 = realtime();
         x = y1.flip(1);
+        subEndTimev2 = realtime();
+        rnn1tflip += getSubTimeDifferencev2();
+
         subEndTime = realtime();
         rnn1t += subEndTime - subStartTime;
 

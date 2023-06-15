@@ -7,6 +7,9 @@ double endTime;
 double subStartTime;
 double subEndTime;
 
+double subStartTimev2;
+double subEndTimev2;
+
 double time_forward;
 double forward_l62;
 double forward_l159;
@@ -22,6 +25,11 @@ double rnn3t;
 double rnn4t;
 double rnn5t;
 
+double rnn1tt1;
+double rnn1th1;
+double rnn1ty1;
+double rnn1tflip;
+
 // Function to measure time difference in seconds
 double getTimeDifference() {
     return endTime - startTime;
@@ -29,4 +37,8 @@ double getTimeDifference() {
 
 double getSubTimeDifference() {
     return subEndTime - subStartTime;
+}
+
+double getSubTimeDifferencev2() {
+    return subEndTimev2 - subStartTimev2;
 }
