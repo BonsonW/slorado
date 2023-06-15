@@ -19,12 +19,12 @@ extern double forward_l5136;
 extern double forward_l577;
 extern double forward_l642;
 
-extern double x_flip;
-extern double rnn1;
-extern double rnn2;
-extern double rnn3;
-extern double rnn4;
-extern double rnn5;
+extern double x_flipt;
+extern double rnn1t;
+extern double rnn2t;
+extern double rnn3t;
+extern double rnn4t;
+extern double rnn5t;
 
 
 // Function to measure time difference

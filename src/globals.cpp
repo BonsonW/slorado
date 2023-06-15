@@ -15,12 +15,12 @@ double forward_l5136;
 double forward_l577;
 double forward_l642;
 
-double x_flip;
-double rnn1;
-double rnn2;
-double rnn3;
-double rnn4;
-double rnn5;
+double x_flipt;
+double rnn1t;
+double rnn2t;
+double rnn3t;
+double rnn4t;
+double rnn5t;
 
 // Function to measure time difference in seconds
 double getTimeDifference() {
