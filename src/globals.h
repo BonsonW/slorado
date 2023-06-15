@@ -30,4 +30,6 @@ extern double rnn5;
 // Function to measure time difference
 double getTimeDifference();
 
+double getSubTimeDifference();
+
 #endif

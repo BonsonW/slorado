@@ -307,7 +307,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                 - Forward time 577: %.3f sec",__func__, forward_l577);
             fprintf(stderr, "\n[%s]                 - Forward time 642: %.3f sec",__func__, forward_l642);
 
-    }       fprintf(stderr, "\n\n[%s]                 - x_flip time 62: %.3f sec",__func__, x_flip);
+    }       fprintf(stderr, "\n\n[%s]                 - x_flip time: %.3f sec",__func__, x_flip);
             fprintf(stderr, "\n[%s]                 - rnn1 time: %.3f sec",__func__, rnn1);
             fprintf(stderr, "\n[%s]                 - rnn2 time: %.3f sec",__func__, rnn2);
             fprintf(stderr, "\n[%s]                 - rnn3 time: %.3f sec",__func__, rnn3);

@@ -529,8 +529,6 @@ struct LSTMStackImpl : Module {
         subEndTime = realtime();
         x_flip += getSubTimeDifference();
 
-
-
         subStartTime = realtime();
         // rnn1
         auto t1 = rnn1(x);
