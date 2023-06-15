@@ -302,7 +302,7 @@ int basecaller_main(int argc, char* argv[]) {
 
             // fprintf(stderr, "\n\n[%s]                 - Forward time 62: %.3f sec",__func__, forward_l62);
             // fprintf(stderr, "\n[%s]                 - Forward time 159: %.3f sec",__func__, forward_l159);
-            // fprintf(stderr, "\n[%s]                 - Forward time 469: %.3f sec",__func__, forward_l469);
+            fprintf(stderr, "\n[%s]                 - Forward time 469: %.3f sec",__func__, forward_l469);
             // fprintf(stderr, "\n[%s]                 - Forward time 510: %.3f sec",__func__, forward_l510);
             // fprintf(stderr, "\n[%s]                 - Forward time 577: %.3f sec",__func__, forward_l577);
             // fprintf(stderr, "\n[%s]                 - Forward time 642: %.3f sec",__func__, forward_l642);
