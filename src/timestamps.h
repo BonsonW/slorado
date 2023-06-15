@@ -34,7 +34,7 @@ typedef struct {
     double_t time_write;
     double_t time_total;
     double_t time_beam_search_emplace;
-    double_t time_forward;
+    // double_t time_forward;
 } timestamps_t;
 
 #endif
