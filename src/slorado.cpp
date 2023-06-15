@@ -476,7 +476,7 @@ void init_timestamps(timestamps_t* time_stamps) {
     time_stamps->time_stitch = 0;
     time_stamps->time_write = 0;
     time_stamps->time_total = 0;
-    time_stamps->time_forward = 0;
+    // time_stamps->time_forward = 0;
     // time_forward = 0;
     // forward_l62 = 0;
     // forward_l159 = 0;
