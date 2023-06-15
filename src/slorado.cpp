@@ -39,7 +39,6 @@ SOFTWARE.
 
 #include "slorado.h"
 #include "misc.h"
-#include "globals.h"
 #include "error.h"
 
 #include "dorado/decode/GPUDecoder.h"
