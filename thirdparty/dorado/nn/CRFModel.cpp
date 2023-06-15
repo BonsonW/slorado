@@ -194,7 +194,7 @@ struct LinearCRFImpl : Module {
         }
         endTime = realtime();
         time_forward += getTimeDifference();
-        // forward_l159 += getTimeDifference();
+        forward_l159 += getTimeDifference();
         // if (ts != nullptr) {
         //     ts->time_forward += realtime();
         // }
@@ -566,7 +566,7 @@ struct LSTMStackImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
-        // forward_l510 += getTimeDifference();
+        forward_l510 += getTimeDifference();
 
         // Output is [N, T, C], non-contiguous
         return x;
@@ -589,7 +589,7 @@ struct ClampImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
-        // forward_l577 += getTimeDifference();
+        forward_l577 += getTimeDifference();
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -655,7 +655,7 @@ struct CRFModelImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
-        // forward_l642 += getTimeDifference();
+        forward_l642 += getTimeDifference();
         // Output is [N, T, C]
         return encoder->forward(x);
     }
