@@ -40,7 +40,6 @@ SOFTWARE.
 #include <memory>
 #include "dorado/nn/ModelRunner.h"
 #include "dorado/Chunk.h"
-#include "globals.h"
 
 #define SLORADO_VERSION "0.1.0"
 
