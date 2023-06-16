@@ -369,7 +369,7 @@ int basecaller_main(int argc, char* argv[]) {
     generateSplitBar(level2, level2_Names, 2);
     std::cout << "\nIn Model Runner" << std::endl;
     generateSplitBar(level3, level3_Names, 2);
-    std::cout << "\nIn Decode Runner" << std::endl;
+    std::cout << "\nIn Decode" << std::endl;
     generateSplitBar(level4, level4_Names, 2);
     std::cout << "\nIn Time consumption for forward() functions" << std::endl;
     generateSplitBar(level5, level5_Names, 6);
