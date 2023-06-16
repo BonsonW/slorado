@@ -396,8 +396,8 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
     std::string colors[] = {"\033[41m", "\033[45m", "\033[43m", "\033[44m", "\033[46m","\033[42m"};
 
     // std::string colorCode = "\033[" + std::to_string(41 + j) + "m"; // Set background color dynamically
-    long sortedVal[len];
-    std::string sortedValNames[len];
+    long sortedVal[size];
+    std::string sortedValNames[size];
 
     for (int i = 0; i < size; i++) {
         sortedVal[i] = values[i];
