@@ -166,8 +166,8 @@ void free_core(core_t* core,opt_t opt) {
 #endif
 
     slow5_close(core->sp);
-    free(core->runners);
-    free(core->runner_ts);
+    delete core->runners;
+    delete core->runner_ts;
     free(core);
 }
 
@@ -425,10 +425,10 @@ void free_db(db_t* db) {
     free(db->mem_records);
     free(db->mem_bytes);
     free(db->means);
-    free(db->chunks);
-    free(db->sequence);
-    free(db->qstring);
-    free(db->tensors);
+    delete db->chunks;
+    delete db->sequence;
+    delete db->qstring;
+    delete db->tensors;
     free(db);
 }
 
