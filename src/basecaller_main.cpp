@@ -334,7 +334,7 @@ int basecaller_main(int argc, char* argv[]) {
     long level2[] = { (long)core->ts.time_sync, runner_ts[0]->time_basecall + runner_ts[0]->time_decode + runner_ts[0]->time_accept};
     std::string level2_Names[] = {"Synchronisation time", "Model Runner time"};
 
-    long level3[] = {(long) runner_ts[0]->time_accept, (long)runner_ts[i]->time_decode};
+    long level3[] = {(long) runner_ts[0]->time_accept, (long)runner_ts[0]->time_decode};
     std::string level3_Names[] = {"Accept time", "Decode time"};
 
     long level4[] = {(long)runner_ts[0]->time_beam_search_emplace, (long)time_forward};
