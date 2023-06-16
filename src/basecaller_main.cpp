@@ -79,16 +79,16 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
-    fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
+    // fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\nadvanced options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
-    fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
+    // fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 #ifdef HAVE_ACC
-    fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
+    // fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
 #endif
 }
 

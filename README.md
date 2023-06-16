@@ -135,7 +135,6 @@ Currently, slorado does not implement automatic batch size selection based on av
 | -c INT            | chunk size                                            | 8000           |
 | -p INT            | overlap                                               | 150            |
 | -x DEVICE         | specify device (e.g., cpu, cuda:0, cuda:1,2: cuda:all)| cuda:0         |
-| -r INT            | number of runners                                     | 1              |
 | -h                | shows help message and exits                          | -              |
 | --verbose INT     | verbosity level                                       | 4              |
 | --version         | print version                                         |                |
