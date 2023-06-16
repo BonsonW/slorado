@@ -444,7 +444,7 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
     // Print the space bar
     std::cout << bar << std::endl;
 
-    std::cout << "\n" << std::endl;
+    // std::cout << "\n" << std::endl;
     // Print the value names with two spaces in the respective color in front
     for (int i = 0; i < len; ++i) {
         std::string colorCode = colors[i]; // Set background color dynamically
