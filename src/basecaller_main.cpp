@@ -391,27 +391,30 @@ int basecaller_main(int argc, char* argv[]) {
 
 void generateSplitBar(const long* values, const std::string* names, int size) {
     int barLength = 100; // Length of the bar
+    long sum = 0;
 
     std::string colors[] = {"\033[31m", "\033[35m", "\033[33m", "\033[34m", "\033[36m","\033[32m"};
+    long sortedVal[size];
+    std::string sortedValNames[size];
 
-    for (int i = 0; i < size - 1; i++) {
-        for (int j = 0; j < size - i - 1; j++) {
-            if (values[j] < values[j + 1]) {
-                long temp = arr[j];
-                values[j] = values[j + 1];
-                values[j + 1] = temp;
-
-                std::string tempName = names[j];
-                names[j] = names[j+1];
-                names[j+1] = tempName;
-            }
-        }
+    for (int i = 0; i < size; i++) {
+        sortedVal[i] = values[i];
+        sortedValNames[i] = names[i];
+        sum += values[i];
     }
 
-    // Calculate the sum of all values
-    long sum = 0;
-    for (int i = 0; i < size; ++i) {
-        sum += values[i];
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size - i - 1; j++) {
+            if (sortedVal[j] < sortedVal[j + 1]) {
+                long temp = sortedVal[j];
+                sortedVal[j] = sortedVal[j + 1];
+                sortedVal[j + 1] = temp;
+
+                std::string tempName = sortedValNames[j];
+                sortedValNames[j] = sortedValNames[j+1];
+                sortedValNames[j+1] = tempName;
+            }
+        }
     }
 
     std::string bar;
@@ -420,7 +423,7 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
     int currentPosition = 0;
     for (int i = 0; i < 6; ++i) {
 
-        int coloredLength = (values[i] * barLength) / sum; // Calculate length of colored portion
+        int coloredLength = (sortedVal[i] * barLength) / sum; // Calculate length of colored portion
         std::string colorCode = colors[i]; // Set background color dynamically
 
         // Append colored portion with the respective color
@@ -449,7 +452,7 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
         std::cout << "\033[0m";
 
         // Print the value name
-        std::cout << " : " << names[i] <<  std::endl;
+        std::cout << " : " << sortedValNames[i] <<  std::endl;
     }
     std::cout << "\n" << std::endl;
 }
