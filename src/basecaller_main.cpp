@@ -288,11 +288,7 @@ int basecaller_main(int argc, char* argv[]) {
     auto runner_ts = *core->runner_ts;
 
     ////Visualization////
-    long values[20] = {(long)core->ts.time_init_runners, (long)core->load_db_time, (long)core->process_db_time, (long)core->parse_time, (long)core->preproc_time, (long)core->basecall_time, (long)core->ts.time_sync, (long)core->postproc_time, (long)core->output_time};
 
-    std::string valueNames[20] = {"Model initialization time", "Data loading time", "Data processing time", "Parse time", "Preprocess time", "Basecall+decode time", "Synchronisation time", "Postprocess time", "Data output time:"};
-
-    int count = 9;
     for (size_t i = 0; i < runner_ts.size(); ++i) {
             fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f",__func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
@@ -328,6 +324,28 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n[%s] Data output time: %.3f sec : %.2f %\n", __func__,core->output_time,core->output_time*100/total_time);
     fprintf(stderr,"\n");
 
+
+    long level0[] = {(long)core->ts.time_init_runners, (long)core->load_db_time, (long)core->process_db_time};
+    std::string level0_Names[] = {"Model initialization time", "Data loading time", "Data processing time"};
+
+    long level1[] = {(long)core->parse_time, (long)core->preproc_time, (long)core->basecall_time};
+    std::string level1_Names[] = {"Parse time", "Preprocess time", "Basecall+decode time"};
+
+    long level2[] = { (long)core->ts.time_sync, runner_ts[0]->time_basecall + runner_ts[0]->time_decode + runner_ts[0]->time_accept};
+    std::string level2_Names[] = {"Synchronisation time", "Model Runner time"};
+
+    long level3[] = {(long) runner_ts[0]->time_accept, (long)runner_ts[i]->time_decode};
+    std::string level3_Names[] = {"Accept time", "Decode time"};
+
+    long level4[] = {(long)runner_ts[0]->time_beam_search_emplace, (long)time_forward};
+    std::string level4_Names[] = {"Beam search emplace time", "Forward function time"};
+    
+    
+    
+    //, , "Synchronisation time", "Postprocess time", "Data output time:"};
+
+     //,, (long)core->postproc_time, (long)core->output_time};
+
     std::cout << "\n" << std::endl;
     std::cout << "---------------------------------------- Time Distribution -----------------------------------------" << std::endl;
 
@@ -336,8 +354,13 @@ int basecaller_main(int argc, char* argv[]) {
 
 
 
-    generateSplitBar(values, valueNames, 12);
-
+    generateSplitBar(level0, level0_Names, 3);
+    generateSplitBar(level1, level1_Names, 3);
+    generateSplitBar(level2, level2_Names, 2);
+    generateSplitBar(level3, level3_Names, 2);
+    generateSplitBar(level4, level4_Names, 2);
+    // generateSplitBar(level5, level0_Names, 12);
+  
     //free the core data structure
     free_core(core,opt);
 
