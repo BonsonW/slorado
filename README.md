@@ -7,7 +7,7 @@ A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (cal
 
 ## Compilation and Running
 
-### Dependencies
+### 1. Dependencies
 
 ```
 sudo apt-get install zlib1g-dev   #install zlib development libraries
@@ -23,7 +23,7 @@ On Fedora/CentOS : sudo dnf/yum install zlib-devel
 On OS X : brew install zlib
 ```
 
-### Downloading Models
+### 2. Downloading Models
 
 Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.0.0, dna_r10.4.1_e8.2_400bps_hac@v4.0.0 and dna_r10.4.1_e8.2_400bps_sup@v4.0.0). We have tested slorado only on these models.
 
@@ -31,15 +31,15 @@ Download fast, high accuracy, and super accuracy simplex basecalling models (dna
 scripts/download-models.sh
 ```
 
-### Make
+### 3. Make
 
-### Option 1:
+### Building for x86_64 architceture 
 
-CUDA GPU version that uses ONT's closed-source koi library binaries (minimum requirement: CUDA 11.3). This is the fastest:
+<details><summary> **Option 1:** CUDA GPU version that uses ONT's closed-source koi library binaries (minimum requirement: CUDA 11.3). This is the fastest. </summary>
+
 ```
 scripts/install-torch12.sh
 make cuda=1 koi=1 -j
-./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
 If you do not have CUDA 11.3 or higher installed system wide, you can install CUDA 11.3 using following commands:
@@ -52,19 +52,18 @@ Then compile slorado by specifying the custom CUDA location to CUDA_ROOT variabl
 ```
 make cuda=1 koi=1 -j CUDA_ROOT=/local/path/cuda/
 ```
+</details>
 
-### Option 2:
-
-CUDA GPU version without close-source koi library (uses CPU decoder, thus considerably slower). CUDA 10.2 or higher is adequate for this:
+<details><summary> **Option 2:** CUDA GPU version without close-source koi library (uses CPU decoder, thus considerably slower). CUDA 10.2 or higher is adequate for this. </summary>
+    
 ```
 scripts/install-torch12.sh
 make cuda=1 -j
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
+</details>
 
-### Option 3:
-
-CPU-only version (horribly slow):
+<details><summary> **Option 3:** CPU-only version (horribly slow): </summary>
 
 ```
 scripts/install-torch12.sh
@@ -72,7 +71,11 @@ make -j
 ./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
+</details>
+
 ### Building for ARM64 Jetson-based devices
+
+<details><summary>Click to expand</summary>
 
 1. Install and activate python venv.
 
@@ -96,6 +99,7 @@ make -j
     cd slorado
     make -j cuda=1 jetson=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/pytorch_venv/lib64/python3.8/site-packages/torch/
     ```
+</details>
 
 ### Advanced Options
 
@@ -111,31 +115,36 @@ make -j
 
 - You can optionally enable zstd support for builtin slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
 
-## Basecaller Options
+### 4. Running, options and testing
 
-| Option:           | Decription:                                           |
-|-------------------|-------------------------------------------------------|
-| -t INT            | number of processing threads                          |
-| -K INT            | batch size (max number of reads loaded at once)       |
-| -C INT            | gpu batch size (max number of chunks loaded at once)  |
-| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    |
-| -o FILE           | output to file                                        |
-| -c INT            | chunk size                                            |
-| -p INT            | overlap                                               |
-| -x DEVICE         | specify device                                        |
-| -r INT            | number of runners                                     |
-| -h                | shows help message and exits                          |
-| --verbose INT     | verbosity level                                       |
-| --version         | print version                                         |
+```
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+```
 
-## Calculate Basecalling Accuracy
+Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. 
+Currently, slorado does not implement automatic batch size selection based on available memory. Thus, if you see an out of RAM error, reduce the batch size using -K or -B. If you see an out of GPU memory error, reduce the GPU batch size using -C option. All options supported by slorado are detailed below:
+
+
+| Option:           | Decription:                                           | Default Value: |
+|-------------------|-------------------------------------------------------|----------------|
+| -t INT            | number of processing threads.                         | 8              |
+| -K INT            | batch size (max number of reads loaded at once).      | 2000           |
+| -C INT            | gpu batch size (max number of chunks loaded at once)  | 800            |
+| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 20.0M          |
+| -o FILE           | output to file                                        | stdout         |
+| -c INT            | chunk size                                            | 8000           |
+| -p INT            | overlap                                               | 150            |
+| -x DEVICE         | specify device (e.g., cpu, cuda:0, cuda:1,2: cuda:all)| cuda:0         |
+| -r INT            | number of runners                                     | 1              |
+| -h                | shows help message and exits                          | -              |
+| --verbose INT     | verbosity level                                       | 4              |
+| --version         | print version                                         |                |
+
+A script to calculate Basecalling Accuracy is provided:
 ```
 set environment variable MINIMAP2 if minimap2 is not in PATH.
 scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ```
-
-## Running out of Memory
-Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. Both can be specified in the basecaller options provided.
 
 ## Acknowledgement
 
