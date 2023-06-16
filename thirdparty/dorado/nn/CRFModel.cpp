@@ -599,7 +599,7 @@ struct LSTMStackImpl : Module {
         // }
         endTime = realtime();
         time_forward += getTimeDifference();
-        forward_l5136 += getTimeDifference();
+        forward_l536 += getTimeDifference();
 
         // Output is [N, T, C], non-contiguous
         return x;

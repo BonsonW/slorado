@@ -299,7 +299,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n\n[%s]                 - Forward time 62: %.3f sec",__func__, forward_l62);
             fprintf(stderr, "\n[%s]                 - Forward time 159: %.3f sec",__func__, forward_l159);
             fprintf(stderr, "\n[%s]                 - Forward time 469: %.3f sec",__func__, forward_l469);
-            fprintf(stderr, "\n[%s]                 - Forward time 513: %.3f sec",__func__, forward_l5136);
+            fprintf(stderr, "\n[%s]                 - Forward time 513: %.3f sec",__func__, forward_l536);
             fprintf(stderr, "\n[%s]                 - Forward time 577: %.3f sec",__func__, forward_l577);
             fprintf(stderr, "\n[%s]                 - Forward time 642: %.3f sec",__func__, forward_l642);
 
@@ -339,7 +339,16 @@ int basecaller_main(int argc, char* argv[]) {
 
     long level4[] = {(long)runner_ts[0]->time_beam_search_emplace, (long)time_forward};
     std::string level4_Names[] = {"Beam search emplace time", "Forward function time"};
-    
+
+    //For different forward() functions    
+    long level5[] = {forward_l62, forward_l159,forward_l469, forward_l536, forward_l577, forward_l642};
+    std::string level5_Names[] = {"forward() in line 62", "forward() in line 159", "forward() in line 469", "forward() in line 536", "forward() in line 576", "forward() in line 642"};
+
+    long level6[] = {x_flipt, rnn1t, rnn2t, rnn3t, rnn4t, rnn5t};
+    std::string level6_Names[] = {"x.flip time", "rnn1 time", "rnn2 time", "rnn3 time", "rnn4 time", "rnn5 time"};
+
+    long level7[] = {rnn1tt1, rnn1th1, rnn1ty1, rnn1tflip};
+    std::string level7_Names[] = {"t1 in rnn1 time", "h1 in rnn1 time", "y1 in rnn1 time", "flip in rnn1 time"};
     
     
     //, , "Synchronisation time", "Postprocess time", "Data output time:"};
@@ -359,8 +368,20 @@ int basecaller_main(int argc, char* argv[]) {
     generateSplitBar(level2, level2_Names, 2);
     generateSplitBar(level3, level3_Names, 2);
     generateSplitBar(level4, level4_Names, 2);
-    // generateSplitBar(level5, level0_Names, 12);
+
+    std::cout << "\nThere are six forward() functions" << std::endl;
+    generateSplitBar(level5, level5_Names, 6);
+
+    std::cout << "\nConsider most time consuming forwad() function" << std::endl;
+    generateSplitBar(level6, level6_Names, 6);
+
+    std::cout << "\nMeasure time in forward()" << std::endl;
+    generateSplitBar(level6, level6_Names, 6);
   
+    std::cout << "\nConsider rnn1" << std::endl;
+    generateSplitBar(level7, level7_Names, 6);
+
+
     //free the core data structure
     free_core(core,opt);
 
