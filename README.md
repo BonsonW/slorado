@@ -5,7 +5,7 @@ Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dora
 Slorado is mainly for research and educational purposes and performance is currently not the key goal. Slorado will only support a minimal set of features and may not be up to date with Dorado.
 A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
 
-## Compilation and running
+## Compilation and Running
 
 ### Dependencies
 
@@ -72,7 +72,7 @@ make -j
 ./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
 
-### advanced options
+### Advanced Options
 
 - Custom libtorch path:
 ```
@@ -86,7 +86,7 @@ make cxx11_abi=1
 
 - You can optionally enable zstd support for builtin slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
 
-## Basecaller options
+## Basecaller Options
 
 | Option:           | Decription:                                           |
 |-------------------|-------------------------------------------------------|
@@ -103,13 +103,13 @@ make cxx11_abi=1
 | --verbose INT     | verbosity level                                       |
 | --version         | print version                                         |
 
-## Calculate basecalling accuracy
+## Calculate Basecalling Accuracy
 ```
 set environment variable MINIMAP2 if minimap2 is not in PATH.
 scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ```
 
-## Running out of memory
+## Running out of Memory
 Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. Both can be specified in the basecaller options provided.
 
 ## Acknowledgement
