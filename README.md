@@ -86,12 +86,31 @@ make cxx11_abi=1
 
 - You can optionally enable zstd support for builtin slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
 
+## Basecaller options
+
+| Option:           | Decription:                                           |
+|-------------------|-------------------------------------------------------|
+| -t INT            | number of processing threads                          |
+| -K INT            | batch size (max number of reads loaded at once)       |
+| -C INT            | gpu batch size (max number of chunks loaded at once)  |
+| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    |
+| -o FILE           | output to file                                        |
+| -c INT            | chunk size                                            |
+| -p INT            | overlap                                               |
+| -x DEVICE         | specify device                                        |
+| -r INT            | number of runners                                     |
+| -h                | shows help message and exits                          |
+| --verbose INT     | verbosity level                                       |
+| --version         | print version                                         |
 
 ## Calculate basecalling accuracy
 ```
 set environment variable MINIMAP2 if minimap2 is not in PATH.
 scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ```
+
+## Running out of memory
+Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. Both can be specified in the basecaller options provided.
 
 ## Acknowledgement
 
