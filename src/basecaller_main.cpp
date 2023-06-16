@@ -348,7 +348,7 @@ int basecaller_main(int argc, char* argv[]) {
     std::string level6_Names[] = {"x.flip time", "rnn1 time", "rnn2 time", "rnn3 time", "rnn4 time", "rnn5 time"};
 
     long level7[] = {rnn1tt1, rnn1th1, rnn1ty1, rnn1tflip};
-    std::string level7_Names[] = {"t1 in rnn1 time", "h1 in rnn1 time", "y1 in rnn1 time", "flip in rnn1 time"};
+    std::string level7_Names[] = {"'auto t1 = rnn1(x)' time", "'auto y1 = std::get<0>(t1)' time", "'auto h1 = std::get<1>(t1);' time", "'x = y1.flip(1)' time"};
     
     
     //, , "Synchronisation time", "Postprocess time", "Data output time:";
@@ -362,20 +362,20 @@ int basecaller_main(int argc, char* argv[]) {
 ////    long values[] = {(long)core->ts.time_init_runners, (long)core->load_db_time, (long)core->process_db_time, (long)core->parse_time, (long)core->preproc_time, (long)core->basecall_time, (long)core->ts.time_sync, (long)core->postproc_time, (long)core->output_time};
 
 
-
     generateSplitBar(level0, level0_Names, 3);
+    std::cout << "\nIn Data processing" << std::endl;
     generateSplitBar(level1, level1_Names, 3);
+    std::cout << "\nIn  Basecall" << std::endl;
     generateSplitBar(level2, level2_Names, 2);
+    std::cout << "\nIn Model Runner" << std::endl;
     generateSplitBar(level3, level3_Names, 2);
+    std::cout << "\nIn Decode Runner" << std::endl;
     generateSplitBar(level4, level4_Names, 2);
-
-    std::cout << "\nThere are six forward() functions" << std::endl;
+    std::cout << "\nIn Time consumption for forward() functions" << std::endl;
     generateSplitBar(level5, level5_Names, 6);
-
-    std::cout << "\nConsider most time consuming forwad() function" << std::endl;
+    std::cout << "\nIn most time consuming forwad() function" << std::endl;
     generateSplitBar(level6, level6_Names, 6);
-  
-    std::cout << "\nConsider rnn1" << std::endl;
+    std::cout << "\nIn rnn1" << std::endl;
     generateSplitBar(level7, level7_Names, 4);
 
 
