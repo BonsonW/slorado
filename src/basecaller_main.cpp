@@ -351,7 +351,7 @@ int basecaller_main(int argc, char* argv[]) {
     std::string level7_Names[] = {"t1 in rnn1 time", "h1 in rnn1 time", "y1 in rnn1 time", "flip in rnn1 time"};
     
     
-    //, , "Synchronisation time", "Postprocess time", "Data output time:"};
+    //, , "Synchronisation time", "Postprocess time", "Data output time:";
 
      //,, (long)core->postproc_time, (long)core->output_time};
 
@@ -374,9 +374,6 @@ int basecaller_main(int argc, char* argv[]) {
 
     std::cout << "\nConsider most time consuming forwad() function" << std::endl;
     generateSplitBar(level6, level6_Names, 6);
-
-    std::cout << "\nMeasure time in forward()" << std::endl;
-    generateSplitBar(level6, level6_Names, 6);
   
     std::cout << "\nConsider rnn1" << std::endl;
     generateSplitBar(level7, level7_Names, 6);
@@ -395,6 +392,22 @@ int basecaller_main(int argc, char* argv[]) {
 void generateSplitBar(const long* values, const std::string* names, int size) {
     int barLength = 100; // Length of the bar
 
+    std::string colors[] = {"\033[31m", "\033[35m", "\033[33m", "\033[34m", "\033[36m","\033[32m"};
+
+    for (int i = 0; i < size - 1; i++) {
+        for (int j = 0; j < size - i - 1; j++) {
+            if (values[j] < values[j + 1]) {
+                long temp = arr[j];
+                values[j] = values[j + 1];
+                values[j + 1] = temp;
+
+                std::string tempName = names[j];
+                names[j] = names[j+1];
+                names[j+1] = tempName;
+            }
+        }
+    }
+
     // Calculate the sum of all values
     long sum = 0;
     for (int i = 0; i < size; ++i) {
@@ -405,18 +418,10 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
 
     // Append colored portions represented by colored spaces
     int currentPosition = 0;
-    for (int i = 0; i < size; ++i) {
-
-        int j;
-        if(i > 6){
-                j = i - 7;
-        }
-        else{
-                j = i;
-        }
+    for (int i = 0; i < 6; ++i) {
 
         int coloredLength = (values[i] * barLength) / sum; // Calculate length of colored portion
-        std::string colorCode = "\033[" + std::to_string(41 + j) + "m"; // Set background color dynamically
+        std::string colorCode = colors[i]; // Set background color dynamically
 
         // Append colored portion with the respective color
         bar += colorCode;
@@ -434,15 +439,8 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
 
     std::cout << "\n" << std::endl;
     // Print the value names with two spaces in the respective color in front
-    for (int i = 0; i < size; ++i) {
-        int j;
-        if(i > 6){
-                j = i - 7;
-        }
-        else{
-                j = i;
-        }
-        std::string colorCode = "\033[" + std::to_string(41 + j) + "m"; // Set background color dynamically
+    for (int i = 0; i < 6; ++i) {
+        std::string colorCode = colors[i]; // Set background color dynamically
 
         // Print two spaces with the color code
         std::cout << colorCode << "  ";
