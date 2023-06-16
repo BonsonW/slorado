@@ -396,17 +396,19 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
     std::string colors[] = {"\033[41m", "\033[45m", "\033[43m", "\033[44m", "\033[46m","\033[42m"};
 
     // std::string colorCode = "\033[" + std::to_string(41 + j) + "m"; // Set background color dynamically
-    long sortedVal[20];
-    std::string sortedValNames[20];
+    long sortedVal[len];
+    std::string sortedValNames[len];
 
     for (int i = 0; i < size; i++) {
         sortedVal[i] = values[i];
         sortedValNames[i] = names[i];
         sum += values[i];
     }
+    int len = 0;
+    (size > 6)?  len = 6: len = size;
 
-    for (int i = 0; i < size; i++) {
-        for (int j = 0; j < size - i - 1; j++) {
+    for (int i = 0; i < len; i++) {
+        for (int j = 0; j < len - i - 1; j++) {
             if (sortedVal[j] < sortedVal[j + 1]) {
                 long temp = sortedVal[j];
                 sortedVal[j] = sortedVal[j + 1];
@@ -423,7 +425,7 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
 
     // Append colored portions represented by colored spaces
     int currentPosition = 0;
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < len; ++i) {
 
         int coloredLength = (sortedVal[i] * barLength) / sum; // Calculate length of colored portion
         std::string colorCode = colors[i]; // Set background color dynamically
@@ -444,7 +446,7 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
 
     std::cout << "\n" << std::endl;
     // Print the value names with two spaces in the respective color in front
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < len; ++i) {
         std::string colorCode = colors[i]; // Set background color dynamically
 
         // Print two spaces with the color code
