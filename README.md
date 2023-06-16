@@ -35,7 +35,7 @@ scripts/download-models.sh
 
 ### Building for x86_64 architceture 
 
-<details><summary> **Option 1:** CUDA GPU version that uses ONT's closed-source koi library binaries (minimum requirement: CUDA 11.3). This is the fastest. </summary>
+<details><summary> <b>Option 1:</b>  CUDA GPU version that uses ONT's closed-source koi library binaries (CUDA >=11.3 needed). This is the fastest: </summary>
 
 ```
 scripts/install-torch12.sh
@@ -54,7 +54,7 @@ make cuda=1 koi=1 -j CUDA_ROOT=/local/path/cuda/
 ```
 </details>
 
-<details><summary> **Option 2:** CUDA GPU version without close-source koi library (uses CPU decoder, thus considerably slower). CUDA 10.2 or higher is adequate for this. </summary>
+<details><summary> <b>Option 2:</b> CUDA GPU version without close-source koi library (CUDA >=10.2 is adequate). Uses CPU decoder, thus considerably slow: </summary>
     
 ```
 scripts/install-torch12.sh
@@ -63,7 +63,7 @@ make cuda=1 -j
 ```
 </details>
 
-<details><summary> **Option 3:** CPU-only version (horribly slow): </summary>
+<details><summary> <b>Option 3:</b>  CPU-only version (horribly slow): </summary>
 
 ```
 scripts/install-torch12.sh
