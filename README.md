@@ -5,7 +5,7 @@ Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dora
 Slorado is mainly for research and educational purposes and performance is currently not the key goal. Slorado will only support a minimal set of features and may not be up to date with Dorado.
 A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
 
-## Compilation and running
+## Compilation and Running
 
 ### Dependencies
 
@@ -97,7 +97,7 @@ make -j
     make -j cuda=1 jetson=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/pytorch_venv/lib64/python3.8/site-packages/torch/
     ```
 
-### advanced options
+### Advanced Options
 
 - Custom libtorch path:
     ```
@@ -111,12 +111,31 @@ make -j
 
 - You can optionally enable zstd support for builtin slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
 
+## Basecaller Options
 
-## Calculate basecalling accuracy
+| Option:           | Decription:                                           |
+|-------------------|-------------------------------------------------------|
+| -t INT            | number of processing threads                          |
+| -K INT            | batch size (max number of reads loaded at once)       |
+| -C INT            | gpu batch size (max number of chunks loaded at once)  |
+| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    |
+| -o FILE           | output to file                                        |
+| -c INT            | chunk size                                            |
+| -p INT            | overlap                                               |
+| -x DEVICE         | specify device                                        |
+| -r INT            | number of runners                                     |
+| -h                | shows help message and exits                          |
+| --verbose INT     | verbosity level                                       |
+| --version         | print version                                         |
+
+## Calculate Basecalling Accuracy
 ```
 set environment variable MINIMAP2 if minimap2 is not in PATH.
 scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ```
+
+## Running out of Memory
+Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. Both can be specified in the basecaller options provided.
 
 ## Acknowledgement
 

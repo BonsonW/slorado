@@ -34,20 +34,28 @@ download_model () {
 }
 
 download_minimap2 () {
-    wget https://github.com/lh3/minimap2/releases/download/v2.24/minimap2-2.24_x64-linux.tar.bz2
-    tar xf minimap2-2.24_x64-linux.tar.bz2
-    mv minimap2-2.24_x64-linux minimap2
-    rm minimap2-2.24_x64-linux.tar.bz2
-}
 
-download_minimap2_arm () {
-    wget https://github.com/lh3/minimap2/releases/download/v2.24/minimap2-2.24.tar.bz2
-    tar xf minimap2-2.24.tar.bz2
-    mv minimap2-2.24 minimap2
-    rm minimap2-2.24.tar.bz2
-    cd minimap2
-    make arm_neon=1 aarch64=1
-    cd ..
+    uname -m || die "Could not determine the architecture. "
+    ARCH=$(uname -m)
+
+    if [ ${ARCH} = "x86_64" ];
+    then
+        wget https://github.com/lh3/minimap2/releases/download/v2.24/minimap2-2.24_x64-linux.tar.bz2
+        tar xf minimap2-2.24_x64-linux.tar.bz2
+        mv minimap2-2.24_x64-linux minimap2
+        rm minimap2-2.24_x64-linux.tar.bz2
+    elif [ ${ARCH} = "aarch64" ];
+    then
+        wget https://github.com/lh3/minimap2/releases/download/v2.24/minimap2-2.24.tar.bz2
+        tar xf minimap2-2.24.tar.bz2
+        mv minimap2-2.24 minimap2
+        rm minimap2-2.24.tar.bz2
+        cd minimap2
+        make arm_neon=1 aarch64=1
+        cd ..
+    else
+        die "Unsupported architecture"
+    fi
 }
 
 test -d models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 || download_model
