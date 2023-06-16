@@ -70,6 +70,8 @@ check_accuracy () {
 test -d models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 || download_model
 test -e minimap2/minimap2 || download_minimap2
 
+make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.3
+
 # echo "Test 1"
 ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 --device "$DEVICE" > test/tmp.fastq  || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont test/chr4_90700000_90900000.fa test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"

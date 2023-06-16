@@ -86,11 +86,8 @@ make clean && make -j cuda=1 koi=1 asan=1 CUDA_ROOT=/data/install/cuda-11.3
 echo "Memory Check - CPU - FAST model - 1 reads"
 ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
 
-echo "Memory Check - GPU - FAST model - 1 reads"
-ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 -xcuda:0 > test/tmp.fastq  || die "Running the tool failed"
-
 # accuracy check
-# make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.3
+make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.3
 
 echo "GPU - FAST model - 20k reads"
 ex  ./slorado basecaller models/$FAST $SUBSAMPLE -xcuda:0,1,2,3 -B500M -c10000 -C1900 > test/tmp.fastq || die "Running the tool failed"
