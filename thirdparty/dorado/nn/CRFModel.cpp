@@ -625,7 +625,6 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
         toml_table_t *qscore = toml_table_in(config_toml, "qscore");
         config.qbias = (float)toml_double_in(qscore, "bias").u.d;
         config.qscale = (float)toml_double_in(qscore, "scale").u.d;
-        free(qscore);
     } else {
         // no qscore calibration found
     }
@@ -652,7 +651,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             toml_table_t *segment = toml_table_at(sublayers, i);
             if (!segment) break;
 
-            char *type = toml_string_in(segment, "type").u.s; // might need to free the char*
+            char *type = toml_string_in(segment, "type").u.s;
             if (strcmp(type, "convolution") == 0) {
                 // Overall stride is the product of all conv layers' strides.
                 config.stride *= toml_int_in(segment, "stride").u.i;
@@ -674,10 +673,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             }
 
             free(type);
-            free(segment);
         }
-
-        free(sublayers);
 
         config.conv = 16;
         config.bias = config.insize > 128;
@@ -701,10 +697,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     // CUDA and CPU paths do not output explicit stay scores from the NN.
     config.outsize = pow(4, config.state_len) * 4;
 
-    free(global_norm);
-    free(encoder);
-    free(input);
-    free(config_toml);
+    toml_free(config_toml);
 
     return config;
 }

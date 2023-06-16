@@ -21,11 +21,7 @@ else
 fi
 
 ex() {
-    if [ $mem -eq 1 ]; then
-        valgrind --leak-check=full --error-exitcode=1 "$@"
-    else
-        "$@"
-    fi
+    "$@"
 }
 
 check_accuracy () {
@@ -84,15 +80,19 @@ test -d models/$SUP || download_model $SUP
 # download minimap2
 test -e minimap2/minimap2 || download_minimap2
 
-# one read
-# echo "CPU FAST model - 1 read"
-# ex  ./slorado basecaller models/$FAST test/oneread_r10.blow5 -xcpu > test/tmp.fastq || die "Running the tool failed"
-# minimap2/minimap2 -cx map-ont test/chr4_90700000_90900000.fa test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
-# awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed"
-# echo ""
-# echo "********************************************************************"
+# memory check
+make clean && make -j cuda=1 koi=1 asan=1 CUDA_ROOT=/data/install/cuda-11.3
 
-echo "GPU FAST model - 20k reads"
+echo "Memory Check - CPU - FAST model - 1 reads"
+ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
+
+echo "Memory Check - GPU - FAST model - 1 reads"
+ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 -xcuda:0 > test/tmp.fastq  || die "Running the tool failed"
+
+# accuracy check
+# make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.3
+
+echo "GPU - FAST model - 20k reads"
 ex  ./slorado basecaller models/$FAST $SUBSAMPLE -xcuda:0,1,2,3 -B500M -c10000 -C1900 > test/tmp.fastq || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1)
@@ -100,7 +100,7 @@ check_accuracy $FAST $MEDIAN
 echo ""
 echo "********************************************************************"
 
-echo "GPU HAC model - 20k reads"
+echo "GPU - HAC model - 20k reads"
 ex  ./slorado basecaller models/$HAC $SUBSAMPLE -xcuda:0,1,2,3 -B500M -c10000 -C832 > test/tmp.fastq || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")
@@ -108,7 +108,7 @@ check_accuracy $HAC $MEDIAN
 echo ""
 echo "********************************************************************"
 
-echo "GPU SUP model - 20k reads"
+echo "GPU - SUP model - 20k reads"
 ex  ./slorado basecaller models/$SUP $SUBSAMPLE -xcuda:0,1,2,3 -B500M -c10000 -C192 > test/tmp.fastq || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")

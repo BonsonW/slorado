@@ -58,14 +58,21 @@ download_minimap2 () {
     fi
 }
 
+check_accuracy () {
+    if (( $(echo "$1 >= 0.8" | bc -l) ));
+    then
+        return 0
+    fi
+
+    die "Failed accuracy test with value of $2"
+}
+
 test -d models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 || download_model
 test -e minimap2/minimap2 || download_minimap2
 
 # echo "Test 1"
 ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 --device "$DEVICE" > test/tmp.fastq  || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont test/chr4_90700000_90900000.fa test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
-awk '{print $10/$11}' test/tmp.paf | datamash mean 1 sstdev 1 q1 1 median 1 q3 1 || die "datamash failed"
-# diff -q test/example.exp test/tmp.txt || die "diff failed"
-
+check_accuracy $(awk '{print $10/$11}' test/tmp.paf | datamash median 1)
 
 echo "Tests passed"

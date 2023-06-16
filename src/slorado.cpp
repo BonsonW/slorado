@@ -165,6 +165,10 @@ void free_core(core_t* core,opt_t opt) {
     }
 #endif
 
+    for (size_t i = 0; i < core->runner_ts->size(); ++i) {
+        free((*core->runner_ts)[i]);
+    }
+
     slow5_close(core->sp);
     delete core->runners;
     delete core->runner_ts;
@@ -419,7 +423,7 @@ void free_db(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
         slow5_rec_free(db->slow5_rec[i]);
-        for (Chunk *chunk: (*db->chunks)[i]) free(chunk);
+        for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
     }
     free(db->slow5_rec);
     free(db->mem_records);
