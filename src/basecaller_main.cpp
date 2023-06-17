@@ -296,24 +296,24 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
             fprintf(stderr, "\n[%s]                 - Forward time: %.3f sec",__func__, time_forward);
 
-            fprintf(stderr, "\n\n[%s]                 - Forward time line 62: %.3f sec",__func__, forward_l62);
-            fprintf(stderr, "\n[%s]                 - Forward time line 159: %.3f sec",__func__, forward_l159);
-            fprintf(stderr, "\n[%s]                 - Forward time line 469: %.3f sec",__func__, forward_l469);
-            fprintf(stderr, "\n[%s]                 - Forward time line 513: %.3f sec",__func__, forward_l536);
-            fprintf(stderr, "\n[%s]                 - Forward time line 577: %.3f sec",__func__, forward_l577);
-            fprintf(stderr, "\n[%s]                 - Forward time line 642: %.3f sec",__func__, forward_l642);
+            fprintf(stderr, "\n\n[%s]                   - Forward in ConvolutionImpl time: %.3f sec",__func__, forward_l62);
+            fprintf(stderr, "\n[%s]                     - Forward in LinearCRFImpl time: %.3f sec",__func__, forward_l159);
+            fprintf(stderr, "\n[%s]                     - Forward in CudaLSTMStackImpl time: %.3f sec",__func__, forward_l469);
+            fprintf(stderr, "\n[%s]                     - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
+            fprintf(stderr, "\n[%s]                     - Forward in ClampImpl time: %.3f sec",__func__, forward_l577);
+            fprintf(stderr, "\n[%s]                     - Forward in CRFModelImpl time: %.3f sec",__func__, forward_l642);
 
-    }       fprintf(stderr, "\n\n[%s]                 - x_flip time: %.3f sec",__func__, x_flipt);
-            fprintf(stderr, "\n[%s]                 - rnn1 time: %.3f sec",__func__, rnn1t);
-            fprintf(stderr, "\n[%s]                 - rnn2 time: %.3f sec",__func__, rnn2t);
-            fprintf(stderr, "\n[%s]                 - rnn3 time: %.3f sec",__func__, rnn3t);
-            fprintf(stderr, "\n[%s]                 - rnn4 time: %.3f sec",__func__, rnn4t);
-            fprintf(stderr, "\n[%s]                 - rnn5 time: %.3f sec",__func__, rnn5t);
+    }       fprintf(stderr, "\n\n[%s]                       - x_flip time: %.3f sec",__func__, x_flipt);
+            fprintf(stderr, "\n[%s]                         - rnn1 time: %.3f sec",__func__, rnn1t);
+            fprintf(stderr, "\n[%s]                         - rnn2 time: %.3f sec",__func__, rnn2t);
+            fprintf(stderr, "\n[%s]                         - rnn3 time: %.3f sec",__func__, rnn3t);
+            fprintf(stderr, "\n[%s]                         - rnn4 time: %.3f sec",__func__, rnn4t);
+            fprintf(stderr, "\n[%s]                         - rnn5 time: %.3f sec",__func__, rnn5t);
 
-            fprintf(stderr, "\n\n[%s]                 - rnn1 t1 time: %.3f sec",__func__, rnn1tt1);
-            fprintf(stderr, "\n[%s]                 - rnn1 h1 time: %.3f sec",__func__, rnn1th1);
-            fprintf(stderr, "\n[%s]                 - rnn1 y1 time: %.3f sec",__func__, rnn1ty1);
-            fprintf(stderr, "\n[%s]                 - rnn1 flip time: %.3f sec",__func__, rnn1tflip);
+            fprintf(stderr, "\n\n[%s]                           - 'auto t1 = rnn1(x)' time: %.3f sec",__func__, rnn1tt1);
+            fprintf(stderr, "\n[%s]                             - 'auto h1 = std::get<1>(t1)' time: %.3f sec",__func__, rnn1th1);
+            fprintf(stderr, "\n[%s]                             - 'auto y1 = std::get<0>(t1)' time: %.3f sec",__func__, rnn1ty1);
+            fprintf(stderr, "\n[%s]                             - 'x = y1.flip(1)' time: %.3f sec",__func__, rnn1tflip);
 
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
@@ -342,13 +342,13 @@ int basecaller_main(int argc, char* argv[]) {
 
     //For different forward() functions    
     long level5[] = {forward_l62, forward_l159,forward_l469, forward_l536, forward_l577, forward_l642};
-    std::string level5_Names[] = {"forward() in line 62", "forward() in line 159", "forward() in line 469", "forward() in line 536", "forward() in line 576", "forward() in line 642"};
+    std::string level5_Names[] = {"forward() in ConvolutionImpl", "forward() in LinearCRFImpl", "forward() in CudaLSTMStackImpl", "forward() in LSTMStackImpl", "forward() in ClampImpl", "forward() in CRFModelImpl"};
 
     long level6[] = {x_flipt, rnn1t, rnn2t, rnn3t, rnn4t, rnn5t};
     std::string level6_Names[] = {"x.flip time", "rnn1 time", "rnn2 time", "rnn3 time", "rnn4 time", "rnn5 time"};
 
     long level7[] = {rnn1tt1, rnn1th1, rnn1ty1, rnn1tflip};
-    std::string level7_Names[] = {"'auto t1 = rnn1(x)' time", "'auto y1 = std::get<0>(t1)' time", "'auto h1 = std::get<1>(t1);' time", "'x = y1.flip(1)' time"};
+    std::string level7_Names[] = {"'auto t1 = rnn1(x)' time", "'auto y1 = std::get<0>(t1)' time", "'auto h1 = std::get<1>(t1)' time", "'x = y1.flip(1)' time"};
     
     
     //, , "Synchronisation time", "Postprocess time", "Data output time:";
@@ -458,6 +458,6 @@ void generateSplitBar(const long* values, const std::string* names, int size) {
         // Print the value name
         std::cout << " : " << sortedValNames[i] <<  std::endl;
     }
-    std::cout << "\n\n" << std::endl;
+    std::cout << "\n" << std::endl;
 }
 
