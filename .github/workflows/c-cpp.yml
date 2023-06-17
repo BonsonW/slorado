@@ -31,7 +31,7 @@ jobs:
     - name: torch
       run: scripts/install-torch12.sh
     - name: build cuda=1
-      run: make cuda=1 -j4
+      run: make cuda=1 -j2
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-20.04
@@ -47,7 +47,7 @@ jobs:
     - name: torch
       run: scripts/install-torch12.sh
     - name: build
-      run: make -j4
+      run: make -j2
     - name: test
       run: make test
   ubuntu_20:
@@ -62,7 +62,7 @@ jobs:
     - name: torch
       run: scripts/install-torch12.sh
     - name: build
-      run: make -j8
+      run: make -j2
     - name: test
       run: make test
   ubuntu_20_koi:
@@ -90,4 +90,4 @@ jobs:
     - name: torch
       run: scripts/install-torch12.sh
     - name: build koi=1 cuda=1
-      run: make -j4 koi=1 cuda=1
+      run: make -j2 koi=1 cuda=1
