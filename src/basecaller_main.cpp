@@ -293,7 +293,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f",__func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
-            if(isCUDA){
+            if(!isCUDA){
                 fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
                 fprintf(stderr, "\n[%s]                 - Forward time: %.3f sec",__func__, time_forward);
 
@@ -315,7 +315,7 @@ int basecaller_main(int argc, char* argv[]) {
             }
         
     }       
-            if(isCUDA){
+            if(!isCUDA){
                 fprintf(stderr, "\n\n[%s]                         - x_flip time: %.3f sec",__func__, x_flipt);
                 fprintf(stderr, "\n[%s]                         - rnn1 time: %.3f sec",__func__, rnn1t);
                 fprintf(stderr, "\n[%s]                         - rnn2 time: %.3f sec",__func__, rnn2t);
@@ -341,7 +341,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n[%s] Data output time: %.3f sec : %.2f %\n", __func__,core->output_time,core->output_time*100/total_time);
     fprintf(stderr,"\n");
 
-    if (isCUDA){
+    if (!isCUDA){
     long level0[] = {(long)core->ts.time_init_runners, (long)core->load_db_time, (long)core->process_db_time};
     std::string level0_Names[] = {"Model initialization time", "Data loading time", "Data processing time"};
 
