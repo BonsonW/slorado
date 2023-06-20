@@ -293,27 +293,44 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f",__func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
-            fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
-            fprintf(stderr, "\n[%s]                 - Forward time: %.3f sec",__func__, time_forward);
+            if(isCUDA){
+                fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
+                fprintf(stderr, "\n[%s]                 - Forward time: %.3f sec",__func__, time_forward);
 
-            fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImpl time: %.3f sec",__func__, forward_l62);
-            fprintf(stderr, "\n[%s]                     - Forward in LinearCRFImpl time: %.3f sec",__func__, forward_l159);
-            fprintf(stderr, "\n[%s]                     - Forward in CudaLSTMStackImpl time: %.3f sec",__func__, forward_l469);
-            fprintf(stderr, "\n[%s]                     - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
-            fprintf(stderr, "\n[%s]                     - Forward in ClampImpl time: %.3f sec",__func__, forward_l577);
-            fprintf(stderr, "\n[%s]                     - Forward in CRFModelImpl time: %.3f sec",__func__, forward_l642);
+                fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImpl time: %.3f sec",__func__, forward_l62);
+                fprintf(stderr, "\n[%s]                     - Forward in LinearCRFImpl time: %.3f sec",__func__, forward_l159);
+                fprintf(stderr, "\n[%s]                     - Forward in CudaLSTMStackImpl time: %.3f sec",__func__, forward_l469);
+                fprintf(stderr, "\n[%s]                     - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
+                fprintf(stderr, "\n[%s]                     - Forward in ClampImpl time: %.3f sec",__func__, forward_l577);
+                fprintf(stderr, "\n[%s]                     - Forward in CRFModelImpl time: %.3f sec",__func__, forward_l642);
+            }
+            else{
+                fprintf(stderr, "\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
+                fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
+                fprintf(stderr, "\n[%s]                 - NNTaskT time: %.3f sec",__func__, NNTaskT);
+                fprintf(stderr, "\n[%s]                 - call_chunks time: %.3f sec",__func__, call_chunksT);
+                fprintf(stderr, "\n[%s]                 - cuda_thread_fn time: %.3f sec",__func__, cuda_thread_fnT);
+                fprintf(stderr, "\n[%s]                 - SubCudaCallerT time: %.3f sec",__func__, SubCudaCallerT);
 
-    }       fprintf(stderr, "\n\n[%s]                         - x_flip time: %.3f sec",__func__, x_flipt);
-            fprintf(stderr, "\n[%s]                         - rnn1 time: %.3f sec",__func__, rnn1t);
-            fprintf(stderr, "\n[%s]                         - rnn2 time: %.3f sec",__func__, rnn2t);
-            fprintf(stderr, "\n[%s]                         - rnn3 time: %.3f sec",__func__, rnn3t);
-            fprintf(stderr, "\n[%s]                         - rnn4 time: %.3f sec",__func__, rnn4t);
-            fprintf(stderr, "\n[%s]                         - rnn5 time: %.3f sec",__func__, rnn5t);
+            }
+        
+    }       
+            if(isCUDA){
+                fprintf(stderr, "\n\n[%s]                         - x_flip time: %.3f sec",__func__, x_flipt);
+                fprintf(stderr, "\n[%s]                         - rnn1 time: %.3f sec",__func__, rnn1t);
+                fprintf(stderr, "\n[%s]                         - rnn2 time: %.3f sec",__func__, rnn2t);
+                fprintf(stderr, "\n[%s]                         - rnn3 time: %.3f sec",__func__, rnn3t);
+                fprintf(stderr, "\n[%s]                         - rnn4 time: %.3f sec",__func__, rnn4t);
+                fprintf(stderr, "\n[%s]                         - rnn5 time: %.3f sec",__func__, rnn5t);
 
-            fprintf(stderr, "\n\n[%s]                             - 'auto t1 = rnn1(x)' time: %.3f sec",__func__, rnn1tt1);
-            fprintf(stderr, "\n[%s]                             - 'auto h1 = std::get<1>(t1)' time: %.3f sec",__func__, rnn1th1);
-            fprintf(stderr, "\n[%s]                             - 'auto y1 = std::get<0>(t1)' time: %.3f sec",__func__, rnn1ty1);
-            fprintf(stderr, "\n[%s]                             - 'x = y1.flip(1)' time: %.3f sec",__func__, rnn1tflip);
+                fprintf(stderr, "\n\n[%s]                             - 'auto t1 = rnn1(x)' time: %.3f sec",__func__, rnn1tt1);
+                fprintf(stderr, "\n[%s]                             - 'auto h1 = std::get<1>(t1)' time: %.3f sec",__func__, rnn1th1);
+                fprintf(stderr, "\n[%s]                             - 'auto y1 = std::get<0>(t1)' time: %.3f sec",__func__, rnn1ty1);
+                fprintf(stderr, "\n[%s]                             - 'x = y1.flip(1)' time: %.3f sec",__func__, rnn1tflip);
+            }
+            else{
+
+            }
 
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}

@@ -1,6 +1,8 @@
 #include "globals.h"
 #include "misc.h"
 
+bool isCUDA = false;
+
 double startTime;
 double endTime;
 
@@ -29,6 +31,14 @@ double rnn1tt1;
 double rnn1th1;
 double rnn1ty1;
 double rnn1tflip;
+
+//isCUDA
+double CudaCallerT;
+double NCudaCallerT;
+double NNTaskT;
+double call_chunksT;
+double cuda_thread_fnT;
+double SubCudaCallerT;
 
 // Function to measure time difference in seconds
 double getTimeDifference() {

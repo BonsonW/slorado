@@ -5,6 +5,8 @@
 #include <cstddef>
 
 // Declaration of global variables
+extern bool isCUDA;
+
 extern double startTime;
 extern double endTime;
 
@@ -33,6 +35,17 @@ extern double rnn1tt1;
 extern double rnn1th1;
 extern double rnn1ty1;
 extern double rnn1tflip;
+
+//isCUDA
+extern double CudaCallerT;
+extern double NCudaCallerT;
+extern double NNTaskT;
+extern double call_chunksT;
+extern double cuda_thread_fnT;
+extern double SubCudaCallerT;
+
+
+
 
 // Function to measure time difference
 double getTimeDifference();
