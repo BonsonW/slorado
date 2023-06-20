@@ -341,7 +341,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n[%s] Data output time: %.3f sec : %.2f %\n", __func__,core->output_time,core->output_time*100/total_time);
     fprintf(stderr,"\n");
 
-
+    if (isCUDA){
     long level0[] = {(long)core->ts.time_init_runners, (long)core->load_db_time, (long)core->process_db_time};
     std::string level0_Names[] = {"Model initialization time", "Data loading time", "Data processing time"};
 
@@ -395,7 +395,7 @@ int basecaller_main(int argc, char* argv[]) {
     std::cout << "\nIn rnn1" << std::endl;
     generateSplitBar(level7, level7_Names, 4);
 
-
+    }
     //free the core data structure
     free_core(core,opt);
 

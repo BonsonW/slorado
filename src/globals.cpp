@@ -1,7 +1,7 @@
 #include "globals.h"
 #include "misc.h"
 
-bool isCUDA = false;
+bool isCUDA = true;
 
 double startTime;
 double endTime;
