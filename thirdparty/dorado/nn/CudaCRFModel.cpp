@@ -13,14 +13,13 @@
 
 using namespace std::chrono_literals;
 
-isCUDA = true;
-
 class CudaCaller {
 public:
     CudaCaller(const std::string &model_path,
                int chunk_size,
                int batch_size,
                const std::string &device) {
+        isCUDA = true;
         startTime = realtime();
         const auto model_config = load_crf_model_config(model_path);
         
@@ -52,7 +51,7 @@ public:
     }
 
     struct NNTask {
-        startTime = realtime();
+        // startTime = realtime();
         NNTask(torch::Tensor input_, int num_chunks_) : input(input_), num_chunks(num_chunks_) {}
         torch::Tensor input;
         std::mutex mut;
@@ -60,8 +59,8 @@ public:
         torch::Tensor out;
         bool done{false};
         int num_chunks;
-        endTime = realtime();
-        NNTaskT += getTimeDifference();
+        // endTime = realtime();
+        // NNTaskT += getTimeDifference();
     };
 
     std::vector<DecodedChunk> call_chunks(torch::Tensor &input,
@@ -125,7 +124,7 @@ public:
         cuda_thread_fnT += getTimeDifference();
     }
 
-    startTime = realtime();
+    // startTime = realtime();
     std::string m_device;
     torch::TensorOptions m_options;
     std::unique_ptr<GPUDecoder> m_decoder;
@@ -138,8 +137,8 @@ public:
     std::condition_variable m_input_cv;
     std::unique_ptr<std::thread> m_cuda_thread;
     int m_num_input_features;
-    endTime = realtime();
-    SubCudaCallerT += getTimeDifference();
+    // endTime = realtime();
+    // SubCudaCallerT += getTimeDifference();
 };
 
 std::shared_ptr<CudaCaller> create_cuda_caller(const std::string &model_path,
