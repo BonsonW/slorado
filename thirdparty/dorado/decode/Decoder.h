@@ -1,5 +1,5 @@
 #pragma once
-#include "../../../src/timestamps.h"
+
 #include <torch/torch.h>
 
 #include <string>
@@ -26,6 +26,5 @@ public:
     virtual std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
                                                   int num_chunks,
                                                   const DecoderOptions& options,
-                                                  std::string& device,
-                                                  timestamps_t* ts) = 0;
+                                                  std::string& device) = 0;
 };
