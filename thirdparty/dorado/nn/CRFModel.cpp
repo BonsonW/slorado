@@ -4,6 +4,7 @@
 
 
 #include "../../../src/globals.h"
+#include "../../../src/misc.h"
 #include "toml.h"
 #include "CRFModel.h"
 #include "error.h"
