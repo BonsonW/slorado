@@ -361,26 +361,26 @@ void process_db(core_t* core,db_t* db){
     work_db(core,db,parse_single);
     double b = realtime();
     core->parse_time += (b-a);
-    LOG_DEBUG("%s","Parsed reads");
+    LOG_DEBUG("%s","Parsed reads");  
 
     a = realtime();
     work_db(core,db,preprocess_signal);
     b = realtime();
     core->preproc_time += (b-a);
     LOG_DEBUG("%s","Preprocessed reads");
-
+    
     a = realtime();
     basecall_db(core,db);
     b = realtime();
     core->basecall_time += (b-a);
     LOG_DEBUG("%s","Basecalled reads");
-
+    
     a = realtime();
     work_db(core,db,postprocess_signal);
     b = realtime();
     core->postproc_time += (b-a);
     LOG_DEBUG("%s","Postprocessed reads");
-
+    
     double proc_end = realtime();
     core->process_db_time += (proc_end-proc_start);
 }
