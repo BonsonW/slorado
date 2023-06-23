@@ -86,7 +86,7 @@ $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h src/globals.h
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h 
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/basecall.o: src/basecall.cpp
@@ -101,7 +101,7 @@ $(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
 $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/globals.o: src/globals.cpp src/globals.h
+$(BUILD_DIR)/globals.o: src/globals.cpp src/globals.h src/misc.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
