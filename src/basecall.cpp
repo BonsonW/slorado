@@ -51,7 +51,7 @@ void basecall_chunks(
 
     LOG_DEBUG("%s", "decoding chunks");
     ts->time_decode -= realtime();
-    std::vector<DecodedChunk> decoded_chunks = model_runner.call_chunks(chunks.size(),ts);
+    std::vector<DecodedChunk> decoded_chunks = model_runner.call_chunks(chunks.size());
     ts->time_decode += realtime();
 
     for (size_t i = 0; i < chunks.size(); ++i) {

@@ -3,6 +3,9 @@
 #include "dorado/decode/GPUDecoder.h"
 #include "error.h"
 
+#include "../../../src/globals.h"
+#include "../../../src/misc.h"
+
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
 #include "toml.h"
@@ -16,7 +19,10 @@ public:
                int chunk_size,
                int batch_size,
                const std::string &device) {
+        isCUDA = true;
+        startTime = realtime();
         const auto model_config = load_crf_model_config(model_path);
+        
         m_model_stride = static_cast<size_t>(model_config.stride);
 
         m_decoder_options = DecoderOptions();
@@ -29,17 +35,23 @@ public:
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
 
         m_cuda_thread.reset(new std::thread(&CudaCaller::cuda_thread_fn, this));
+        endTime = realtime();
+        CudaCallerT += getSubTimeDifference();
     }
 
     ~CudaCaller() {
+        startTime = realtime();
         std::unique_lock<std::mutex> input_lock(m_input_lock);
         m_terminate = true;
         input_lock.unlock();
         m_input_cv.notify_one();
         m_cuda_thread->join();
+        endTime = realtime();
+        NCudaCallerT += getTimeDifference();
     }
 
     struct NNTask {
+        // startTime = realtime();
         NNTask(torch::Tensor input_, int num_chunks_) : input(input_), num_chunks(num_chunks_) {}
         torch::Tensor input;
         std::mutex mut;
@@ -47,12 +59,15 @@ public:
         torch::Tensor out;
         bool done{false};
         int num_chunks;
+        // endTime = realtime();
+        // NNTaskT += getTimeDifference();
     };
 
     std::vector<DecodedChunk> call_chunks(torch::Tensor &input,
                                           torch::Tensor &output,
                                           int num_chunks,
                                           c10::cuda::CUDAStream stream) {
+        startTime = realtime();
         c10::cuda::CUDAStreamGuard stream_guard(stream);
 
         if (num_chunks == 0) {
@@ -71,11 +86,13 @@ public:
         }
 
         output.copy_(task.out);
-
+        endTime = realtime();
+        call_chunksT += getTimeDifference();
         return m_decoder->cpu_part(output);
     }
 
     void cuda_thread_fn() {
+        startTime = realtime();
         torch::InferenceMode guard;
         c10::cuda::CUDAGuard device_guard(m_options.device());
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
@@ -95,7 +112,6 @@ public:
             input_lock.unlock();
 
             std::unique_lock<std::mutex> task_lock(task->mut);
-            timestamps_t *ts = nullptr;
             auto scores = m_module->forward(task->input);
             torch::cuda::synchronize();
             task->out = m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device);
@@ -104,8 +120,11 @@ public:
             task->cv.notify_one();
             task_lock.unlock();
         }
+        endTime = realtime();
+        cuda_thread_fnT += getTimeDifference();
     }
 
+    // startTime = realtime();
     std::string m_device;
     torch::TensorOptions m_options;
     std::unique_ptr<GPUDecoder> m_decoder;
@@ -118,6 +137,8 @@ public:
     std::condition_variable m_input_cv;
     std::unique_ptr<std::thread> m_cuda_thread;
     int m_num_input_features;
+    // endTime = realtime();
+    // SubCudaCallerT += getTimeDifference();
 };
 
 std::shared_ptr<CudaCaller> create_cuda_caller(const std::string &model_path,
