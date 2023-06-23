@@ -49,6 +49,7 @@ SOFTWARE.
 //std::string generateSplitBar(const long* values, int size);   ////////////////////////////////
 void generateSplitBar(const long* values, const std::string* names, int size);
 
+
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
     {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
