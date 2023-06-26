@@ -60,7 +60,7 @@ struct ConvolutionImpl : Module {
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
         activation = register_module("activation", SiLU());
         endTime = realtime();
-        convolutionImplT= getTimeDifference();
+        convolutionImplT += getTimeDifference();
     }
 
     torch::Tensor forward(torch::Tensor x) { 
@@ -199,6 +199,7 @@ struct LinearCRFImpl : Module {
 
 struct CudaLSTMImpl : Module {
     CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
+        startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
@@ -214,6 +215,8 @@ struct CudaLSTMImpl : Module {
         register_parameter("weight_hh", weight_hh, false);
         register_parameter("bias_ih", bias, false);
         register_parameter("bias_hh", bias_hh, false);
+        endTime = realtime();
+        cudaLSTMImplT += getTimeDifference();
     }
 
     torch::Tensor weights, bias;
@@ -224,6 +227,7 @@ TORCH_MODULE(CudaLSTM);
 
 struct CudaLSTMStackImpl : Module {
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
+        startTime = realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
         rnn2 = register_module("rnn_2", CudaLSTM(layer_size, false));
         rnn3 = register_module("rnn_3", CudaLSTM(layer_size, true));
@@ -251,6 +255,8 @@ struct CudaLSTMStackImpl : Module {
             _host_run_lstm_fwd_quantized = host_run_lstm_fwd_quantized128;
             _host_run_lstm_rev_quantized = host_run_lstm_reverse_quantized128;
         }
+        endTime = realtime();
+        cudaLSTMStackImplT += getTimeDifference();
     }
 
     bool _weights_rearranged = false;
@@ -263,6 +269,7 @@ struct CudaLSTMStackImpl : Module {
     quantized_lstm _host_run_lstm_rev_quantized{nullptr};
 
     torch::Tensor forward_cublas(torch::Tensor in) {
+        startTime = realtime();
         // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
         c10::cuda::CUDAGuard device_guard(in.device());
         auto stream = at::cuda::getCurrentCUDAStream().stream();
@@ -327,6 +334,8 @@ struct CudaLSTMStackImpl : Module {
                                    gate_buf.data_ptr(), state_buf.data_ptr(),
                                    timestep_out.data_ptr());
             }
+            endTime = realtime();
+            forward_cublasT += getTimeDifference();
         }
 
         // Output is [N, T, C], non-contiguous
@@ -334,6 +343,7 @@ struct CudaLSTMStackImpl : Module {
     }
 
     void rearrange_individual_weights(torch::Tensor buffer) {
+        startTime = realtime();
         torch::Tensor tmp = torch::empty_like(buffer);
         int layer_width = tmp.size(0) / 4;
 
@@ -350,9 +360,12 @@ struct CudaLSTMStackImpl : Module {
         }
 
         buffer.index({torch::indexing::Slice()}) = tmp;
+        endTime = realtime();
+        rearrange_individual_weightsT += getTimeDifference();
     }
 
     void rearrange_weights() {
+        startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rearrange_individual_weights(rnn->named_parameters()["weight_hh"]);
             rearrange_individual_weights(rnn->named_parameters()["weight_ih"]);
@@ -361,10 +374,13 @@ struct CudaLSTMStackImpl : Module {
             rearrange_individual_weights(rnn->named_parameters()["bias_ih"]);
         }
         _weights_rearranged = true;
+        endTime = realtime();
+        rearrange_weightsT += getTimeDifference();
     }
 
     std::pair<torch::Tensor, torch::Tensor> quantize_tensor(torch::Tensor tensor,
                                                             int levels = 256) {
+        startTime = realtime();
         //Quantize a tensor to int8, returning per-channel scales and the quantized tensor
         //if weights have not been quantized we get some scaling
         tensor = tensor.transpose(0, 1).contiguous();
@@ -386,12 +402,14 @@ struct CudaLSTMStackImpl : Module {
                                         .round()
                                         .clip(-quantization_max, quantization_max)
                                         .to(torch::kI8);
-
+        endTime = realtime();
+        quantize_tensorT += getTimeDifference();
         return std::pair<torch::Tensor, torch::Tensor>(quantization_scale.to(torch::kFloat32),
                                                        tensor_quantized);
     }
 
     void quantize_weights() {
+        startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             // auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
             auto t0 = quantize_tensor(rnn->named_parameters()["weight_hh"]);
@@ -400,9 +418,12 @@ struct CudaLSTMStackImpl : Module {
             _quantization_scale_factors.push_back(factors);
             _quantized_buffers.push_back(quantized);
         }
+        endTime = realtime();
+        quantize_weightsT += getTimeDifference();
     }
 
     torch::Tensor forward_quantized(torch::Tensor x) {
+        startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         c10::cuda::CUDAGuard device_guard(x.device());
 
@@ -450,6 +471,8 @@ struct CudaLSTMStackImpl : Module {
                 _quantization_scale_factors[4].data_ptr(), x.data_ptr(), _chunks.size(0));
 
         // Output is [N, T, C], contiguous
+        endTime = realtime();
+        forward_quantizedT += getTimeDifference();
         return x;
     }
 

@@ -312,6 +312,15 @@ int basecaller_main(int argc, char* argv[]) {
                 fprintf(stderr, "\n[%s]                     - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
                 fprintf(stderr, "\n[%s]                     - Forward in ClampImpl time: %.3f sec",__func__, forward_l577);   
 
+                fprintf(stderr, "\n\n[%s]                     - Forward in cudaLSTMImplT time: %.3f sec",__func__, cudaLSTMImplT);
+                fprintf(stderr, "\n\n[%s]                     - Forward in cudaLSTMStackImplT time: %.3f sec",__func__, cudaLSTMStackImplT);
+                fprintf(stderr, "\n[%s]                     - Forward in forward_cublasT time: %.3f sec",__func__, forward_cublasT);
+                fprintf(stderr, "\n[%s]                     - Forward in rearrange_individual_weightsT time: %.3f sec",__func__, rearrange_individual_weightsT);
+                fprintf(stderr, "\n[%s]                     - Forward in rearrange_weightsT time: %.3f sec",__func__, rearrange_weightsT);
+                fprintf(stderr, "\n[%s]                     - Forward in quantize_weightsT time: %.3f sec",__func__, quantize_weightsT);   
+                fprintf(stderr, "\n[%s]                     - Forward in quantize_tensorT time: %.3f sec",__func__, quantize_tensorT);
+                fprintf(stderr, "\n[%s]                     - Forward in forward_quantizedT time: %.3f sec",__func__, forward_quantizedT);   
+
                 fprintf(stderr, "\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
                 fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
                 fprintf(stderr, "\n[%s]                 - NNTaskT time: %.3f sec",__func__, NNTaskT);
