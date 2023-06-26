@@ -55,9 +55,12 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
 struct ConvolutionImpl : Module {
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
             : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
+        startTime = realtime();
         conv = register_module(
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
         activation = register_module("activation", SiLU());
+        endTime = realtime();
+        convolutionImplT= getTimeDifference();
     }
 
     torch::Tensor forward(torch::Tensor x) { 

@@ -20,6 +20,8 @@ double forward_l536;
 double forward_l577;
 double forward_l642;
 
+double convolutionImplT;
+
 double x_flipt;
 double rnn1t;
 double rnn2t;

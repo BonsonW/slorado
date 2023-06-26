@@ -24,6 +24,8 @@ extern double forward_l536;
 extern double forward_l577;
 extern double forward_l642;
 
+extern double convolutionImplT;
+
 extern double x_flipt;
 extern double rnn1t;
 extern double rnn2t;
