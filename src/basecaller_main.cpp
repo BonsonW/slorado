@@ -321,6 +321,13 @@ int basecaller_main(int argc, char* argv[]) {
                 fprintf(stderr, "\n[%s]                     - Forward in quantize_tensorT time: %.3f sec",__func__, quantize_tensorT);
                 fprintf(stderr, "\n[%s]                     - Forward in forward_quantizedT time: %.3f sec",__func__, forward_quantizedT);   
 
+                fprintf(stderr, "\n\n[%s]                     - Forward in call_ch_while time: %.3f sec",__func__, call_ch_while);
+                fprintf(stderr, "\n\n[%s]                     - Forward in stream_guardT time: %.3f sec",__func__, stream_guardT);
+                fprintf(stderr, "\n[%s]                     - Forward in taskT time: %.3f sec",__func__, taskT);
+                fprintf(stderr, "\n[%s]                     - Forward in lock_guardT time: %.3f sec",__func__, lock_guardT);
+                fprintf(stderr, "\n[%s]                     - Forward in notify_oneT time: %.3f sec",__func__, notify_oneT);
+                fprintf(stderr, "\n[%s]                     - Forward in unique_lockT time: %.3f sec",__func__, unique_lockT);   
+
                 fprintf(stderr, "\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
                 fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
                 fprintf(stderr, "\n[%s]                 - NNTaskT time: %.3f sec",__func__, NNTaskT);

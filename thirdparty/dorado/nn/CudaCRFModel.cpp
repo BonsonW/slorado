@@ -68,23 +68,43 @@ public:
                                           int num_chunks,
                                           c10::cuda::CUDAStream stream) {
         startTime = realtime();
+        subStartTime = realtime();
         c10::cuda::CUDAStreamGuard stream_guard(stream);
-
+        subEndTime = realtime();
+        stream_guardT += getSubTimeDifference();
         if (num_chunks == 0) {
             return std::vector<DecodedChunk>();
         }
+
+        subStartTime = realtime();
         NNTask task(input.to(m_options.device()), num_chunks);
+        subEndTime = realtime();
+        taskT += getSubTimeDifference();
+
+        subStartTime = realtime();
         {
             std::lock_guard<std::mutex> lock(m_input_lock);
             m_input_queue.push_front(&task);
         }
-        m_input_cv.notify_one();
+        subEndTime = realtime();
+        lock_guardT += getSubTimeDifference();
 
+        subStartTime = realtime();
+        m_input_cv.notify_one();
+        subEndTime = realtime();
+        notify_oneT += getSubTimeDifference();
+
+        subStartTime = realtime();
         std::unique_lock<std::mutex> lock(task.mut);
+        subEndTime = realtime();
+        unique_lockT += getSubTimeDifference();
+
+        subStartTime = realtime();
         while (!task.done) {
             task.cv.wait(lock);
         }
-
+        subEndTime = realtime();
+        call_ch_while += getSubTimeDifference();
         output.copy_(task.out);
         endTime = realtime();
         call_chunksT += getTimeDifference();

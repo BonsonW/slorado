@@ -34,6 +34,13 @@ extern double quantize_tensorT;
 extern double quantize_weightsT;
 extern double forward_quantizedT;
 
+extern double call_ch_while;
+extern double stream_guardT;
+extern double taskT;
+extern double lock_guardT;
+extern double notify_oneT;
+extern double unique_lockT;
+
 extern double x_flipt;
 extern double rnn1t;
 extern double rnn2t;
