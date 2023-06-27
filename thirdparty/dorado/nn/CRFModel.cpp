@@ -271,7 +271,6 @@ struct CudaLSTMStackImpl : Module {
         endTime = realtime();
         cudaLSTMStackImplT += getTimeDifference();
     }
-    std::cout << "\nCRF 274\n" << std::endl; //Test
     bool _weights_rearranged = false;
     bool m_quantize;
     torch::Tensor _chunks;
