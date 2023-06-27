@@ -524,8 +524,8 @@ TORCH_MODULE(CudaLSTMStack);
 #endif  // if USE_CUDA_LSTM
 
 struct LSTMStackImpl : Module {
-    std::cout << "\nCRF 527\n" << std::endl; //Test
     LSTMStackImpl(int size, int batchsize, int chunksize) {
+        std::cout << "\nCRF 528\n" << std::endl; //Test
         // torch::nn::LSTM expects/produces [N, T, C] with batch_first == true
         rnn1 = register_module("rnn1", LSTM(LSTMOptions(size, size).batch_first(true)));
         rnn2 = register_module("rnn2", LSTM(LSTMOptions(size, size).batch_first(true)));
