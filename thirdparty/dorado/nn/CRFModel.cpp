@@ -20,7 +20,6 @@ extern "C" {
 
 
 #if USE_CUDA_LSTM
-std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
 static bool cuda_lstm_is_quantized(int layer_size) {
 #ifdef DORADO_TX2
     return false;
@@ -139,9 +138,9 @@ struct ConvolutionImpl : Module {
         endTime = realtime();
         time_forward += getTimeDifference();
         // Output is [N, C_out, T_out], contiguous
+        std::cout << "\nCRF 141\n" << std::endl; //Test
         return activation(conv(x));
     }
-    std::cout << "\nCRF 144\n" << std::endl; //Test
     Conv1d conv{nullptr};
     SiLU activation{nullptr};
     int in_size;
@@ -237,8 +236,8 @@ struct CudaLSTMImpl : Module {
 TORCH_MODULE(CudaLSTM);
 
 struct CudaLSTMStackImpl : Module {
-    std::cout << "\nCRF 240\n" << std::endl; //Test
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
+        std::cout << "\nCRF 240\n" << std::endl; //Test
         startTime = realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
         rnn2 = register_module("rnn_2", CudaLSTM(layer_size, false));
