@@ -278,7 +278,24 @@ int basecaller_main(int argc, char* argv[]) {
     double total_time = core->ts.time_init_runners + core->load_db_time + core->process_db_time + core->output_time;
     fprintf(stderr, "\n[%s] Model initialization time: %.3f sec : %.2f %", __func__,core->ts.time_init_runners,core->ts.time_init_runners * 100 / total_time);
     fprintf(stderr, "\n[%s] Data loading time: %.3f sec : %.2f %", __func__,core->load_db_time,core->load_db_time*100/total_time);
-    fprintf(stderr, "\n[%s] Data processing time: %.3f sec : %.2f %", __func__,core->process_db_time,core->process_db_time*100/total_time);
+    fprintf(stderr, "\n[%s]     - cuda_thread_fn time: %.3f sec",__func__, cuda_thread_fnT);
+    fprintf(stderr, "\n[%s]     - CudaCaller time: %.3f sec",__func__, CudaCallerT);
+    fprintf(stderr, "\n[%s]     - call_chunks time: %.3f sec",__func__, call_chunksT);
+    fprintf(stderr, "\n[%s]       - stream_guard time: %.3f sec",__func__, stream_guardT);
+    fprintf(stderr, "\n[%s]         - task time: %.3f sec",__func__, taskT);
+    fprintf(stderr, "\n[%s]         - lock_guard time: %.3f sec",__func__, lock_guardT);
+    fprintf(stderr, "\n[%s]         - notify_one time: %.3f sec",__func__, notify_oneT);
+    fprintf(stderr, "\n[%s]         - unique_lock time: %.3f sec",__func__, unique_lockT);   
+    fprintf(stderr, "\n[%s]         - call_ch_while time: %.3f sec",__func__, call_ch_while);
+    fprintf(stderr, "\n[%s]         - ConvolutionImpl time: %.3f sec",__func__, convolutionImplT);
+    fprintf(stderr, "\n[%s]         - cudaLSTMStackImpl time: %.3f sec",__func__, cudaLSTMStackImplT);
+    fprintf(stderr, "\n[%s]         - cudaLSTMImplT time: %.3f sec",__func__, cudaLSTMImplT);
+    fprintf(stderr, "\n[%s]         - rearrange_weights time: %.3f sec",__func__, rearrange_weightsT);
+    fprintf(stderr, "\n[%s]         - rearrange_individual_weights time: %.3f sec",__func__, rearrange_individual_weightsT);
+    fprintf(stderr, "\n[%s]         - quantize_weights time: %.3f sec",__func__, quantize_weightsT);   
+    fprintf(stderr, "\n[%s]         - quantize_tensor time: %.3f sec",__func__, quantize_tensorT);
+
+fprintf(stderr, "\n[%s] Data processing time: %.3f sec : %.2f %", __func__,core->process_db_time,core->process_db_time*100/total_time);
     //if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
             fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
@@ -305,34 +322,18 @@ int basecaller_main(int argc, char* argv[]) {
                 fprintf(stderr, "\n[%s]                     - Forward in CRFModelImpl time: %.3f sec",__func__, forward_l642);
             }
             else{
-                fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImplT time: %.3f sec",__func__, convolutionImplT);
                 fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImpl time: %.3f sec",__func__, forward_l62);
                 fprintf(stderr, "\n[%s]                     - Forward in LinearCRFImpl time: %.3f sec",__func__, forward_l159);
                 fprintf(stderr, "\n[%s]                     - Forward in CudaLSTMStackImpl time: %.3f sec",__func__, forward_l469);
                 fprintf(stderr, "\n[%s]                     - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
                 fprintf(stderr, "\n[%s]                     - Forward in ClampImpl time: %.3f sec",__func__, forward_l577);   
 
-                fprintf(stderr, "\n\n[%s]                     - cudaLSTMImplT time: %.3f sec",__func__, cudaLSTMImplT);
-                fprintf(stderr, "\n\n[%s]                     - cudaLSTMStackImplT time: %.3f sec",__func__, cudaLSTMStackImplT);
                 fprintf(stderr, "\n[%s]                     - forward_cublasT time: %.3f sec",__func__, forward_cublasT);
-                fprintf(stderr, "\n[%s]                     - rearrange_individual_weightsT time: %.3f sec",__func__, rearrange_individual_weightsT);
-                fprintf(stderr, "\n[%s]                     - rearrange_weightsT time: %.3f sec",__func__, rearrange_weightsT);
-                fprintf(stderr, "\n[%s]                     - quantize_weightsT time: %.3f sec",__func__, quantize_weightsT);   
-                fprintf(stderr, "\n[%s]                     - quantize_tensorT time: %.3f sec",__func__, quantize_tensorT);
                 fprintf(stderr, "\n[%s]                     - forward_quantizedT time: %.3f sec",__func__, forward_quantizedT);   
 
-                fprintf(stderr, "\n\n[%s]                     - call_ch_while time: %.3f sec",__func__, call_ch_while);
-                fprintf(stderr, "\n\n[%s]                     - stream_guardT time: %.3f sec",__func__, stream_guardT);
-                fprintf(stderr, "\n[%s]                     - taskT time: %.3f sec",__func__, taskT);
-                fprintf(stderr, "\n[%s]                     - lock_guardT time: %.3f sec",__func__, lock_guardT);
-                fprintf(stderr, "\n[%s]                     - notify_oneT time: %.3f sec",__func__, notify_oneT);
-                fprintf(stderr, "\n[%s]                     - unique_lockT time: %.3f sec",__func__, unique_lockT);   
-
-                fprintf(stderr, "\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
+                fprintf(stderr, "\n[%s]                 - stream_guard time: %.3f sec",__func__, stream_guardT);
                 fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
                 fprintf(stderr, "\n[%s]                 - NNTaskT time: %.3f sec",__func__, NNTaskT);
-                fprintf(stderr, "\n[%s]                 - call_chunks time: %.3f sec",__func__, call_chunksT);
-                fprintf(stderr, "\n[%s]                 - cuda_thread_fn time: %.3f sec",__func__, cuda_thread_fnT);
                 fprintf(stderr, "\n[%s]                 - SubCudaCallerT time: %.3f sec",__func__, SubCudaCallerT);
 
             }
