@@ -208,8 +208,8 @@ struct LinearCRFImpl : Module {
 #if USE_CUDA_LSTM
 
 struct CudaLSTMImpl : Module {
-    std::cout << "\nCRF 211\n" << std::endl; //Test
     CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
+        std::cout << "\nCRF 212\n" << std::endl; //Test
         startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
