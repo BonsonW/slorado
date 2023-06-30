@@ -612,8 +612,8 @@ TORCH_MODULE(Clamp);
 
 template <class LSTMStackType>
 struct CRFModelImpl : Module {
-    CRFModelImpl(const CRFModelConfig &config, bool expand_blanks, int batch_size, int chunk_size) {
-        conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
+    conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
+    CRFModelImpl(const CRFModelConfig &config, bool expand_blanks, int batch_size, int chunk_size) {    // Data loading        conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
         clamp1 = Clamp(-0.5, 3.5, config.clamp);
         conv2 = register_module("conv2", Convolution(config.conv, 16, 5, 1));
         clamp2 = Clamp(-0.5, 3.5, config.clamp);
