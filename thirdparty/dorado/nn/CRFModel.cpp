@@ -71,6 +71,7 @@ struct ConvolutionImpl : Module {
         if (to_lstm) {
 #if USE_CUDA_LSTM
             if (x.device() != torch::kCPU) {
+                std::cout << "\nCRF 78\n" << std::endl; //Test
                 c10::cuda::CUDAGuard device_guard(x.device());
                 auto stream = at::cuda::getCurrentCUDAStream().stream();
 
@@ -100,6 +101,7 @@ struct ConvolutionImpl : Module {
                     // Output is [N, T_out, C_out], contiguous
                     return res;
                 } else {
+                    std::cout << "\nCRF 109\n" << std::endl; //Test
                     auto res = torch::empty({chunk_size_out + 1, batch_size, 2, out_size},
                                             x.options());
                     res.index({0, Slice(), 1, Slice()}) = 0;
@@ -145,6 +147,7 @@ struct ConvolutionImpl : Module {
 
 struct LinearCRFImpl : Module {
     LinearCRFImpl(int insize, int outsize) : scale(5), blank_score(2.0), expand_blanks(false) {
+        std::cout << "\nCRF 156\n" << std::endl; //Test
         linear = register_module("linear", Linear(insize, outsize));
         activation = register_module("activation", Tanh());
     };
@@ -158,6 +161,7 @@ struct LinearCRFImpl : Module {
         torch::Tensor scores;
 #if USE_CUDA_LSTM
         if (x.device() != torch::kCPU) {
+            std::cout << "\nCRF 170\n" << std::endl; //Test
             // Optimised version of the else branch for CUDA devices
             c10::cuda::CUDAGuard device_guard(x.device());
             auto stream = at::cuda::getCurrentCUDAStream().stream();
@@ -174,6 +178,7 @@ struct LinearCRFImpl : Module {
         }
 
         if (expand_blanks == true) {
+            std::cout << "\nCRF 187\n" << std::endl; //Test
             scores = scores.contiguous();
             int C = scores.size(2);
             scores = F::pad(scores.view({N, T, C / 4, 4}),
@@ -257,7 +262,6 @@ struct CudaLSTMStackImpl : Module {
         endTime = realtime();
         cudaLSTMStackImplT += getTimeDifference();
     }
-
     bool _weights_rearranged = false;
     bool m_quantize;
     torch::Tensor _chunks;
@@ -268,6 +272,7 @@ struct CudaLSTMStackImpl : Module {
     quantized_lstm _host_run_lstm_rev_quantized{nullptr};
 
     torch::Tensor forward_cublas(torch::Tensor in) {
+        std::cout << "\nCRF 285\n" << std::endl; //Test
         startTime = realtime();
         // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
         c10::cuda::CUDAGuard device_guard(in.device());
@@ -308,6 +313,7 @@ struct CudaLSTMStackImpl : Module {
         auto working_mem_right = mat_working_mem.slice(0, 1, chunk_size + 1).select(2, 1);
 
         if (!input_is_working_mem) {
+            std::cout << "\nCRF 326\n" << std::endl; //Test
             // NOTE: `host_transpose_f16' does exactly what the commented out assignment
             // below would do, only ~5x faster (on A100)
             // working_mem_right = in.transpose(1, 0);
@@ -512,6 +518,7 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
+        std::cout << "\nCRF 538\n" << std::endl; //Test
         startTime = realtime();
         // Input is [N, T, C], contiguity optional
 
