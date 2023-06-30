@@ -55,6 +55,7 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
 struct ConvolutionImpl : Module {
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
             : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
+        startTime = realtime();
         conv = register_module(
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
         activation = register_module("activation", SiLU());
@@ -133,6 +134,7 @@ struct ConvolutionImpl : Module {
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
+
     Conv1d conv{nullptr};
     SiLU activation{nullptr};
     int in_size;
@@ -200,6 +202,7 @@ struct LinearCRFImpl : Module {
 
 struct CudaLSTMImpl : Module {
     CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
+        startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
@@ -225,6 +228,7 @@ TORCH_MODULE(CudaLSTM);
 
 struct CudaLSTMStackImpl : Module {
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
+        startTime = realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
         rnn2 = register_module("rnn_2", CudaLSTM(layer_size, false));
         rnn3 = register_module("rnn_3", CudaLSTM(layer_size, true));
@@ -336,6 +340,7 @@ struct CudaLSTMStackImpl : Module {
     }
 
     void rearrange_individual_weights(torch::Tensor buffer) {
+        startTime = realtime();
         torch::Tensor tmp = torch::empty_like(buffer);
         int layer_width = tmp.size(0) / 4;
 
@@ -355,6 +360,7 @@ struct CudaLSTMStackImpl : Module {
     }
 
     void rearrange_weights() {
+        startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rearrange_individual_weights(rnn->named_parameters()["weight_hh"]);
             rearrange_individual_weights(rnn->named_parameters()["weight_ih"]);
@@ -367,6 +373,7 @@ struct CudaLSTMStackImpl : Module {
 
     std::pair<torch::Tensor, torch::Tensor> quantize_tensor(torch::Tensor tensor,
                                                             int levels = 256) {
+        startTime = realtime();
         //Quantize a tensor to int8, returning per-channel scales and the quantized tensor
         //if weights have not been quantized we get some scaling
         tensor = tensor.transpose(0, 1).contiguous();
@@ -394,6 +401,7 @@ struct CudaLSTMStackImpl : Module {
     }
 
     void quantize_weights() {
+        startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             // auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
             auto t0 = quantize_tensor(rnn->named_parameters()["weight_hh"]);
@@ -405,6 +413,7 @@ struct CudaLSTMStackImpl : Module {
     }
 
     torch::Tensor forward_quantized(torch::Tensor x) {
+        startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         c10::cuda::CUDAGuard device_guard(x.device());
 
