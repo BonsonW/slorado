@@ -20,6 +20,23 @@ double forward_l536;
 double forward_l577;
 double forward_l642;
 
+double convolutionImplT;
+double cudaLSTMImplT;
+double cudaLSTMStackImplT;
+double forward_cublasT;
+double rearrange_individual_weightsT;
+double rearrange_weightsT;
+double quantize_tensorT;
+double quantize_weightsT;
+double forward_quantizedT;
+
+double call_ch_while;
+double stream_guardT;
+double taskT;
+double lock_guardT;
+double notify_oneT;
+double unique_lockT;
+
 double x_flipt;
 double rnn1t;
 double rnn2t;
