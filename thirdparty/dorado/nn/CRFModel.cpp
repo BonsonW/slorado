@@ -40,7 +40,7 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
                                        const std::string &path,
                                        const torch::TensorOptions &options,
                                        bool decomposition,
-                                       bool bias) {
+                                       bool bias) { // data loading
     auto state_dict = load_crf_model_weights(path, decomposition, bias);
     model->load_state_dict(state_dict);
     model->to(options.dtype_opt().value().toScalarType());
@@ -54,7 +54,7 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
 
 struct ConvolutionImpl : Module {
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
-            : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
+            : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {    // Data loading
         startTime = realtime();
         conv = register_module(
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
@@ -71,6 +71,7 @@ struct ConvolutionImpl : Module {
         if (to_lstm) {
 #if USE_CUDA_LSTM
             if (x.device() != torch::kCPU) {
+                std::cout << "\nCRF 78\n" << std::endl; //Test
                 c10::cuda::CUDAGuard device_guard(x.device());
                 auto stream = at::cuda::getCurrentCUDAStream().stream();
 
@@ -82,7 +83,7 @@ struct ConvolutionImpl : Module {
                                         .to(x.options())
                                         .contiguous();
                 auto b_device = conv->bias.to(x.options());
-                if (cuda_lstm_is_quantized(out_size)) {
+                if (cuda_lstm_is_quantized(out_size)) { // Data loading
                     torch::Tensor res =
                             torch::empty({batch_size, chunk_size_out, out_size}, x.options());
                     auto res_2D = res.view({-1, out_size});
@@ -100,6 +101,7 @@ struct ConvolutionImpl : Module {
                     // Output is [N, T_out, C_out], contiguous
                     return res;
                 } else {
+                    std::cout << "\nCRF 109\n" << std::endl; //Test
                     auto res = torch::empty({chunk_size_out + 1, batch_size, 2, out_size},
                                             x.options());
                     res.index({0, Slice(), 1, Slice()}) = 0;
@@ -131,10 +133,9 @@ struct ConvolutionImpl : Module {
         }
         endTime = realtime();
         time_forward += getTimeDifference();
-        // Output is [N, C_out, T_out], contiguous
+        // Output is [N, C_out, T_out], contiguous  // Data processing
         return activation(conv(x));
     }
-
     Conv1d conv{nullptr};
     SiLU activation{nullptr};
     int in_size;
@@ -146,6 +147,7 @@ struct ConvolutionImpl : Module {
 
 struct LinearCRFImpl : Module {
     LinearCRFImpl(int insize, int outsize) : scale(5), blank_score(2.0), expand_blanks(false) {
+        std::cout << "\nCRF 156\n" << std::endl; //Test
         linear = register_module("linear", Linear(insize, outsize));
         activation = register_module("activation", Tanh());
     };
@@ -159,6 +161,7 @@ struct LinearCRFImpl : Module {
         torch::Tensor scores;
 #if USE_CUDA_LSTM
         if (x.device() != torch::kCPU) {
+            std::cout << "\nCRF 170\n" << std::endl; //Test
             // Optimised version of the else branch for CUDA devices
             c10::cuda::CUDAGuard device_guard(x.device());
             auto stream = at::cuda::getCurrentCUDAStream().stream();
@@ -175,6 +178,7 @@ struct LinearCRFImpl : Module {
         }
 
         if (expand_blanks == true) {
+            std::cout << "\nCRF 187\n" << std::endl; //Test
             scores = scores.contiguous();
             int C = scores.size(2);
             scores = F::pad(scores.view({N, T, C / 4, 4}),
@@ -198,7 +202,7 @@ struct LinearCRFImpl : Module {
 #if USE_CUDA_LSTM
 
 struct CudaLSTMImpl : Module {
-    CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
+    CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {   // Data loading
         startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
@@ -226,7 +230,7 @@ struct CudaLSTMImpl : Module {
 TORCH_MODULE(CudaLSTM);
 
 struct CudaLSTMStackImpl : Module {
-    CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
+    CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {  // Data loading
         startTime = realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
         rnn2 = register_module("rnn_2", CudaLSTM(layer_size, false));
@@ -236,7 +240,7 @@ struct CudaLSTMStackImpl : Module {
 
         m_quantize = cuda_lstm_is_quantized(layer_size);
 
-        if (m_quantize) {
+        if (m_quantize) {   // Data loading
             // chunk_size * batch_size can not be > 2**31 (2147483648).
             // For practical purposes this is currently always the case.
             _chunks = torch::empty({batch_size, 4}).to(torch::kInt32);
@@ -258,7 +262,6 @@ struct CudaLSTMStackImpl : Module {
         endTime = realtime();
         cudaLSTMStackImplT += getTimeDifference();
     }
-
     bool _weights_rearranged = false;
     bool m_quantize;
     torch::Tensor _chunks;
@@ -269,6 +272,7 @@ struct CudaLSTMStackImpl : Module {
     quantized_lstm _host_run_lstm_rev_quantized{nullptr};
 
     torch::Tensor forward_cublas(torch::Tensor in) {
+        std::cout << "\nCRF 285\n" << std::endl; //Test
         startTime = realtime();
         // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
         c10::cuda::CUDAGuard device_guard(in.device());
@@ -309,6 +313,7 @@ struct CudaLSTMStackImpl : Module {
         auto working_mem_right = mat_working_mem.slice(0, 1, chunk_size + 1).select(2, 1);
 
         if (!input_is_working_mem) {
+            std::cout << "\nCRF 326\n" << std::endl; //Test
             // NOTE: `host_transpose_f16' does exactly what the commented out assignment
             // below would do, only ~5x faster (on A100)
             // working_mem_right = in.transpose(1, 0);
@@ -342,7 +347,7 @@ struct CudaLSTMStackImpl : Module {
         return working_mem_left.transpose(1, 0);
     }
 
-    void rearrange_individual_weights(torch::Tensor buffer) {
+    void rearrange_individual_weights(torch::Tensor buffer) {   // data loading
         startTime = realtime();
         torch::Tensor tmp = torch::empty_like(buffer);
         int layer_width = tmp.size(0) / 4;
@@ -364,7 +369,7 @@ struct CudaLSTMStackImpl : Module {
         rearrange_individual_weightsT += getTimeDifference();
     }
 
-    void rearrange_weights() {
+    void rearrange_weights() { // Data loading
         startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rearrange_individual_weights(rnn->named_parameters()["weight_hh"]);
@@ -379,7 +384,7 @@ struct CudaLSTMStackImpl : Module {
     }
 
     std::pair<torch::Tensor, torch::Tensor> quantize_tensor(torch::Tensor tensor,
-                                                            int levels = 256) {
+                                                            int levels = 256) { // Data loading
         startTime = realtime();
         //Quantize a tensor to int8, returning per-channel scales and the quantized tensor
         //if weights have not been quantized we get some scaling
@@ -408,7 +413,7 @@ struct CudaLSTMStackImpl : Module {
                                                        tensor_quantized);
     }
 
-    void quantize_weights() {
+    void quantize_weights() {   // Data loading
         startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             // auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
@@ -422,7 +427,7 @@ struct CudaLSTMStackImpl : Module {
         quantize_weightsT += getTimeDifference();
     }
 
-    torch::Tensor forward_quantized(torch::Tensor x) {
+    torch::Tensor forward_quantized(torch::Tensor x) {  // Data loading
         startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         c10::cuda::CUDAGuard device_guard(x.device());
@@ -477,7 +482,7 @@ struct CudaLSTMStackImpl : Module {
     }
 
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x) {    // Data loading
         startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         
@@ -513,6 +518,7 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
+        std::cout << "\nCRF 538\n" << std::endl; //Test
         startTime = realtime();
         // Input is [N, T, C], contiguity optional
 
@@ -606,7 +612,7 @@ struct LSTMStackImpl : Module {
 struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
-    torch::Tensor forward(torch::Tensor x) {
+    torch::Tensor forward(torch::Tensor x) {    // Data loading
         startTime = realtime();
         endTime = realtime();
         time_forward += getTimeDifference();
@@ -629,7 +635,7 @@ TORCH_MODULE(Clamp);
 
 template <class LSTMStackType>
 struct CRFModelImpl : Module {
-    CRFModelImpl(const CRFModelConfig &config, bool expand_blanks, int batch_size, int chunk_size) {
+    CRFModelImpl(const CRFModelConfig &config, bool expand_blanks, int batch_size, int chunk_size) {    // Data loading        conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
         conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
         clamp1 = Clamp(-0.5, 3.5, config.clamp);
         conv2 = register_module("conv2", Convolution(config.conv, 16, 5, 1));
@@ -661,7 +667,7 @@ struct CRFModelImpl : Module {
         }
     }
 
-    void load_state_dict(const std::vector<torch::Tensor> &weights) {
+    void load_state_dict(const std::vector<torch::Tensor> &weights) {   // Data loading
         module_load_state_dict(*this, weights);
     }
 
@@ -690,7 +696,7 @@ TORCH_MODULE(CudaCRFModel);
 using CpuCRFModelImpl = CRFModelImpl<LSTMStack>;
 TORCH_MODULE(CpuCRFModel);
 
-CRFModelConfig load_crf_model_config(const std::string &path) {
+CRFModelConfig load_crf_model_config(const std::string &path) { // Data loading
     FILE* fp;
     char errbuf[200];
 
@@ -800,8 +806,8 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
 
 std::vector<torch::Tensor> load_crf_model_weights(const std::string &dir,
                                                   bool decomposition,
-                                                  bool bias) {
-    auto tensors = std::vector<std::string>{
+                                                  bool bias) {  //Data loading
+            auto tensors = std::vector<std::string>{
             "0.conv.weight.tensor",      "0.conv.bias.tensor",
 
             "1.conv.weight.tensor",      "1.conv.bias.tensor",
@@ -840,7 +846,7 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const CRFModelConfig &model_config,
                                        const int batch_size,
                                        const int chunk_size,
-                                       const torch::TensorOptions &options) {
+                                       const torch::TensorOptions &options) {   // Data loading
 #if USE_CUDA_LSTM
     if (options.device() != torch::kCPU) {
         const bool expand_blanks = false;

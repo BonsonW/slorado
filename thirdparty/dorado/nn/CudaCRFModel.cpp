@@ -18,7 +18,7 @@ public:
     CudaCaller(const std::string &model_path,
                int chunk_size,
                int batch_size,
-               const std::string &device) {
+               const std::string &device) { // Data loading
         isCUDA = true;
         startTime = realtime();
         const auto model_config = load_crf_model_config(model_path);
@@ -40,6 +40,7 @@ public:
     }
 
     ~CudaCaller() {
+        std::cout << "\nCuda_CRF 44\n" << std::endl; //Test
         startTime = realtime();
         std::unique_lock<std::mutex> input_lock(m_input_lock);
         m_terminate = true;
@@ -66,7 +67,7 @@ public:
     std::vector<DecodedChunk> call_chunks(torch::Tensor &input,
                                           torch::Tensor &output,
                                           int num_chunks,
-                                          c10::cuda::CUDAStream stream) {
+                                          c10::cuda::CUDAStream stream) {   // data loading
         startTime = realtime();
         subStartTime = realtime();
         c10::cuda::CUDAStreamGuard stream_guard(stream);
@@ -111,7 +112,7 @@ public:
         return m_decoder->cpu_part(output);
     }
 
-    void cuda_thread_fn() {
+    void cuda_thread_fn() { // Data loading
         startTime = realtime();
         torch::InferenceMode guard;
         c10::cuda::CUDAGuard device_guard(m_options.device());
@@ -164,13 +165,13 @@ public:
 std::shared_ptr<CudaCaller> create_cuda_caller(const std::string &model_path,
                                                int chunk_size,
                                                int batch_size,
-                                               const std::string &device) {
+                                               const std::string &device) { //Data loading
     return std::make_shared<CudaCaller>(model_path, chunk_size, batch_size, device);
 }
 
 CudaModelRunner::CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_size, int batch_size)
         : m_caller(caller),
-          m_stream(c10::cuda::getStreamFromPool(false, m_caller->m_options.device().index())) {
+          m_stream(c10::cuda::getStreamFromPool(false, m_caller->m_options.device().index())) { // Data loading
     // adjust chunk size to be a multiple of the stride
     chunk_size -= chunk_size % model_stride();
 
@@ -188,11 +189,11 @@ CudaModelRunner::CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_s
     call_chunks(batch_size);
 }
 
-void CudaModelRunner::accept_chunk(int chunk_idx, at::Tensor slice) {
+void CudaModelRunner::accept_chunk(int chunk_idx, at::Tensor slice) {   // Data processing
     m_input.index_put_({chunk_idx, torch::indexing::Ellipsis}, slice);
 }
 
-std::vector<DecodedChunk> CudaModelRunner::call_chunks(int num_chunks) {
+std::vector<DecodedChunk> CudaModelRunner::call_chunks(int num_chunks) {    // Data loading
     return m_caller->call_chunks(m_input, m_output, num_chunks, m_stream);
 }
 
