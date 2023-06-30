@@ -52,6 +52,7 @@ public:
     }
 
     struct NNTask {
+        std::cout << "\nCuda_CRF 56\n" << std::endl; //Test
         // startTime = realtime();
         NNTask(torch::Tensor input_, int num_chunks_) : input(input_), num_chunks(num_chunks_) {}
         torch::Tensor input;
@@ -128,6 +129,7 @@ public:
     }
 
     // startTime = realtime();
+    std::cout << "\nCuda_CRF 153\n" << std::endl; //Test
     std::string m_device;
     torch::TensorOptions m_options;
     std::unique_ptr<GPUDecoder> m_decoder;
@@ -185,3 +187,4 @@ std::vector<DecodedChunk> CudaModelRunner::call_chunks(int num_chunks) {
 
 size_t CudaModelRunner::model_stride() const { return m_caller->m_model_stride; }
 size_t CudaModelRunner::chunk_size() const { return m_input.size(2); }
+std::cout << "\nCuda_CRF 211\n" << std::endl; //Test
