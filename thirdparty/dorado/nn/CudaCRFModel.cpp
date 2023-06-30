@@ -40,7 +40,6 @@ public:
     }
 
     ~CudaCaller() {
-        std::cout << "\nCuda_CRF 44\n" << std::endl; //Test
         startTime = realtime();
         std::unique_lock<std::mutex> input_lock(m_input_lock);
         m_terminate = true;
