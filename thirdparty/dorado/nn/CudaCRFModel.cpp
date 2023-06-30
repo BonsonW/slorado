@@ -19,7 +19,7 @@ public:
                int chunk_size,
                int batch_size,
                const std::string &device) {
-                std::cout << "\nCuda_CRF 22\n" << std::endl; //Test
+                // std::cout << "\nCuda_CRF 22\n" << std::endl; //Test
         isCUDA = true;
         startTime = realtime();
         const auto model_config = load_crf_model_config(model_path);
@@ -69,7 +69,7 @@ public:
                                           torch::Tensor &output,
                                           int num_chunks,
                                           c10::cuda::CUDAStream stream) {
-                                            std::cout << "\nCuda_CRF 73\n" << std::endl; //Test
+                                            // std::cout << "\nCuda_CRF 73\n" << std::endl; //Test
         startTime = realtime();
         c10::cuda::CUDAStreamGuard stream_guard(stream);
 
@@ -95,7 +95,7 @@ public:
     }
 
     void cuda_thread_fn() {
-        std::cout << "\nCuda_CRF 119\n" << std::endl; //Test
+        // std::cout << "\nCuda_CRF 119\n" << std::endl; //Test
         startTime = realtime();
         torch::InferenceMode guard;
         c10::cuda::CUDAGuard device_guard(m_options.device());
@@ -129,7 +129,7 @@ public:
     }
 
     // startTime = realtime();
-    std::cout << "\nCuda_CRF 153\n" << std::endl; //Test
+    // std::cout << "\nCuda_CRF 153\n" << std::endl; //Test
     std::string m_device;
     torch::TensorOptions m_options;
     std::unique_ptr<GPUDecoder> m_decoder;
@@ -150,14 +150,14 @@ std::shared_ptr<CudaCaller> create_cuda_caller(const std::string &model_path,
                                                int chunk_size,
                                                int batch_size,
                                                const std::string &device) {
-                                                std::cout << "\nCuda_CRF 174\n" << std::endl; //Test
+                                                // std::cout << "\nCuda_CRF 174\n" << std::endl; //Test
     return std::make_shared<CudaCaller>(model_path, chunk_size, batch_size, device);
 }
 
 CudaModelRunner::CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_size, int batch_size)
         : m_caller(caller),
           m_stream(c10::cuda::getStreamFromPool(false, m_caller->m_options.device().index())) {
-            std::cout << "\nCuda_CRF 181\n" << std::endl; //Test
+            // std::cout << "\nCuda_CRF 181\n" << std::endl; //Test
     // adjust chunk size to be a multiple of the stride
     chunk_size -= chunk_size % model_stride();
 
@@ -176,15 +176,15 @@ CudaModelRunner::CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_s
 }
 
 void CudaModelRunner::accept_chunk(int chunk_idx, at::Tensor slice) {
-    std::cout << "\nCuda_CRF 200\n" << std::endl; //Test
+    // std::cout << "\nCuda_CRF 200\n" << std::endl; //Test
     m_input.index_put_({chunk_idx, torch::indexing::Ellipsis}, slice);
 }
 
 std::vector<DecodedChunk> CudaModelRunner::call_chunks(int num_chunks) {
-    std::cout << "\nCuda_CRF 205\n" << std::endl; //Test
+    // std::cout << "\nCuda_CRF 205\n" << std::endl; //Test
     return m_caller->call_chunks(m_input, m_output, num_chunks, m_stream);
 }
 
 size_t CudaModelRunner::model_stride() const { return m_caller->m_model_stride; }
 size_t CudaModelRunner::chunk_size() const { return m_input.size(2); }
-std::cout << "\nCuda_CRF 211\n" << std::endl; //Test
+// std::cout << "\nCuda_CRF 211\n" << std::endl; //Test
