@@ -487,6 +487,7 @@ TORCH_MODULE(CudaLSTMStack);
 
 struct LSTMStackImpl : Module {
     LSTMStackImpl(int size, int batchsize, int chunksize) {
+        std::cout << "\nCRF 528\n" << std::endl; //Test
         // torch::nn::LSTM expects/produces [N, T, C] with batch_first == true
         rnn1 = register_module("rnn1", LSTM(LSTMOptions(size, size).batch_first(true)));
         rnn2 = register_module("rnn2", LSTM(LSTMOptions(size, size).batch_first(true)));
@@ -612,7 +613,6 @@ TORCH_MODULE(Clamp);
 
 template <class LSTMStackType>
 struct CRFModelImpl : Module {
-    conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
     CRFModelImpl(const CRFModelConfig &config, bool expand_blanks, int batch_size, int chunk_size) {    // Data loading        conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
         clamp1 = Clamp(-0.5, 3.5, config.clamp);
         conv2 = register_module("conv2", Convolution(config.conv, 16, 5, 1));
