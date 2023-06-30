@@ -52,7 +52,7 @@ public:
     }
 
     struct NNTask {
-        std::cout << "\nCuda_CRF 56\n" << std::endl; //Test
+        // std::cout << "\nCuda_CRF 56\n" << std::endl; //Test
         // startTime = realtime();
         NNTask(torch::Tensor input_, int num_chunks_) : input(input_), num_chunks(num_chunks_) {}
         torch::Tensor input;
