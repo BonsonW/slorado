@@ -24,6 +24,23 @@ extern double forward_l536;
 extern double forward_l577;
 extern double forward_l642;
 
+extern double convolutionImplT;
+extern double cudaLSTMImplT;
+extern double cudaLSTMStackImplT;
+extern double forward_cublasT;
+extern double rearrange_individual_weightsT;
+extern double rearrange_weightsT;
+extern double quantize_tensorT;
+extern double quantize_weightsT;
+extern double forward_quantizedT;
+
+extern double call_ch_while;
+extern double stream_guardT;
+extern double taskT;
+extern double lock_guardT;
+extern double notify_oneT;
+extern double unique_lockT;
+
 extern double x_flipt;
 extern double rnn1t;
 extern double rnn2t;
