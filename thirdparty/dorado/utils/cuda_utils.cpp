@@ -20,6 +20,7 @@ extern "C" {
 #include <vector>
 
 void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
+    std::cout << "\nmatMul\n" << std::endl; //Test
     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
     constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
     assert(A.dtype() == torch::kF16 && B.dtype() == torch::kF16 && C.dtype() == torch::kF16);
