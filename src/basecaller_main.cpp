@@ -352,11 +352,12 @@ int basecaller_main(int argc, char* argv[]) {
                 fprintf(stderr, "\n[%s]                             - 'x = y1.flip(1)' time: %.3f sec",__func__, rnn1tflip);
             }
             else{
-                fprintf(stderr, "\n[%s]     - matmul time: %.6f sec",__func__, matMul);
+                fprintf(stderr, "\n\n[%s]     - matmul time: %.6f sec",__func__, matMul);
                 fprintf(stderr, "\n[%s]     - cublasGemmEx time: %.6f sec",__func__, cublasGemmExT);
+                fprintf(stderr, "\n[%s]     - assert time: %.6f sec",__func__, assertT);
             }
             // fprintf(stderr, "\n[%s]     - matmul time: %f sec",__func__, matMul);
-            fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
+            fprintf(stderr, "\n\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
     //}
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
 

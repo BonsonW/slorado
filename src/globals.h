@@ -46,7 +46,7 @@ extern double SubCudaCallerT;
 
 extern double matMul;
 extern double cublasGemmExT;
-
+extern double assertT;
 
 // Function to measure time difference
 double getTimeDifference();

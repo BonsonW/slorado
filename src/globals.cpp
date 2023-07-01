@@ -42,6 +42,7 @@ double SubCudaCallerT;
 
 double matMul;
 double cublasGemmExT;
+double assertT;
 
 // Function to measure time difference in seconds
 double getTimeDifference() {
