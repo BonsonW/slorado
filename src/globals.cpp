@@ -41,6 +41,7 @@ double cuda_thread_fnT;
 double SubCudaCallerT;
 
 double matMul;
+double cublasGemmExT;
 
 // Function to measure time difference in seconds
 double getTimeDifference() {

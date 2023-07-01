@@ -353,6 +353,7 @@ int basecaller_main(int argc, char* argv[]) {
             }
             else{
                 fprintf(stderr, "\n[%s]     - matmul time: %.6f sec",__func__, matMul);
+                fprintf(stderr, "\n[%s]     - cublasGemmEx time: %.6f sec",__func__, cublasGemmExT);
             }
             // fprintf(stderr, "\n[%s]     - matmul time: %f sec",__func__, matMul);
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);

@@ -45,6 +45,7 @@ extern double cuda_thread_fnT;
 extern double SubCudaCallerT;
 
 extern double matMul;
+extern double cublasGemmExT;
 
 
 // Function to measure time difference

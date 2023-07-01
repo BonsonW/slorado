@@ -32,6 +32,8 @@ void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Te
     assert(A.size(0) == C.size(0));  // M
     assert(B.size(1) == C.size(1));  // N
     assert(A.size(1) == B.size(0));  // K
+
+    cublasGemmExT -= realtime();
     auto res =
             cublasGemmEx(at::cuda::getCurrentCUDABlasHandle(), CUBLAS_OP_N, CUBLAS_OP_N, B.size(1),
                          A.size(0), A.size(1), &HALF_ONE, B.data_ptr(), CUDA_R_16F, B.stride(0),
@@ -41,6 +43,8 @@ void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Te
         // spdlog::error("CuBLAS error {}", int(res));
         exit(EXIT_FAILURE);
     }
+    
+    cublasGemmExT += realtime();
     matMul += realtime();
 
 }
