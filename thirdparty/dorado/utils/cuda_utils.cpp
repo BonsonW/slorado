@@ -1,5 +1,8 @@
 #include "cuda_utils.h"
 
+#include "../../../src/globals.h"
+#include "../../../src/misc.h"
+
 #include "../nn/CRFModel.h"
 #include "torch/torch.h"
 
@@ -21,6 +24,7 @@ extern "C" {
 
 void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
     std::cout << "\nmatMul\n" << std::endl; //Test
+    matMul -= realtime();
     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
     constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
     assert(A.dtype() == torch::kF16 && B.dtype() == torch::kF16 && C.dtype() == torch::kF16);
@@ -37,6 +41,8 @@ void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Te
         // spdlog::error("CuBLAS error {}", int(res));
         exit(EXIT_FAILURE);
     }
+    matMul += realtime();
+
 }
 
 void matmul_f16_torch(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
