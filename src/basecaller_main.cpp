@@ -328,12 +328,12 @@ int basecaller_main(int argc, char* argv[]) {
                 // fprintf(stderr, "\n[%s]                     - notify_oneT time: %.3f sec",__func__, notify_oneT);
                 // fprintf(stderr, "\n[%s]                     - unique_lockT time: %.3f sec",__func__, unique_lockT);   
 
-                fprintf(stderr, "\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
-                fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
-                fprintf(stderr, "\n[%s]                 - NNTaskT time: %.3f sec",__func__, NNTaskT);
-                fprintf(stderr, "\n[%s]                 - call_chunks time: %.3f sec",__func__, call_chunksT);
-                fprintf(stderr, "\n[%s]                 - cuda_thread_fn time: %.3f sec",__func__, cuda_thread_fnT);
-                fprintf(stderr, "\n[%s]                 - SubCudaCallerT time: %.3f sec",__func__, SubCudaCallerT);
+                // fprintf(stderr, "\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
+                // fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
+                // fprintf(stderr, "\n[%s]                 - NNTaskT time: %.3f sec",__func__, NNTaskT);
+                // fprintf(stderr, "\n[%s]                 - call_chunks time: %.3f sec",__func__, call_chunksT);
+                // fprintf(stderr, "\n[%s]                 - cuda_thread_fn time: %.3f sec",__func__, cuda_thread_fnT);
+                // fprintf(stderr, "\n[%s]                 - SubCudaCallerT time: %.3f sec",__func__, SubCudaCallerT);
 
             }
         
