@@ -44,8 +44,9 @@ extern double call_chunksT;
 extern double cuda_thread_fnT;
 extern double SubCudaCallerT;
 
-
-
+extern double matMul;
+extern double cublasGemmExT;
+extern double assertT;
 
 // Function to measure time difference
 double getTimeDifference();
