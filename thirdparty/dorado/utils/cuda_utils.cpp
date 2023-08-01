@@ -28,7 +28,7 @@ void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Te
     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
     constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
 
-    std::cout << "\nA: \n" << A.lengths << std::endl; //Test
+    std::cout << "\nA: \n" << A.sizes() << std::endl; // Test
 
         
     // assertT -= realtime();
