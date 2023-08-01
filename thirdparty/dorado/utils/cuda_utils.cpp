@@ -30,7 +30,7 @@ void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Te
 
     std::cout << "\nA: " << A.sizes() << std::endl; // Test
     std::cout << "\nB: " << B.sizes() << std::endl; // Test
-    std::cout << "\nB: " << C.sizes() << std::endl; // Test
+    std::cout << "\nC: " << C.sizes() << std::endl; // Test
 
         
     // assertT -= realtime();
