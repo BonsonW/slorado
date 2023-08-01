@@ -27,6 +27,9 @@ void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Te
     // matMul -= realtime();
     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
     constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
+
+    std::cout << "\nA: \n" << A.dtype() << std::endl; //Test
+
         
     // assertT -= realtime();
     assert(A.dtype() == torch::kF16 && B.dtype() == torch::kF16 && C.dtype() == torch::kF16);
