@@ -19,6 +19,7 @@ double forward_l469;
 double forward_l536;
 double forward_l577;
 double forward_l642;
+double cudaLSTM;
 
 double x_flipt;
 double rnn1t;

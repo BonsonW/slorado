@@ -23,6 +23,7 @@ extern double forward_l469;
 extern double forward_l536;
 extern double forward_l577;
 extern double forward_l642;
+extern double cudaLSTM;
 
 extern double x_flipt;
 extern double rnn1t;

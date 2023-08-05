@@ -205,6 +205,7 @@ struct CudaLSTMImpl : Module {
         // std::cout << "\nCRF 212\n" << std::endl; //Test
         // startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
+        cudaLSTM -= realtime();
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
         auto weight_ih = weights.slice(1, 0, layer_size);
@@ -219,6 +220,7 @@ struct CudaLSTMImpl : Module {
         register_parameter("weight_hh", weight_hh, false);
         register_parameter("bias_ih", bias, false);
         register_parameter("bias_hh", bias_hh, false);
+        cudaLSTM += realtime();
     }
 
     torch::Tensor weights, bias;

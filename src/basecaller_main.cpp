@@ -302,7 +302,7 @@ int basecaller_main(int argc, char* argv[]) {
                 // fprintf(stderr, "\n[%s]                     - Forward in CudaLSTMStackImpl time: %.3f sec",__func__, forward_l469);
                 // fprintf(stderr, "\n[%s]                     - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
                 // fprintf(stderr, "\n[%s]                     - Forward in ClampImpl time: %.3f sec",__func__, forward_l577);
-                // fprintf(stderr, "\n[%s]                     - Forward in CRFModelImpl time: %.3f sec",__func__, forward_l642);
+            fprintf(stderr, "\n[%s]                     - cudaLSTM time: %.3f sec",__func__, cudaLSTM);
             // }
             // else{
                 // fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImplT time: %.3f sec",__func__, convolutionImplT);
