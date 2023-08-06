@@ -40,6 +40,7 @@ double CudaCallerT2;
 double CudaCallerT3;
 double CudaCallerT4;
 double CudaCallerT5;
+double CudaCallerT6;
 double NCudaCallerT;
 double NNTaskT;
 double call_chunksT;

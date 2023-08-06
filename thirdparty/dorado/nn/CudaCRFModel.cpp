@@ -42,9 +42,10 @@ public:
 
         m_options = torch::TensorOptions().dtype(GPUDecoder::dtype).device(device);
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
-        CudaCallerT5 -= realtime();
-
+        CudaCallerT5 += realtime();
+        CudaCallerT6 -= realtime();
         m_cuda_thread.reset(new std::thread(&CudaCaller::cuda_thread_fn, this));
+        CudaCallerT6 += realtime();
         CudaCallerT += realtime();
 
         // CudaCallerT += getSubTimeDifference();
