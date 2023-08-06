@@ -21,7 +21,7 @@ public:
                const std::string &device) {
                 // std::cout << "\nCuda_CRF 22\n" << std::endl; //Test
         // isCUDA = true;
-        // startTime = realtime();
+        CudaCallerT -= realtime();
         const auto model_config = load_crf_model_config(model_path);
         
         m_model_stride = static_cast<size_t>(model_config.stride);
@@ -36,18 +36,19 @@ public:
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
 
         m_cuda_thread.reset(new std::thread(&CudaCaller::cuda_thread_fn, this));
-        // endTime = realtime();
+        CudaCallerT += realtime();
+
         // CudaCallerT += getSubTimeDifference();
     }
 
     ~CudaCaller() {
-        // startTime = realtime();
+        NCudaCallerT -= realtime();
         std::unique_lock<std::mutex> input_lock(m_input_lock);
         m_terminate = true;
         input_lock.unlock();
         m_input_cv.notify_one();
         m_cuda_thread->join();
-        // endTime = realtime();
+        NCudaCallerT += realtime();
         // NCudaCallerT += getTimeDifference();
     }
 
@@ -70,7 +71,7 @@ public:
                                           int num_chunks,
                                           c10::cuda::CUDAStream stream) {
                                             // std::cout << "\nCuda_CRF 73\n" << std::endl; //Test
-        // startTime = realtime();
+        call_chunksT -= realtime();
         c10::cuda::CUDAStreamGuard stream_guard(stream);
 
         if (num_chunks == 0) {
@@ -90,6 +91,7 @@ public:
 
         output.copy_(task.out);
         // endTime = realtime();
+        call_chunksT += realtime();
         // call_chunksT += getTimeDifference();
         return m_decoder->cpu_part(output);
     }
