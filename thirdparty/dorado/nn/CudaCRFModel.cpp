@@ -22,18 +22,27 @@ public:
                 // std::cout << "\nCuda_CRF 22\n" << std::endl; //Test
         // isCUDA = true;
         CudaCallerT -= realtime();
+        CudaCallerT1 -= realtime();
         const auto model_config = load_crf_model_config(model_path);
         
         m_model_stride = static_cast<size_t>(model_config.stride);
-
+        CudaCallerT1 += realtime();
+        CudaCallerT2 -= realtime();
         m_decoder_options = DecoderOptions();
+        CudaCallerT2 += realtime();
+        CudaCallerT3 -= realtime();
         m_decoder_options.q_shift = model_config.qbias;
         m_decoder_options.q_scale = model_config.qscale;
+        CudaCallerT3 += realtime();
+        CudaCallerT4 -= realtime();
         m_decoder = std::make_unique<GPUDecoder>();
         m_num_input_features = model_config.num_features;
+        CudaCallerT4 += realtime();
+        CudaCallerT5 -= realtime();
 
         m_options = torch::TensorOptions().dtype(GPUDecoder::dtype).device(device);
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
+        CudaCallerT5 -= realtime();
 
         m_cuda_thread.reset(new std::thread(&CudaCaller::cuda_thread_fn, this));
         CudaCallerT += realtime();

@@ -35,6 +35,11 @@ double rnn1tflip;
 
 //isCUDA
 double CudaCallerT;
+double CudaCallerT1;
+double CudaCallerT2;
+double CudaCallerT3;
+double CudaCallerT4;
+double CudaCallerT5;
 double NCudaCallerT;
 double NNTaskT;
 double call_chunksT;

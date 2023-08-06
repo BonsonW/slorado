@@ -39,6 +39,11 @@ extern double rnn1tflip;
 
 //isCUDA
 extern double CudaCallerT;
+extern double CudaCallerT1;
+extern double CudaCallerT2;
+extern double CudaCallerT3;
+extern double CudaCallerT4;
+extern double CudaCallerT5;
 extern double NCudaCallerT;
 extern double NNTaskT;
 extern double call_chunksT;
