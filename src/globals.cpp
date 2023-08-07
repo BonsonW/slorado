@@ -50,7 +50,7 @@ double SubCudaCallerT;
 double matMul;
 double cublasGemmExT;
 double assertT;
-double NNTaskT;
+double NNTaskT0;
 double NNTaskT1;
 double NNTaskT2;
 

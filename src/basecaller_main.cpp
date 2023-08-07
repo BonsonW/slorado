@@ -339,7 +339,9 @@ int basecaller_main(int argc, char* argv[]) {
 
 
             fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
-                // fprintf(stderr, "\n[%s]                 - NNTaskT time: %.3f sec",__func__, NNTaskT);
+                fprintf(stderr, "\n[%s]                 - NNTaskT0 time: %.3f sec",__func__, NNTaskT0);
+                fprintf(stderr, "\n[%s]                 - NNTaskT1 time: %.3f sec",__func__, NNTaskT1);
+                fprintf(stderr, "\n[%s]                 - NNTaskT2 time: %.3f sec",__func__, NNTaskT2);
                 fprintf(stderr, "\n[%s]                 - call_chunks time: %.3f sec",__func__, call_chunksT);
                 // fprintf(stderr, "\n[%s]                 - cuda_thread_fn time: %.3f sec",__func__, cuda_thread_fnT);
                 // fprintf(stderr, "\n[%s]                 - SubCudaCallerT time: %.3f sec",__func__, SubCudaCallerT);

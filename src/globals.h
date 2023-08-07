@@ -51,7 +51,7 @@ extern double call_chunksT;
 extern double cuda_thread_fnT;
 extern double SubCudaCallerT;
 
-extern double NNTaskT;
+extern double NNTaskT0;
 extern double NNTaskT1;
 extern double NNTaskT2;
 
