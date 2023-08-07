@@ -89,9 +89,9 @@ public:
             return std::vector<DecodedChunk>();
         }
 
-        NNTaskT -= realtime();
+        NNTaskT0 -= realtime();
         NNTask task(input.to(m_options.device()), num_chunks);
-        NNTaskT += realtime();
+        NNTaskT0 += realtime();
         NNTaskT1 -= realtime();
         {
             std::lock_guard<std::mutex> lock(m_input_lock);
