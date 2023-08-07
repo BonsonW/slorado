@@ -333,9 +333,9 @@ int basecaller_main(int argc, char* argv[]) {
             // fprintf(stderr, "\n[%s]                     - CudaCaller1 time: %.3f sec",__func__, CudaCallerT1);
             // fprintf(stderr, "\n[%s]                     - CudaCaller2 time: %.3f sec",__func__, CudaCallerT2);
             // fprintf(stderr, "\n[%s]                     - CudaCaller3 time: %.3f sec",__func__, CudaCallerT3);
-            fprintf(stderr, "\n[%s]                     - CudaCaller4 time: %.3f sec",__func__, CudaCallerT4);
-            fprintf(stderr, "\n[%s]                     - CudaCaller5 time: %.3f sec",__func__, CudaCallerT5);
-            // fprintf(stderr, "\n[%s]                     - CudaCaller6 time: %.3f sec",__func__, CudaCallerT6);
+            // fprintf(stderr, "\n[%s]                     - CudaCaller4 time: %.3f sec",__func__, CudaCallerT4);
+            fprintf(stderr, "\n[%s]                     - load_crf_model time: %.3f sec",__func__, CudaCallerT5);
+            fprintf(stderr, "\n[%s]                     - in load_crf_model time: %.3f sec",__func__, load_crf_modelT);
 
 
             fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);

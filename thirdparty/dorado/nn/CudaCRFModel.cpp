@@ -38,10 +38,9 @@ public:
         m_decoder = std::make_unique<GPUDecoder>();
         m_num_input_features = model_config.num_features;
         // CudaCallerT4 += realtime();
-        CudaCallerT4 -= realtime();
 
         m_options = torch::TensorOptions().dtype(GPUDecoder::dtype).device(device);
-        CudaCallerT4 += realtime();
+       
         CudaCallerT5 -= realtime();
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
         CudaCallerT5 += realtime();
