@@ -88,17 +88,24 @@ public:
         if (num_chunks == 0) {
             return std::vector<DecodedChunk>();
         }
+
+        NNTaskT -= realtime();
         NNTask task(input.to(m_options.device()), num_chunks);
+        NNTaskT += realtime();
+        NNTaskT1 -= realtime();
         {
             std::lock_guard<std::mutex> lock(m_input_lock);
             m_input_queue.push_front(&task);
         }
         m_input_cv.notify_one();
-
+        NNTaskT1 += realtime();
+        NNTaskT2 -= realtime();
         std::unique_lock<std::mutex> lock(task.mut);
         while (!task.done) {
             task.cv.wait(lock);
         }
+        NNTaskT2 += realtime();
+
 
         output.copy_(task.out);
         // endTime = realtime();
