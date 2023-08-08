@@ -21,7 +21,7 @@ public:
                const std::string &device) {
                 // std::cout << "\nCuda_CRF 22\n" << std::endl; //Test
         // isCUDA = true;
-        // CudaCallerT -= realtime();
+        CudaCallerT -= realtime();
         // CudaCallerT1 -= realtime();
         const auto model_config = load_crf_model_config(model_path);
         
@@ -89,18 +89,20 @@ public:
             return std::vector<DecodedChunk>();
         }
 
-        NNTaskT0 -= realtime();
+        // NNTaskT0 -= realtime();
         NNTask task(input.to(m_options.device()), num_chunks);
-        NNTaskT0 += realtime();
-        NNTaskT1 -= realtime();
+        // NNTaskT0 += realtime();
+        // NNTaskT1 -= realtime();
         {
             std::lock_guard<std::mutex> lock(m_input_lock);
             m_input_queue.push_front(&task);
         }
         m_input_cv.notify_one();
-        NNTaskT1 += realtime();
-        NNTaskT2 -= realtime();
+        // NNTaskT1 += realtime();
+        
         std::unique_lock<std::mutex> lock(task.mut);
+
+        NNTaskT2 -= realtime();
         while (!task.done) {
             task.cv.wait(lock);
         }
