@@ -854,9 +854,10 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
         load_crf_modelT -= realtime();
         auto model = CudaCRFModel(model_config, expand_blanks, batch_size, chunk_size);
         load_crf_modelT += realtime();
+        // load_crf_modelT1 -= realtime();
         return populate_model(model, path, options, model_config.decomposition,
                               model_config.bias);
-    
+        // load_crf_modelT1 -= realtime();
 
     } else
 #endif

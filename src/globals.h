@@ -45,6 +45,7 @@ extern double CudaCallerT3;
 extern double CudaCallerT4;
 extern double CudaCallerT5;
 extern double load_crf_modelT;
+extern double load_crf_modelT1;
 extern double NCudaCallerT;
 extern double NNTaskT;
 extern double call_chunksT;

@@ -41,6 +41,7 @@ double CudaCallerT3;
 double CudaCallerT4;
 double CudaCallerT5;
 double load_crf_modelT;
+double load_crf_modelT1;
 double NCudaCallerT;
 double NNTaskT;
 double call_chunksT;
