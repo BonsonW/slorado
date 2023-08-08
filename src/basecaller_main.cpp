@@ -294,7 +294,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
             // if(!isCUDA){
-                fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
+                // fprintf(stderr, "\n[%s]                 - Beam search emplace time: %.3f sec",__func__, runner_ts[i]->time_beam_search_emplace);
                 // fprintf(stderr, "\n[%s]                 - Forward time: %.3f sec",__func__, time_forward);
 
                 // fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImpl time: %.3f sec",__func__, forward_l62);
@@ -302,7 +302,7 @@ int basecaller_main(int argc, char* argv[]) {
                 // fprintf(stderr, "\n[%s]                     - Forward in CudaLSTMStackImpl time: %.3f sec",__func__, forward_l469);
                 // fprintf(stderr, "\n[%s]                     - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
                 // fprintf(stderr, "\n[%s]                     - Forward in ClampImpl time: %.3f sec",__func__, forward_l577);
-            fprintf(stderr, "\n[%s]                     - cudaLSTM time: %.3f sec",__func__, cudaLSTM);
+            fprintf(stderr, "\n\n[%s]              - cudaLSTM time: %.3f sec",__func__, cudaLSTM);
             // }
             // else{
                 // fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImplT time: %.3f sec",__func__, convolutionImplT);
@@ -334,16 +334,16 @@ int basecaller_main(int argc, char* argv[]) {
             // fprintf(stderr, "\n[%s]                     - CudaCaller2 time: %.3f sec",__func__, CudaCallerT2);
             // fprintf(stderr, "\n[%s]                     - CudaCaller3 time: %.3f sec",__func__, CudaCallerT3);
             // fprintf(stderr, "\n[%s]                     - CudaCaller4 time: %.3f sec",__func__, CudaCallerT4);
-            fprintf(stderr, "\n[%s]                     - load_crf_model time: %.3f sec",__func__, CudaCallerT5);
-            fprintf(stderr, "\n[%s]                         - initialize crf_model time: %.3f sec",__func__, load_crf_modelT);
-
+            fprintf(stderr, "\n[%s]                 - load_crf_model time: %.3f sec",__func__, CudaCallerT5);
+            fprintf(stderr, "\n[%s]                         - Initialize crf_model time: %.3f sec",__func__, load_crf_modelT);
+            fprintf(stderr, "\n[%s]                         - Populate crf_model time: %.3f sec",__func__, CudaCallerT5 - load_crf_modelT);
 
             // fprintf(stderr, "\n[%s]                 - ~CudaCallerT time: %.3f sec",__func__, NCudaCallerT);
                 // fprintf(stderr, "\n[%s]                 - NNTaskT0 time: %.3f sec",__func__, NNTaskT0);
                 // fprintf(stderr, "\n[%s]                 - NNTaskT1 time: %.3f sec",__func__, NNTaskT1);
+                fprintf(stderr, "\n[%s]              - call_chunks time: %.3f sec",__func__, call_chunksT);
                 fprintf(stderr, "\n[%s]                 - NNTaskT while loop time: %.3f sec",__func__, NNTaskT2);
-                fprintf(stderr, "\n[%s]                 - call_chunks time: %.3f sec",__func__, call_chunksT);
-                // fprintf(stderr, "\n[%s]                 - cuda_thread_fn time: %.3f sec",__func__, cuda_thread_fnT);
+                fprintf(stderr, "\n\n[%s]               - cublasGemmEx time: %.3f sec",__func__, cublasGemmExT);
                 // fprintf(stderr, "\n[%s]                 - SubCudaCallerT time: %.3f sec",__func__, SubCudaCallerT);
 
             // }
@@ -364,7 +364,6 @@ int basecaller_main(int argc, char* argv[]) {
             // }
             // else{
                 // fprintf(stderr, "\n\n[%s]     - matmul time: %.6f sec",__func__, matMul);
-            fprintf(stderr, "\n[%s]     - cublasGemmEx time: %.6f sec",__func__, cublasGemmExT);
                 // fprintf(stderr, "\n[%s]     - assert time: %.6f sec",__func__, assertT);
             // }
             // fprintf(stderr, "\n[%s]     - matmul time: %f sec",__func__, matMul);
