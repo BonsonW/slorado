@@ -23,6 +23,7 @@ extern double forward_l469;
 extern double forward_l536;
 extern double forward_l577;
 extern double forward_l642;
+extern double cudaLSTM;
 
 extern double x_flipt;
 extern double rnn1t;
@@ -38,11 +39,22 @@ extern double rnn1tflip;
 
 //isCUDA
 extern double CudaCallerT;
+extern double CudaCallerT1;
+extern double CudaCallerT2;
+extern double CudaCallerT3;
+extern double CudaCallerT4;
+extern double CudaCallerT5;
+extern double load_crf_modelT;
+extern double load_crf_modelT1;
 extern double NCudaCallerT;
 extern double NNTaskT;
 extern double call_chunksT;
 extern double cuda_thread_fnT;
 extern double SubCudaCallerT;
+
+extern double NNTaskT0;
+extern double NNTaskT1;
+extern double NNTaskT2;
 
 extern double matMul;
 extern double cublasGemmExT;
