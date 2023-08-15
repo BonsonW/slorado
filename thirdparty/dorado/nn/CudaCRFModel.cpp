@@ -102,11 +102,13 @@ public:
         
         std::unique_lock<std::mutex> lock(task.mut);
 
-        NNTaskT2 -= realtime();
         while (!task.done) {
+            NNTaskT2 -= realtime();
             task.cv.wait(lock);
+            NNTaskT2 += realtime();
+
         }
-        NNTaskT2 += realtime();
+        // NNTaskT2 += realtime();
 
 
         output.copy_(task.out);
