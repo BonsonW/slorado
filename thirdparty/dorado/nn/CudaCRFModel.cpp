@@ -104,7 +104,7 @@ public:
 
         while (!task.done) {
             NNTaskT2 -= realtime();
-            // task.cv.wait(lock);
+            task.cv.wait(lock);
             NNTaskT2 += realtime();
 
         }
