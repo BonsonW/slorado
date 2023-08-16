@@ -135,10 +135,11 @@ public:
                 m_input_cv.wait_for(input_lock, 100ms);
             }
             // TODO: finish work before terminating?
+            cuda_thread_fnT += realtime();
             if (m_terminate) {
-                cuda_thread_fnT += realtime();
                 return;
             }
+            cuda_thread_fnT -= realtime();
 
             NNTask *task = m_input_queue.back();
             m_input_queue.pop_back();
