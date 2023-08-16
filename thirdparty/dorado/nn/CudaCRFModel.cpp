@@ -136,6 +136,7 @@ public:
             }
             // TODO: finish work before terminating?
             if (m_terminate) {
+                cuda_thread_fnT += realtime();
                 return;
             }
 
