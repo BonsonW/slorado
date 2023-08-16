@@ -46,6 +46,7 @@ double NCudaCallerT;
 double NNTaskT;
 double call_chunksT;
 double cuda_thread_fnT;
+double cuda_thread_fnT2;
 double SubCudaCallerT;
 
 double matMul;

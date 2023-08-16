@@ -139,7 +139,7 @@ public:
             if (m_terminate) {
                 return;
             }
-            cuda_thread_fnT -= realtime();
+            cuda_thread_fnT2 -= realtime();
 
             NNTask *task = m_input_queue.back();
             m_input_queue.pop_back();
@@ -153,7 +153,7 @@ public:
             task->done = true;
             task->cv.notify_one();
             task_lock.unlock();
-            cuda_thread_fnT += realtime();
+            cuda_thread_fnT2 += realtime();
 
         }
         // endTime = realtime();
