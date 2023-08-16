@@ -54,6 +54,7 @@ double assertT;
 double NNTaskT0;
 double NNTaskT1;
 double NNTaskT2;
+double cuda_thread_fnT;
 
 // Function to measure time difference in seconds
 double getTimeDifference() {

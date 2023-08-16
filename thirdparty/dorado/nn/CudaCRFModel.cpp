@@ -126,6 +126,7 @@ public:
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
 
         while (true) {
+            cuda_thread_fnT -= realtime();
             std::unique_lock<std::mutex> input_lock(m_input_lock);
             while (m_input_queue.empty() && !m_terminate) {
                 if(m_input_queue.size() > 0){            
@@ -150,6 +151,8 @@ public:
             task->done = true;
             task->cv.notify_one();
             task_lock.unlock();
+            cuda_thread_fnT += realtime();
+
         }
         // endTime = realtime();
         // cuda_thread_fnT += getTimeDifference();
