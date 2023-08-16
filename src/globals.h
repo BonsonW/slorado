@@ -59,7 +59,6 @@ extern double NNTaskT2;
 extern double matMul;
 extern double cublasGemmExT;
 extern double assertT;
-extern double cuda_thread_fnT;
 
 // Function to measure time difference
 double getTimeDifference();
