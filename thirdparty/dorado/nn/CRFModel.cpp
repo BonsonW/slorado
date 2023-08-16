@@ -230,7 +230,7 @@ struct CudaLSTMImpl : Module {
 TORCH_MODULE(CudaLSTM);
 
 struct CudaLSTMStackImpl : Module {
-    std::cout << "\nCRF 240\n" << std::endl; //Test
+    // std::cout << "\nCRF 240\n" << std::endl; //Test
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
         // startTime = realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
