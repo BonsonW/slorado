@@ -20,7 +20,7 @@ extern "C" {
 
 
 #if USE_CUDA_LSTM
-std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
+// std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
 static bool cuda_lstm_is_quantized(int layer_size) {
 #ifdef DORADO_TX2
     return false;
