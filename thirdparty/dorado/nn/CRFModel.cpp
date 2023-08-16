@@ -20,7 +20,7 @@ extern "C" {
 
 
 #if USE_CUDA_LSTM
-// std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
+std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
 static bool cuda_lstm_is_quantized(int layer_size) {
 #ifdef DORADO_TX2
     return false;
@@ -42,7 +42,7 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
                                        const torch::TensorOptions &options,
                                        bool decomposition,
                                        bool bias) {
-    // std::cout << "\nCRF 45\n" << std::endl; //Test
+    std::cout << "\nCRF 45\n" << std::endl; //Test
     auto state_dict = load_crf_model_weights(path, decomposition, bias);
     model->load_state_dict(state_dict);
     model->to(options.dtype_opt().value().toScalarType());
@@ -57,7 +57,7 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
 struct ConvolutionImpl : Module {
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
             : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
-            // std::cout << "\nCRF 60\n" << std::endl; //Test
+            std::cout << "\nCRF 60\n" << std::endl; //Test
         // startTime = realtime();
         conv = register_module(
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
@@ -202,7 +202,7 @@ struct LinearCRFImpl : Module {
 
 struct CudaLSTMImpl : Module {
     CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
-        // std::cout << "\nCRF 212\n" << std::endl; //Test
+        std::cout << "\nCRF 212\n" << std::endl; //Test
         // startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
         cudaLSTM -= realtime();
@@ -230,7 +230,7 @@ struct CudaLSTMImpl : Module {
 TORCH_MODULE(CudaLSTM);
 
 struct CudaLSTMStackImpl : Module {
-    // std::cout << "\nCRF 240\n" << std::endl; //Test
+    std::cout << "\nCRF 240\n" << std::endl; //Test
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
         // startTime = realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
@@ -476,7 +476,7 @@ struct CudaLSTMStackImpl : Module {
 
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
     torch::Tensor forward(torch::Tensor x) {
-        // std::cout << "\nCRF 501\n" << std::endl; //Test
+        std::cout << "\nCRF 501\n" << std::endl; //Test
         // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         
@@ -503,7 +503,7 @@ TORCH_MODULE(CudaLSTMStack);
 
 struct LSTMStackImpl : Module {
     LSTMStackImpl(int size, int batchsize, int chunksize) {
-        // std::cout << "\nCRF 528\n" << std::endl; //Test
+        std::cout << "\nCRF 528\n" << std::endl; //Test
         // torch::nn::LSTM expects/produces [N, T, C] with batch_first == true
         rnn1 = register_module("rnn1", LSTM(LSTMOptions(size, size).batch_first(true)));
         rnn2 = register_module("rnn2", LSTM(LSTMOptions(size, size).batch_first(true)));
@@ -607,7 +607,7 @@ struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
     torch::Tensor forward(torch::Tensor x) {
-        // std::cout << "\nCRF 633\n" << std::endl; //Test
+        std::cout << "\nCRF 633\n" << std::endl; //Test
         // startTime = realtime();
         // endTime = realtime();
         // time_forward += getTimeDifference();
