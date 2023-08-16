@@ -141,14 +141,23 @@ public:
             }
             cuda_thread_fnT2 -= realtime();
 
+            cuda_thread_fnT3 -= realtime();
             NNTask *task = m_input_queue.back();
+            cuda_thread_fnT3 += realtime();
+            cuda_thread_fnT4 -= realtime();
             m_input_queue.pop_back();
             input_lock.unlock();
+            cuda_thread_fnT4 += realtime();
+
 
             std::unique_lock<std::mutex> task_lock(task->mut);
+            cuda_thread_fnT5 -= realtime();
             auto scores = m_module->forward(task->input);
+            cuda_thread_fnT5 += realtime();
+            cuda_thread_fnT6 -= realtime();
             torch::cuda::synchronize();
             task->out = m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device);
+            cuda_thread_fnT6 += realtime();
             stream.synchronize();
             task->done = true;
             task->cv.notify_one();
