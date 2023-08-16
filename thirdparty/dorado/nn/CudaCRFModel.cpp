@@ -72,6 +72,7 @@ public:
         std::condition_variable cv;
         torch::Tensor out;
         bool done{false};
+        
         int num_chunks;
         // endTime = realtime();
         // NNTaskT += getTimeDifference();

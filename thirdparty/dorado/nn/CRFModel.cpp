@@ -513,6 +513,7 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
+        forward_l536 -= realtime();
         // startTime = realtime();
         // Input is [N, T, C], contiguity optional
 
@@ -594,7 +595,7 @@ struct LSTMStackImpl : Module {
 
         // endTime = realtime();
         // time_forward += getTimeDifference();
-        // forward_l536 += getTimeDifference();
+        forward_l536 += realtime();
 
         // Output is [N, T, C], non-contiguous
         return x;
@@ -607,7 +608,7 @@ struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
     torch::Tensor forward(torch::Tensor x) {
-        std::cout << "\nCRF 633\n" << std::endl; //Test
+        // std::cout << "\nCRF 633\n" << std::endl; //Test
         // startTime = realtime();
         // endTime = realtime();
         // time_forward += getTimeDifference();
