@@ -20,35 +20,47 @@ public:
                int batch_size,
                const std::string &device) {
                 // std::cout << "\nCuda_CRF 22\n" << std::endl; //Test
-        isCUDA = true;
-        startTime = realtime();
+        // isCUDA = true;
+        CudaCallerT -= realtime();
+        // CudaCallerT1 -= realtime();
         const auto model_config = load_crf_model_config(model_path);
         
         m_model_stride = static_cast<size_t>(model_config.stride);
-
+        // CudaCallerT1 += realtime();
+        // CudaCallerT2 -= realtime();
         m_decoder_options = DecoderOptions();
+        // CudaCallerT2 += realtime();
+        // CudaCallerT3 -= realtime();
         m_decoder_options.q_shift = model_config.qbias;
         m_decoder_options.q_scale = model_config.qscale;
+        // CudaCallerT3 += realtime();
+        // CudaCallerT4 -= realtime();
         m_decoder = std::make_unique<GPUDecoder>();
         m_num_input_features = model_config.num_features;
+        // CudaCallerT4 += realtime();
 
         m_options = torch::TensorOptions().dtype(GPUDecoder::dtype).device(device);
+       
+        CudaCallerT5 -= realtime();
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
-
+        CudaCallerT5 += realtime();
+        // CudaCallerT6 -= realtime();
         m_cuda_thread.reset(new std::thread(&CudaCaller::cuda_thread_fn, this));
-        endTime = realtime();
-        CudaCallerT += getSubTimeDifference();
+        // CudaCallerT6 += realtime();
+        CudaCallerT += realtime();
+
+        // CudaCallerT += getSubTimeDifference();
     }
 
     ~CudaCaller() {
-        startTime = realtime();
+        NCudaCallerT -= realtime();
         std::unique_lock<std::mutex> input_lock(m_input_lock);
         m_terminate = true;
         input_lock.unlock();
         m_input_cv.notify_one();
         m_cuda_thread->join();
-        endTime = realtime();
-        NCudaCallerT += getTimeDifference();
+        NCudaCallerT += realtime();
+        // NCudaCallerT += getTimeDifference();
     }
 
     struct NNTask {
@@ -70,33 +82,43 @@ public:
                                           int num_chunks,
                                           c10::cuda::CUDAStream stream) {
                                             // std::cout << "\nCuda_CRF 73\n" << std::endl; //Test
-        startTime = realtime();
+        call_chunksT -= realtime();
         c10::cuda::CUDAStreamGuard stream_guard(stream);
 
         if (num_chunks == 0) {
             return std::vector<DecodedChunk>();
         }
+
+        // NNTaskT0 -= realtime();
         NNTask task(input.to(m_options.device()), num_chunks);
+        // NNTaskT0 += realtime();
+        // NNTaskT1 -= realtime();
         {
             std::lock_guard<std::mutex> lock(m_input_lock);
             m_input_queue.push_front(&task);
         }
         m_input_cv.notify_one();
-
+        // NNTaskT1 += realtime();
+        
         std::unique_lock<std::mutex> lock(task.mut);
+
+        NNTaskT2 -= realtime();
         while (!task.done) {
             task.cv.wait(lock);
         }
+        NNTaskT2 += realtime();
+
 
         output.copy_(task.out);
-        endTime = realtime();
-        call_chunksT += getTimeDifference();
+        // endTime = realtime();
+        call_chunksT += realtime();
+        // call_chunksT += getTimeDifference();
         return m_decoder->cpu_part(output);
     }
 
     void cuda_thread_fn() {
         // std::cout << "\nCuda_CRF 119\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         torch::InferenceMode guard;
         c10::cuda::CUDAGuard device_guard(m_options.device());
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
@@ -124,8 +146,8 @@ public:
             task->cv.notify_one();
             task_lock.unlock();
         }
-        endTime = realtime();
-        cuda_thread_fnT += getTimeDifference();
+        // endTime = realtime();
+        // cuda_thread_fnT += getTimeDifference();
     }
 
     // startTime = realtime();

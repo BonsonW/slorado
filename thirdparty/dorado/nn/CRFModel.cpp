@@ -58,7 +58,7 @@ struct ConvolutionImpl : Module {
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
             : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
             // std::cout << "\nCRF 60\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         conv = register_module(
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
         activation = register_module("activation", SiLU());
@@ -66,7 +66,7 @@ struct ConvolutionImpl : Module {
 
     torch::Tensor forward(torch::Tensor x) { 
         // std::cout << "\nCRF 70\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
 
     // Perform some task
         // Input x is [N, C_in, T_in], contiguity optional
@@ -132,8 +132,8 @@ struct ConvolutionImpl : Module {
                 return activation(conv(x)).transpose(1, 2);
             }
         }
-        endTime = realtime();
-        time_forward += getTimeDifference();
+        // endTime = realtime();
+        // time_forward += getTimeDifference();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
@@ -154,7 +154,7 @@ struct LinearCRFImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) { 
-        startTime = realtime();
+        // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         auto N = x.size(0);
         auto T = x.size(1);
@@ -184,9 +184,9 @@ struct LinearCRFImpl : Module {
                             F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
                              .view({N, T, -1});
         }
-        endTime = realtime();
-        time_forward += getTimeDifference();
-        forward_l159 += getTimeDifference();
+        // endTime = realtime();
+        // time_forward += getTimeDifference();
+        // forward_l159 += getTimeDifference();
         // Output is [N, T, C], contiguous
         return scores;
     }
@@ -203,8 +203,9 @@ struct LinearCRFImpl : Module {
 struct CudaLSTMImpl : Module {
     CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
         // std::cout << "\nCRF 212\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
+        cudaLSTM -= realtime();
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
         auto weight_ih = weights.slice(1, 0, layer_size);
@@ -219,6 +220,7 @@ struct CudaLSTMImpl : Module {
         register_parameter("weight_hh", weight_hh, false);
         register_parameter("bias_ih", bias, false);
         register_parameter("bias_hh", bias_hh, false);
+        cudaLSTM += realtime();
     }
 
     torch::Tensor weights, bias;
@@ -230,7 +232,7 @@ TORCH_MODULE(CudaLSTM);
 struct CudaLSTMStackImpl : Module {
     // std::cout << "\nCRF 240\n" << std::endl; //Test
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
-        startTime = realtime();
+        // startTime = realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
         rnn2 = register_module("rnn_2", CudaLSTM(layer_size, false));
         rnn3 = register_module("rnn_3", CudaLSTM(layer_size, true));
@@ -271,7 +273,7 @@ struct CudaLSTMStackImpl : Module {
     quantized_lstm _host_run_lstm_rev_quantized{nullptr};
 
     torch::Tensor forward_cublas(torch::Tensor in) {
-        startTime = realtime();
+        // startTime = realtime();
         // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
         c10::cuda::CUDAGuard device_guard(in.device());
         auto stream = at::cuda::getCurrentCUDAStream().stream();
@@ -344,7 +346,7 @@ struct CudaLSTMStackImpl : Module {
 
     void rearrange_individual_weights(torch::Tensor buffer) {
         // std::cout << "\nCRF 361\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         torch::Tensor tmp = torch::empty_like(buffer);
         int layer_width = tmp.size(0) / 4;
 
@@ -365,7 +367,7 @@ struct CudaLSTMStackImpl : Module {
 
     void rearrange_weights() {
         // std::cout << "\nCRF 384\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rearrange_individual_weights(rnn->named_parameters()["weight_hh"]);
             rearrange_individual_weights(rnn->named_parameters()["weight_ih"]);
@@ -379,7 +381,7 @@ struct CudaLSTMStackImpl : Module {
     std::pair<torch::Tensor, torch::Tensor> quantize_tensor(torch::Tensor tensor,
                                                             int levels = 256) {
         // std::cout << "\nCRF 400\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         //Quantize a tensor to int8, returning per-channel scales and the quantized tensor
         //if weights have not been quantized we get some scaling
         tensor = tensor.transpose(0, 1).contiguous();
@@ -408,7 +410,7 @@ struct CudaLSTMStackImpl : Module {
 
     void quantize_weights() {
         // std::cout << "\nCRF 430\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             // auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
             auto t0 = quantize_tensor(rnn->named_parameters()["weight_hh"]);
@@ -421,7 +423,7 @@ struct CudaLSTMStackImpl : Module {
 
     torch::Tensor forward_quantized(torch::Tensor x) {
         // std::cout << "\nCRF 445\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         c10::cuda::CUDAGuard device_guard(x.device());
 
@@ -475,17 +477,17 @@ struct CudaLSTMStackImpl : Module {
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
     torch::Tensor forward(torch::Tensor x) {
         // std::cout << "\nCRF 501\n" << std::endl; //Test
-        startTime = realtime();
+        // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         
-        time_forward += getTimeDifference();
-        forward_l469 += getTimeDifference();
+        // time_forward += getTimeDifference();
+        // forward_l469 += getTimeDifference();
         if (m_quantize) {
-            endTime = realtime();
+            // endTime = realtime();
             // Output is [N, T, C], contiguous
             return forward_quantized(x);
         } else {
-            endTime = realtime();
+            // endTime = realtime();
             // Output is [N, T, C], non-contiguous
             return forward_cublas(x);
         }
@@ -511,7 +513,7 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
-        startTime = realtime();
+        // startTime = realtime();
         // Input is [N, T, C], contiguity optional
 
         // auto [y1, h1] = rnn1(x.flip(1));
@@ -520,79 +522,79 @@ struct LSTMStackImpl : Module {
         // auto [y4, h4] = rnn4(y3.flip(1));
         // auto [y5, h5] = rnn5(y4.flip(1));
 
-        subStartTime = realtime();
+        // subStartTime = realtime();
         x = x.flip(1);
-        subEndTime = realtime();
-        x_flipt += subEndTime - subStartTime;
+        // subEndTime = realtime();
+        // x_flipt += subEndTime - subStartTime;
 
         subStartTime = realtime();
         // rnn1
-        subStartTimev2 = realtime();
+        // subStartTimev2 = realtime();
         auto t1 = rnn1(x);
-        subEndTimev2 = realtime();
-        rnn1tt1 += getSubTimeDifferencev2();
+        // subEndTimev2 = realtime();
+        // rnn1tt1 += getSubTimeDifferencev2();
 
-        subStartTimev2 = realtime();
+        // subStartTimev2 = realtime();
         auto y1 = std::get<0>(t1);
-        subEndTimev2 = realtime();
-        rnn1ty1 += getSubTimeDifferencev2();
+        // subEndTimev2 = realtime();
+        // rnn1ty1 += getSubTimeDifferencev2();
 
-        subStartTimev2 = realtime();
+        // subStartTimev2 = realtime();
         auto h1 = std::get<1>(t1);
-        subEndTimev2 = realtime();
-        rnn1th1 += getSubTimeDifferencev2();
+        // subEndTimev2 = realtime();
+        // rnn1th1 += getSubTimeDifferencev2();
 
-        subStartTimev2 = realtime();
+        // subStartTimev2 = realtime();
         x = y1.flip(1);
-        subEndTimev2 = realtime();
-        rnn1tflip += getSubTimeDifferencev2();
+        // subEndTimev2 = realtime();
+        // rnn1tflip += getSubTimeDifferencev2();
 
-        subEndTime = realtime();
-        rnn1t += subEndTime - subStartTime;
+        // subEndTime = realtime();
+        // rnn1t += subEndTime - subStartTime;
 
-        subStartTime = realtime();
+        // subStartTime = realtime();
         // rnn2
         auto t2 = rnn2(x);
         auto y2 = std::get<0>(t2);
         auto h2 = std::get<1>(t2);
 
         x = y2.flip(1);
-        subEndTime = realtime();
-        rnn2t += subEndTime - subStartTime;
+        // subEndTime = realtime();
+        // rnn2t += subEndTime - subStartTime;
 
-        subStartTime = realtime();
+        // subStartTime = realtime();
         // rnn3
         auto t3 = rnn3(x);
         auto y3 = std::get<0>(t3);
         auto h3 = std::get<1>(t3);
 
         x = y3.flip(1);
-        subEndTime = realtime();
-        rnn3t += subEndTime - subStartTime;
+        // subEndTime = realtime();
+        // rnn3t += subEndTime - subStartTime;
 
-        subStartTime = realtime();
+        // subStartTime = realtime();
         // rnn4
         auto t4 = rnn4(x);
         auto y4 = std::get<0>(t4);
         auto h4 = std::get<1>(t4);
 
         x = y4.flip(1);
-        subEndTime = realtime();
-        rnn4t += subEndTime - subStartTime;
+        // subEndTime = realtime();
+        // rnn4t += subEndTime - subStartTime;
 
-        subStartTime = realtime();
+        // subStartTime = realtime();
         // rnn5
         auto t5 = rnn5(x);
         auto y5 = std::get<0>(t5);
         auto h5 = std::get<1>(t5);
 
         x = y5.flip(1);
-        subEndTime = realtime();
-        rnn5t += subEndTime - subStartTime;
+        // subEndTime = realtime();
+        // rnn5t += subEndTime - subStartTime;
 
-        endTime = realtime();
-        time_forward += getTimeDifference();
-        forward_l536 += getTimeDifference();
+        // endTime = realtime();
+        // time_forward += getTimeDifference();
+        // forward_l536 += getTimeDifference();
 
         // Output is [N, T, C], non-contiguous
         return x;
@@ -606,10 +608,10 @@ struct ClampImpl : Module {
 
     torch::Tensor forward(torch::Tensor x) {
         // std::cout << "\nCRF 633\n" << std::endl; //Test
-        startTime = realtime();
-        endTime = realtime();
-        time_forward += getTimeDifference();
-        forward_l577 += getTimeDifference();
+        // startTime = realtime();
+        // endTime = realtime();
+        // time_forward += getTimeDifference();
+        // forward_l577 += getTimeDifference();
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -667,10 +669,10 @@ struct CRFModelImpl : Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        startTime = realtime();
-        endTime = realtime();
-        time_forward += getTimeDifference();
-        forward_l642 += getTimeDifference();
+        // startTime = realtime();
+        // endTime = realtime();
+        // time_forward += getTimeDifference();
+        // forward_l642 += getTimeDifference();
         // Output is [N, T, C]
         return encoder->forward(x);
     }
@@ -716,7 +718,6 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
         toml_table_t *qscore = toml_table_in(config_toml, "qscore");
         config.qbias = (float)toml_double_in(qscore, "bias").u.d;
         config.qscale = (float)toml_double_in(qscore, "scale").u.d;
-        free(qscore);
     } else {
         // no qscore calibration found
     }
@@ -743,7 +744,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             toml_table_t *segment = toml_table_at(sublayers, i);
             if (!segment) break;
 
-            char *type = toml_string_in(segment, "type").u.s; // might need to free the char*
+            char *type = toml_string_in(segment, "type").u.s;
             if (strcmp(type, "convolution") == 0) {
                 // Overall stride is the product of all conv layers' strides.
                 config.stride *= toml_int_in(segment, "stride").u.i;
@@ -765,10 +766,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             }
 
             free(type);
-            free(segment);
         }
-
-        free(sublayers);
 
         config.conv = 16;
         config.bias = config.insize > 128;
@@ -792,10 +790,7 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     // CUDA and CPU paths do not output explicit stay scores from the NN.
     config.outsize = pow(4, config.state_len) * 4;
 
-    free(global_norm);
-    free(encoder);
-    free(input);
-    free(config_toml);
+    toml_free(config_toml);
 
     return config;
 }
@@ -849,9 +844,14 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
 // std::cout << "\nCRF 874\n" << std::endl; //Test
     if (options.device() != torch::kCPU) {
         const bool expand_blanks = false;
+        load_crf_modelT -= realtime();
         auto model = CudaCRFModel(model_config, expand_blanks, batch_size, chunk_size);
+        load_crf_modelT += realtime();
+        // load_crf_modelT1 -= realtime();
         return populate_model(model, path, options, model_config.decomposition,
                               model_config.bias);
+        // load_crf_modelT1 -= realtime();
+
     } else
 #endif
     {

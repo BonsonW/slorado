@@ -19,6 +19,7 @@ double forward_l469;
 double forward_l536;
 double forward_l577;
 double forward_l642;
+double cudaLSTM;
 
 double x_flipt;
 double rnn1t;
@@ -34,6 +35,13 @@ double rnn1tflip;
 
 //isCUDA
 double CudaCallerT;
+double CudaCallerT1;
+double CudaCallerT2;
+double CudaCallerT3;
+double CudaCallerT4;
+double CudaCallerT5;
+double load_crf_modelT;
+double load_crf_modelT1;
 double NCudaCallerT;
 double NNTaskT;
 double call_chunksT;
@@ -43,6 +51,9 @@ double SubCudaCallerT;
 double matMul;
 double cublasGemmExT;
 double assertT;
+double NNTaskT0;
+double NNTaskT1;
+double NNTaskT2;
 
 // Function to measure time difference in seconds
 double getTimeDifference() {
