@@ -126,7 +126,7 @@ public:
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
 
         while (true) {
-            cuda_thread_fnT -= realtime();
+            // cuda_thread_fnT -= realtime();
             std::unique_lock<std::mutex> input_lock(m_input_lock);
             while (m_input_queue.empty() && !m_terminate) {
                 if(m_input_queue.size() > 0){            
@@ -135,7 +135,7 @@ public:
                 m_input_cv.wait_for(input_lock, 100ms);
             }
             // TODO: finish work before terminating?
-            cuda_thread_fnT += realtime();
+            // cuda_thread_fnT += realtime();
             if (m_terminate) {
                 return;
             }
