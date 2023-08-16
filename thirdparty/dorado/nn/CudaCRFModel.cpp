@@ -141,13 +141,13 @@ public:
             }
             cuda_thread_fnT2 -= realtime();
 
-            cuda_thread_fnT3 -= realtime();
+            // cuda_thread_fnT3 -= realtime();
             NNTask *task = m_input_queue.back();
-            cuda_thread_fnT3 += realtime();
-            cuda_thread_fnT4 -= realtime();
+            // cuda_thread_fnT3 += realtime();
+            // cuda_thread_fnT4 -= realtime();
             m_input_queue.pop_back();
             input_lock.unlock();
-            cuda_thread_fnT4 += realtime();
+            // cuda_thread_fnT4 += realtime();
 
 
             std::unique_lock<std::mutex> task_lock(task->mut);
