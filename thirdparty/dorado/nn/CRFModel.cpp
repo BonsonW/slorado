@@ -322,15 +322,15 @@ struct CudaLSTMStackImpl : Module {
             // NOTE: `host_transpose_f16' does exactly what the commented out assignment
             // below would do, only ~5x faster (on A100)
             // working_mem_right = in.transpose(1, 0);
-            host_transpose_f16T -= realtime();
+            // host_transpose_f16T -= realtime();
             host_transpose_f16(stream, in.data_ptr(), in.size(1), in.size(0), in.size(2),
                                in.stride(1), in.stride(0), in.stride(2),
                                working_mem_right.stride(0), working_mem_right.stride(1),
                                working_mem_right.stride(2), working_mem_right.data_ptr());
-            host_transpose_f16T += realtime();
+            // host_transpose_f16T += realtime();
         }
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
-            rnnIterate -= realtime();
+            // rnnIterate -= realtime();
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
             auto weights_cpu = rnn->weights.t().contiguous();
             auto weights = weights_cpu.to(in.device());
@@ -348,7 +348,7 @@ struct CudaLSTMStackImpl : Module {
                                    timestep_out.data_ptr());
                 matmul_f16T += realtime();
             }
-            rnnIterate += realtime();
+            // rnnIterate += realtime();
 
         }
 
