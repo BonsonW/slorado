@@ -56,7 +56,7 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
 
 struct ConvolutionImpl : Module {
     
-    (int size, int outsize, int k, int stride_, bool to_lstm_ = false)
+    ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
             : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
             std::cout << "\nCRF 60\n" << std::endl; //Test
         // startTime = realtime();
