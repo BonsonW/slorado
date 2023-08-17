@@ -56,6 +56,7 @@ extern double cuda_thread_fnT4;
 extern double cuda_thread_fnT5;
 extern double cuda_thread_fnT6;
 extern double SubCudaCallerT;
+extern double forward_cublasT;
 
 extern double NNTaskT0;
 extern double NNTaskT1;

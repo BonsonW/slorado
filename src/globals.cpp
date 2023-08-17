@@ -52,6 +52,7 @@ double cuda_thread_fnT4;
 double cuda_thread_fnT5;
 double cuda_thread_fnT6;
 double SubCudaCallerT;
+double forward_cublasT;
 
 double matMul;
 double cublasGemmExT;
