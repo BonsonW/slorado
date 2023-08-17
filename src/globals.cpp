@@ -57,6 +57,8 @@ double cudaLSTMImplT;
 double convolutionImplT;
 double cudaLSTMStackImplT;
 double matmul_f16T;
+double host_transpose_f16T;
+double rnnIterate;
 
 double matMul;
 double cublasGemmExT;

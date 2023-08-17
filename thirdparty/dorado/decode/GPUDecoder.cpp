@@ -80,7 +80,7 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
 
 std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstring_cpu) {
 #ifdef USE_CUDA_LSTM
-    std::cout << "\nGPUDecoder\n" << std::endl; //Test
+    // std::cout << "\nGPUDecoder\n" << std::endl; //Test
     assert(moves_sequence_qstring_cpu.device() == torch::kCPU);
     auto moves_cpu = moves_sequence_qstring_cpu[0];
     auto sequence_cpu = moves_sequence_qstring_cpu[1];
