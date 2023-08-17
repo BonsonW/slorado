@@ -204,7 +204,7 @@ struct LinearCRFImpl : Module {
 
 struct CudaLSTMImpl : Module {
     CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
-        CudaLSTMImplT -= realtime();
+        cudaLSTMImplT -= realtime();
         // std::cout << "\nCRF 212\n" << std::endl; //Test
         // startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
@@ -224,7 +224,7 @@ struct CudaLSTMImpl : Module {
         register_parameter("bias_ih", bias, false);
         register_parameter("bias_hh", bias_hh, false);
         // cudaLSTM += realtime();
-        CudaLSTMImplT += realtime();
+        cudaLSTMImplT += realtime();
     }
 
     torch::Tensor weights, bias;
