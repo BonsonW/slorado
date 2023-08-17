@@ -67,7 +67,7 @@ struct ConvolutionImpl : Module {
 
     torch::Tensor forward(torch::Tensor x) { 
         // std::cout << "\nCRF 70\n" << std::endl; //Test
-        ConvolutionImplT -= realtime();
+        convolutionImplT -= realtime();
 
     // Perform some task
         // Input x is [N, C_in, T_in], contiguity optional
@@ -135,7 +135,7 @@ struct ConvolutionImpl : Module {
         }
         endTime = realtime();
         // time_forward += getTimeDifference();
-        ConvolutionImplT += realtime();
+        convolutionImplT += realtime();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
@@ -236,7 +236,7 @@ TORCH_MODULE(CudaLSTM);
 struct CudaLSTMStackImpl : Module {
     // std::cout << "\nCRF 240\n" << std::endl; //Test
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
-        CudaLSTMStackImplT -= realtime();
+        cudaLSTMStackImplT -= realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
         rnn2 = register_module("rnn_2", CudaLSTM(layer_size, false));
         rnn3 = register_module("rnn_3", CudaLSTM(layer_size, true));
@@ -265,7 +265,7 @@ struct CudaLSTMStackImpl : Module {
             _host_run_lstm_fwd_quantized = host_run_lstm_fwd_quantized128;
             _host_run_lstm_rev_quantized = host_run_lstm_reverse_quantized128;
         }
-        CudaLSTMStackImplT += realtime();
+        cudaLSTMStackImplT += realtime();
     }
 
     bool _weights_rearranged = false;
