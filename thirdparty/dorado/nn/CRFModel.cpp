@@ -341,12 +341,12 @@ struct CudaLSTMStackImpl : Module {
                                                  : working_mem_right[ts];
 
                 // Timestep matrix mulitplication
-                matmul_f16T -= realtime();
+                // matmul_f16T -= realtime();
                 matmul_f16(timestep_in, weights, gate_buf);
                 host_lstm_step_f16(stream, batch_size, layer_size, bias.data_ptr(),
                                    gate_buf.data_ptr(), state_buf.data_ptr(),
                                    timestep_out.data_ptr());
-                matmul_f16T += realtime();
+                // matmul_f16T += realtime();
             }
             // rnnIterate += realtime();
 
