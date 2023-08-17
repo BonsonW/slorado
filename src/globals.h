@@ -60,6 +60,7 @@ extern double forward_cublasT;
 extern double cudaLSTMImplT;
 extern double convolutionImplT;
 extern double cudaLSTMStackImplT;
+extern double matmul_f16T;
 
 extern double NNTaskT0;
 extern double NNTaskT1;

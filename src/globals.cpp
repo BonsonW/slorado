@@ -56,6 +56,7 @@ double forward_cublasT;
 double cudaLSTMImplT;
 double convolutionImplT;
 double cudaLSTMStackImplT;
+double matmul_f16T;
 
 double matMul;
 double cublasGemmExT;
