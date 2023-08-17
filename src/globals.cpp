@@ -53,6 +53,9 @@ double cuda_thread_fnT5;
 double cuda_thread_fnT6;
 double SubCudaCallerT;
 double forward_cublasT;
+double cudaLSTMImplT;
+double convolutionImplT;
+double cudaLSTMStackImplT;
 
 double matMul;
 double cublasGemmExT;
