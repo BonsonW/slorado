@@ -102,6 +102,7 @@ struct ConvolutionImpl : Module {
                                         res_2D.data_ptr(), b_device.data_ptr());
 
                     // Output is [N, T_out, C_out], contiguous
+                    convolutionImplT += realtime();
                     return res;
                 } else {
                     auto res = torch::empty({chunk_size_out + 1, batch_size, 2, out_size},
@@ -124,6 +125,7 @@ struct ConvolutionImpl : Module {
 
                     // Output is [T_out + 1, N, 2, C_out], contiguous, which serves as
                     // working memory for CuBLAS LSTM
+                    convolutionImplT += realtime();
                     return res;
                 }
             } else
@@ -135,7 +137,6 @@ struct ConvolutionImpl : Module {
         }
         endTime = realtime();
         // time_forward += getTimeDifference();
-        convolutionImplT += realtime();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
@@ -208,7 +209,6 @@ struct CudaLSTMImpl : Module {
         // std::cout << "\nCRF 212\n" << std::endl; //Test
         // startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
-        cudaLSTM -= realtime();
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
         auto weight_ih = weights.slice(1, 0, layer_size);
