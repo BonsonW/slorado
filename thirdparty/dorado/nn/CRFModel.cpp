@@ -58,7 +58,7 @@ struct ConvolutionImpl : Module {
     
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
             : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
-            std::cout << "\nCRF 60\n" << std::endl; //Test
+            // std::cout << "\nCRF 60\n" << std::endl; //Test
         // startTime = realtime();
         conv = register_module(
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
@@ -67,7 +67,7 @@ struct ConvolutionImpl : Module {
 
     torch::Tensor forward(torch::Tensor x) { 
         // std::cout << "\nCRF 70\n" << std::endl; //Test
-        convolutionImplT -= realtime();
+        // convolutionImplT -= realtime();
 
     // Perform some task
         // Input x is [N, C_in, T_in], contiguity optional
@@ -102,7 +102,7 @@ struct ConvolutionImpl : Module {
                                         res_2D.data_ptr(), b_device.data_ptr());
 
                     // Output is [N, T_out, C_out], contiguous
-                    convolutionImplT += realtime();
+                    // convolutionImplT += realtime();
                     return res;
                 } else {
                     auto res = torch::empty({chunk_size_out + 1, batch_size, 2, out_size},
@@ -125,7 +125,7 @@ struct ConvolutionImpl : Module {
 
                     // Output is [T_out + 1, N, 2, C_out], contiguous, which serves as
                     // working memory for CuBLAS LSTM
-                    convolutionImplT += realtime();
+                    // convolutionImplT += realtime();
                     return res;
                 }
             } else
@@ -526,7 +526,7 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
-        forward_l536 -= realtime();
+        // forward_l536 -= realtime();
         // startTime = realtime();
         // Input is [N, T, C], contiguity optional
 
@@ -541,7 +541,7 @@ struct LSTMStackImpl : Module {
         // subEndTime = realtime();
         // x_flipt += subEndTime - subStartTime;
 
-        subStartTime = realtime();
+        // subStartTime = realtime();
         // rnn1
         // subStartTimev2 = realtime();
         auto t1 = rnn1(x);
@@ -608,7 +608,7 @@ struct LSTMStackImpl : Module {
 
         // endTime = realtime();
         // time_forward += getTimeDifference();
-        forward_l536 += realtime();
+        // forward_l536 += realtime();
 
         // Output is [N, T, C], non-contiguous
         return x;
