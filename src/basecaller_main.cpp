@@ -315,9 +315,9 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n\n[%s]                     - cudaLSTMImplT time: %.3f sec",__func__, cudaLSTMImplT);
             fprintf(stderr, "\n\n[%s]                     - cudaLSTMStackImplT time: %.3f sec",__func__, cudaLSTMStackImplT);
             fprintf(stderr, "\n[%s]                        - forward_cublasT time: %.3f sec",__func__, forward_cublasT);
-            // fprintf(stderr, "\n[%s]                        - matmul_f16T time: %.3f sec",__func__, matmul_f16T);
-            // fprintf(stderr, "\n[%s]                        - host_transpose_f16T time: %.3f sec",__func__, host_transpose_f16T);
-            // fprintf(stderr, "\n[%s]                        - rnnIterate time: %.3f sec",__func__, rnnIterate);
+            fprintf(stderr, "\n[%s]                        - matmul_f16T time: %.3f sec",__func__, matmul_f16T);
+            fprintf(stderr, "\n[%s]                        - host_transpose_f16T time: %.3f sec",__func__, host_transpose_f16T);
+            fprintf(stderr, "\n[%s]                        - rnnIterate time: %.3f sec",__func__, rnnIterate);
                 // fprintf(stderr, "\n[%s]                     - rearrange_individual_weightsT time: %.3f sec",__func__, rearrange_individual_weightsT);
                 // fprintf(stderr, "\n[%s]                     - rearrange_weightsT time: %.3f sec",__func__, rearrange_weightsT);
                 // fprintf(stderr, "\n[%s]                     - quantize_weightsT time: %.3f sec",__func__, quantize_weightsT);   
