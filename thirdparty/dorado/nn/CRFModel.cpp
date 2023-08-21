@@ -331,7 +331,7 @@ struct CudaLSTMStackImpl : Module {
         }
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rnnIterate -= realtime();
-            state_bufT = realtime();
+            state_bufT -= realtime();
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
             state_bufT += realtime();
             weights_cpuT -= realtime();
