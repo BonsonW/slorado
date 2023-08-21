@@ -331,10 +331,18 @@ struct CudaLSTMStackImpl : Module {
         }
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rnnIterate -= realtime();
+            state_bufT = realtime();
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
+            state_bufT += realtime();
+            weights_cpuT -= realtime();
             auto weights_cpu = rnn->weights.t().contiguous();
+            weights_cpuT += realtime();
+            weightsT -= realtime();
             auto weights = weights_cpu.to(in.device());
+            weightsT += realtime();
+            biasT -= realtime();
             auto bias = rnn->bias.to(in.device());
+            biasT += realtime();
             for (int ts = 0; ts < chunk_size; ++ts) {
                 forLoopRest -= realtime();
                 auto timestep_in = working_mem_all[rnn->reverse ? (chunk_size - ts) : ts];

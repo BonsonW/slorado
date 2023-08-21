@@ -319,10 +319,10 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                        - host_transpose_f16T time: %.3f sec",__func__, host_transpose_f16T);
             fprintf(stderr, "\n[%s]                        - rnnIterate time: %.3f sec",__func__, rnnIterate);
             fprintf(stderr, "\n[%s]                        - forLoopRest time: %.3f sec",__func__, forLoopRest);
-                // fprintf(stderr, "\n[%s]                     - rearrange_weightsT time: %.3f sec",__func__, rearrange_weightsT);
-                // fprintf(stderr, "\n[%s]                     - quantize_weightsT time: %.3f sec",__func__, quantize_weightsT);   
-                // fprintf(stderr, "\n[%s]                     - quantize_tensorT time: %.3f sec",__func__, quantize_tensorT);
-                // fprintf(stderr, "\n[%s]                     - forward_quantizedT time: %.3f sec",__func__, forward_quantizedT);   
+            fprintf(stderr, "\n[%s]                         - forLoopRest time: %.3f sec",__func__, forLoopRest);
+            fprintf(stderr, "\n[%s]                         - state_bufT time: %.3f sec",__func__, state_bufT);   
+            fprintf(stderr, "\n[%s]                         - weightsT time: %.3f sec",__func__, weightsT);
+            fprintf(stderr, "\n[%s]                         - biasT time: %.3f sec",__func__, biasT);   
 
                 // fprintf(stderr, "\n\n[%s]                     - call_ch_while time: %.3f sec",__func__, call_ch_while);
                 // fprintf(stderr, "\n\n[%s]                     - stream_guardT time: %.3f sec",__func__, stream_guardT);

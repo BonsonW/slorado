@@ -60,6 +60,10 @@ double matmul_f16T;
 double host_transpose_f16T;
 double rnnIterate;
 double forLoopRest;
+double state_bufT;
+double weights_cpuT;
+double weightsT;
+double biasT;
 
 double matMul;
 double cublasGemmExT;

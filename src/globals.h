@@ -64,6 +64,10 @@ extern double matmul_f16T;
 extern double host_transpose_f16T;
 extern double rnnIterate;
 extern double forLoopRest;
+extern double state_bufT;
+extern double weights_cpuT;
+extern double weightsT;
+extern double biasT;
 
 extern double NNTaskT0;
 extern double NNTaskT1;
