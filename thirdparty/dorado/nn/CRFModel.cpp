@@ -330,7 +330,7 @@ struct CudaLSTMStackImpl : Module {
             // host_transpose_f16T += realtime();
         }
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
-            rnnIterate -= realtime();
+            // rnnIterate -= realtime();
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
             auto weights_cpu = rnn->weights.t().contiguous();
             auto weights = weights_cpu.to(in.device());
@@ -348,7 +348,7 @@ struct CudaLSTMStackImpl : Module {
                                    timestep_out.data_ptr());
                 matmul_f16T += realtime();
             }
-            rnnIterate += realtime();
+            // rnnIterate += realtime();
 
         }
 
