@@ -63,6 +63,7 @@ extern double cudaLSTMStackImplT;
 extern double matmul_f16T;
 extern double host_transpose_f16T;
 extern double rnnIterate;
+extern double forLoopRest;
 
 extern double NNTaskT0;
 extern double NNTaskT1;
