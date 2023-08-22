@@ -281,7 +281,7 @@ struct CudaLSTMStackImpl : Module {
         forward_cublasT -= realtime();
         // startTime = realtime();
         // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
-        forward_cublasT2 -= realtime();
+        
         c10::cuda::CUDAGuard device_guard(in.device());
         auto stream = at::cuda::getCurrentCUDAStream().stream();
         int chunk_size, batch_size;
@@ -303,7 +303,6 @@ struct CudaLSTMStackImpl : Module {
 
         int gate_size = layer_size * 4;
         auto gate_buf = torch::empty({batch_size, gate_size}, in.options());
-        forward_cublasT2 += realtime();
         forward_cublasT3 -= realtime();
 
 
@@ -334,6 +333,8 @@ struct CudaLSTMStackImpl : Module {
                                working_mem_right.stride(2), working_mem_right.data_ptr());
             host_transpose_f16T += realtime();
         }
+
+        forward_cublasT2 -= realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rnnIterate -= realtime();
             state_bufT -= realtime();
@@ -368,6 +369,7 @@ struct CudaLSTMStackImpl : Module {
             rnnIterate += realtime();
 
         }
+        forward_cublasT2 += realtime();
 
         // Output is [N, T, C], non-contiguous
         forward_cublasT += realtime();
