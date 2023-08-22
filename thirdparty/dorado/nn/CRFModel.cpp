@@ -341,7 +341,17 @@ struct CudaLSTMStackImpl : Module {
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
             state_bufT += realtime();
             weights_cpuT -= realtime();
-            auto weights_cpu = rnn->weights.t().contiguous();
+            //---------------------------------------
+            // auto weights_cpu = rnn->weights.t().contiguous();
+            // Divided upper line as below
+           
+            // Transpose the weights
+            auto transposed_weights = rnn->weights.t();
+
+            // Make the transposed weights contiguous
+            auto weights_cpu = transposed_weights.contiguous();
+
+            // --------------------------------------
             weights_cpuT += realtime();
             weightsT -= realtime();
             auto weights = weights_cpu.to(in.device());
