@@ -317,14 +317,13 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                        - forward_cublasT time: %.3f sec",__func__, forward_cublasT);
             fprintf(stderr, "\n[%s]                        - forward_cublasT2 time: %.3f sec",__func__, forward_cublasT2);
             fprintf(stderr, "\n[%s]                        - forward_cublasT3 time: %.3f sec",__func__, forward_cublasT3);
-            fprintf(stderr, "\n[%s]                        - matmul_f16T time: %.3f sec",__func__, matmul_f16T);
             fprintf(stderr, "\n[%s]                        - host_transpose_f16T time: %.3f sec",__func__, host_transpose_f16T);
             fprintf(stderr, "\n[%s]                        - rnnIterate time: %.3f sec",__func__, rnnIterate);
-            fprintf(stderr, "\n[%s]                             - forLoopRest time: %.3f sec",__func__, forLoopRest);
-            fprintf(stderr, "\n[%s]                             - state_bufT time: %.3f sec",__func__, state_bufT);   
+            fprintf(stderr, "\n[%s]                             - state_bufT time: %.3f sec",__func__, state_bufT); 
+            fprintf(stderr, "\n[%s]                             - weights_cpuT time: %.3f sec",__func__, weights_cpuT);  
             fprintf(stderr, "\n[%s]                             - weightsT time: %.3f sec",__func__, weightsT);
             fprintf(stderr, "\n[%s]                             - biasT time: %.3f sec",__func__, biasT);   
-
+            fprintf(stderr, "\n[%s]                             - matmul_f16T time: %.3f sec",__func__, matmul_f16T);
                 // fprintf(stderr, "\n\n[%s]                     - call_ch_while time: %.3f sec",__func__, call_ch_while);
                 // fprintf(stderr, "\n\n[%s]                     - stream_guardT time: %.3f sec",__func__, stream_guardT);
                 // fprintf(stderr, "\n[%s]                     - taskT time: %.3f sec",__func__, taskT);

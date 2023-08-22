@@ -349,7 +349,7 @@ struct CudaLSTMStackImpl : Module {
             biasT -= realtime();
             auto bias = rnn->bias.to(in.device());
             biasT += realtime();
-            forLoopRest -= realtime();
+            // forLoopRest -= realtime();
             for (int ts = 0; ts < chunk_size; ++ts) {
                 
                 auto timestep_in = working_mem_all[rnn->reverse ? (chunk_size - ts) : ts];
@@ -365,7 +365,7 @@ struct CudaLSTMStackImpl : Module {
                                    timestep_out.data_ptr());
                 matmul_f16T += realtime();
             }
-            forLoopRest += realtime();
+            // forLoopRest += realtime();
             rnnIterate += realtime();
 
         }
