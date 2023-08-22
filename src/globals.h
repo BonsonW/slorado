@@ -57,6 +57,8 @@ extern double cuda_thread_fnT5;
 extern double cuda_thread_fnT6;
 extern double SubCudaCallerT;
 extern double forward_cublasT;
+extern double forward_cublasT2;
+extern double forward_cublasT3;
 extern double cudaLSTMImplT;
 extern double convolutionImplT;
 extern double cudaLSTMStackImplT;

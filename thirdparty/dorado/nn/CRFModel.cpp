@@ -281,6 +281,7 @@ struct CudaLSTMStackImpl : Module {
         forward_cublasT -= realtime();
         // startTime = realtime();
         // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
+        forward_cublasT2 -= realtime();
         c10::cuda::CUDAGuard device_guard(in.device());
         auto stream = at::cuda::getCurrentCUDAStream().stream();
         int chunk_size, batch_size;
@@ -302,6 +303,9 @@ struct CudaLSTMStackImpl : Module {
 
         int gate_size = layer_size * 4;
         auto gate_buf = torch::empty({batch_size, gate_size}, in.options());
+        forward_cublasT2 += realtime();
+        forward_cublasT3 -= realtime();
+
 
         // Working memory is laid out as [T+1][N][2][C] in memory, where the 2 serves to
         // interleave input and output for each LSTM layer in a specific way. The reverse LSTM
@@ -317,6 +321,7 @@ struct CudaLSTMStackImpl : Module {
         auto working_mem_all = mat_working_mem.view({chunk_size + 1, batch_size, -1});
         auto working_mem_left = mat_working_mem.slice(0, 0, chunk_size).select(2, 0);
         auto working_mem_right = mat_working_mem.slice(0, 1, chunk_size + 1).select(2, 1);
+        forward_cublasT3 += realtime();
 
         if (!input_is_working_mem) {
             // NOTE: `host_transpose_f16' does exactly what the commented out assignment
