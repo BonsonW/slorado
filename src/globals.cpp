@@ -66,6 +66,8 @@ double state_bufT;
 double weights_cpuT;
 double weightsT;
 double biasT;
+double transposed_weightsT;
+double weights_cpuT;
 
 double matMul;
 double cublasGemmExT;
