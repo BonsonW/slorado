@@ -320,9 +320,9 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                        - host_transpose_f16 time: %.3f sec",__func__, host_transpose_f16T);
             fprintf(stderr, "\n[%s]                        - rnnIterate time: %.3f sec",__func__, rnnIterate);
             fprintf(stderr, "\n[%s]                             - state_buf time: %.3f sec",__func__, state_bufT); 
-            fprintf(stderr, "\n[%s]                             - weights_cpu time: %.3f sec",__func__, weights_cpuT);
-            fprintf(stderr, "\n[%s]                                 - transposed_weights time: %.3f sec",__func__, transposed_weightsT); 
-            fprintf(stderr, "\n[%s]                                 - weights_cpu time: %.3f sec",__func__, weights_cpuT); 
+            // fprintf(stderr, "\n[%s]                             - weights_cpu time: %.3f sec",__func__, weights_cpuT);
+            fprintf(stderr, "\n[%s]                             - transposed_weights time: %.3f sec",__func__, transposed_weightsT); 
+            fprintf(stderr, "\n[%s]                             - weights_cpu time: %.3f sec",__func__, weights_cpuT); 
             fprintf(stderr, "\n[%s]                             - weights time: %.3f sec",__func__, weightsT);
             fprintf(stderr, "\n[%s]                             - bias time: %.3f sec",__func__, biasT);   
             fprintf(stderr, "\n[%s]                             - matmul_f16 time: %.3f sec",__func__, matmul_f16T);
