@@ -348,7 +348,7 @@ struct CudaLSTMStackImpl : Module {
             // Transpose the weights
             transposed_weightsT -= realtime();
             auto transposed_weights = rnn->weights.t();
-            transposed_weights += realtime();
+            transposed_weightsT += realtime();
             weights_cpuT -= realtime();
             // Make the transposed weights contiguous
             auto weights_cpu = transposed_weights.contiguous();
