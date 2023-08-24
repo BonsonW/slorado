@@ -354,6 +354,7 @@ struct CudaLSTMStackImpl : Module {
             auto weights_cpu = transposed_weights.contiguous();
             weightCPUcalls ++;
             weights_cpuT += realtime();
+            std::cout << "\nSize of weights_cpu: " << sizeof(weights_cpu) << " bytes" << std::endl;
 
             // --------------------------------------
             // weights_cpuT += realtime();
