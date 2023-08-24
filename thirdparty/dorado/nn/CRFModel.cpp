@@ -355,10 +355,15 @@ struct CudaLSTMStackImpl : Module {
             weightCPUcalls ++;
             weights_cpuT += realtime();
             // std::cout << "\nSize of weights_cpu: " << sizeof(weights_cpu) << " bytes" << std::endl;
-            std::cout << "Contents of weights_cpu:" << std::endl;
-            for (const auto& element : weights_cpu) {
-                std::cout << element << " ";
+            std::cout << "Contents of weights_cpu:";
+
+            // Calculate the number of elements in the array
+            int numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
+
+            for (int k = 0; k < numElements; k++) {
+                std::cout << " " << weights_cpu[k];
             }
+
             std::cout << std::endl;
             // --------------------------------------
             // weights_cpuT += realtime();
