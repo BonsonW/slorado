@@ -351,17 +351,18 @@ struct CudaLSTMStackImpl : Module {
             transposed_weightsT += realtime();
             weights_cpuT -= realtime();
             // Make the transposed weights contiguous
-            auto weights_cpu = transposed_weights.contiguous();
+            // auto weights_cpu = transposed_weights.contiguous();
+            auto weights_cpu = transposed_weights;
             weightCPUcalls ++;
             weights_cpuT += realtime();
-            double numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
-            std::cout << "\ncount: " << numElements  << std::endl;
-            std::cout << "\nsizeof(weights_cpu): " << sizeof(weights_cpu)  << std::endl;
-            std::cout << "\nsizeof(weights_cpu[0]): " << sizeof(weights_cpu[0])  << std::endl;    
+            // double numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
+            // std::cout << "\ncount: " << numElements  << std::endl;
+            // std::cout << "\nsizeof(weights_cpu): " << sizeof(weights_cpu)  << std::endl;
+            // std::cout << "\nsizeof(weights_cpu[0]): " << sizeof(weights_cpu[0])  << std::endl;    
 
-            int length = weights_cpu.size(0);
+            // int length = weights_cpu.size(0);
 
-            std::cout << "Length along dimension 0: " << length << std::endl;
+            // std::cout << "Length along dimension 0: " << length << std::endl;
 
             // --------------------------------------
             // weights_cpuT += realtime();
