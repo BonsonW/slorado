@@ -71,6 +71,7 @@ extern double weights_cpuT;
 extern double weightsT;
 extern double biasT;
 extern double transposed_weightsT;
+extern double weightCPUcalls;
 
 extern double NNTaskT0;
 extern double NNTaskT1;

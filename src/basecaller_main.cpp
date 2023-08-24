@@ -323,11 +323,11 @@ int basecaller_main(int argc, char* argv[]) {
             // fprintf(stderr, "\n[%s]                             - weights_cpu time: %.3f sec",__func__, weights_cpuT);
             fprintf(stderr, "\n[%s]                             - transposed_weights time: %.3f sec",__func__, transposed_weightsT); 
             fprintf(stderr, "\n[%s]                             - weights_cpu time: %.3f sec",__func__, weights_cpuT); 
+            fprintf(stderr, "\n\n[%s]                               - No of times called contigious(): %.0f",__func__, weightCPUcalls);
             fprintf(stderr, "\n[%s]                             - weights time: %.3f sec",__func__, weightsT);
             fprintf(stderr, "\n[%s]                             - bias time: %.3f sec",__func__, biasT);   
             fprintf(stderr, "\n[%s]                             - matmul_f16 time: %.3f sec",__func__, matmul_f16T);
                 
-                // fprintf(stderr, "\n\n[%s]                     - stream_guardT time: %.3f sec",__func__, stream_guardT);
                 // fprintf(stderr, "\n[%s]                     - taskT time: %.3f sec",__func__, taskT);
                 // fprintf(stderr, "\n[%s]                     - lock_guardT time: %.3f sec",__func__, lock_guardT);
                 // fprintf(stderr, "\n[%s]                     - notify_oneT time: %.3f sec",__func__, notify_oneT);
