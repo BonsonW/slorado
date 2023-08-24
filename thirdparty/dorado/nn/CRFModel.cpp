@@ -354,15 +354,14 @@ struct CudaLSTMStackImpl : Module {
             auto weights_cpu = transposed_weights.contiguous();
             weightCPUcalls ++;
             weights_cpuT += realtime();
-            // std::cout << "\nSize of weights_cpu: " << sizeof(weights_cpu) << " bytes" << std::endl;
-            std::cout << "Contents of weights_cpu:";
-
-            // Calculate the number of elements in the array
-            int numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
-
-            for (int k = 0; k < numElements; k++) {
-                std::cout << " " << weights_cpu[k];
-            }
+            std::cout << "\nSize of weights_cpu: " << sizeof(weights_cpu) / sizeof(weights_cpu[0]) << " bytes" << std::endl;
+            
+            // std::cout << "Contents of weights_cpu:";
+            // // Calculate the number of elements in the array
+            // int numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
+            // for (int k = 0; k < numElements; k++) {
+            //     std::cout << " " << weights_cpu[k];
+            // }
 
             std::cout << std::endl;
             // --------------------------------------
