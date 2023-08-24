@@ -351,8 +351,11 @@ struct CudaLSTMStackImpl : Module {
             transposed_weightsT += realtime();
             weights_cpuT -= realtime();
             // Make the transposed weights contiguous
-            // auto weights_cpu = transposed_weights.contiguous();
-            auto weights_cpu = transposed_weights;
+            auto weights_cpu = transposed_weights.contiguous();
+
+            const char* typeName = typeid(weights_cpu).name();
+
+            std::cout << "Type of weights_cpu: " << typeName << std::endl;
             weightCPUcalls ++;
             weights_cpuT += realtime();
             // double numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
