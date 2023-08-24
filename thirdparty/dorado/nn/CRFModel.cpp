@@ -358,8 +358,8 @@ struct CudaLSTMStackImpl : Module {
             size_t sizeInBytes = sizeof(weights_cpu);
             std::cout << "Size of weights_cpu: " << sizeInBytes << " bytes" << std::endl;
 
-            size_t dataSizeBytes = weights_cpu.numel() * weights_cpu.element_size();
-            std::cout << "Size of the data in weights_cpu: " << dataSizeBytes << " bytes" << std::endl;
+            // size_t dataSizeBytes = weights_cpu.numel() * weights_cpu.element_size();
+            // std::cout << "Size of the data in weights_cpu: " << dataSizeBytes << " bytes" << std::endl;
 
 
             weightCPUcalls ++;
