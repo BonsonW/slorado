@@ -2,10 +2,6 @@
 #include <string>
 #include <torch/torch.h>
 
-#include <typeinfo>
-#include <boost/core/demangle.hpp>
-
-
 #include "../../../src/globals.h"
 #include "../../../src/misc.h"
 #include "toml.h"
@@ -357,8 +353,7 @@ struct CudaLSTMStackImpl : Module {
             auto weights_cpu = transposed_weights.contiguous();
 
             const char* typeName = typeid(weights_cpu).name();
-            std::string demangledTypeName = boost::core::demangle(typeName);
-            std::cout << "Type of weights_cpu: " << demangledTypeName << std::endl;
+            std::cout << "Type of weights_cpu: " << typeName << std::endl;
 
             size_t sizeInBytes = sizeof(weights_cpu);
             std::cout << "Size of weights_cpu: " << sizeInBytes << " bytes" << std::endl;
