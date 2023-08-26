@@ -352,11 +352,11 @@ struct CudaLSTMStackImpl : Module {
             // Make the transposed weights contiguous
             auto weights_cpu = transposed_weights.contiguous();
 
-            const char* typeName = typeid(weights_cpu).name();
-            std::cout << "Type of weights_cpu: " << typeName << std::endl;
+            // const char* typeName = typeid(weights_cpu).name();
+            // std::cout << "Type of weights_cpu: " << typeName << std::endl;
 
-            size_t sizeInBytes = sizeof(weights_cpu);
-            std::cout << "Size of weights_cpu: " << sizeInBytes << " bytes" << std::endl;
+            // size_t sizeInBytes = sizeof(weights_cpu);
+            // std::cout << "Size of weights_cpu: " << sizeInBytes << " bytes" << std::endl;
 
             // size_t dataSizeBytes = weights_cpu.numel() * weights_cpu.element_size();
             // std::cout << "Size of the data in weights_cpu: " << dataSizeBytes << " bytes" << std::endl;
