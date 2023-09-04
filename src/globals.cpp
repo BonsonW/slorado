@@ -68,6 +68,8 @@ double weightsT;
 double biasT;
 double transposed_weightsT;
 double weightCPUcalls;
+double cont;
+double ncont;
 
 double matMul;
 double cublasGemmExT;

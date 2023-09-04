@@ -341,16 +341,25 @@ struct CudaLSTMStackImpl : Module {
             state_bufT += realtime();
             weights_cpuT -= realtime();
             //---------------------------------------
-            auto weights_cpu = rnn->weights.t().contiguous();
+            // auto weights_cpu = rnn->weights.t().contiguous();
             // Divided upper line as below
            
             // Transpose the weights
-            // transposed_weightsT -= realtime();
-            // auto transposed_weights = rnn->weights.t();
-            // transposed_weightsT += realtime();
-            // weights_cpuT -= realtime();
+            transposed_weightsT -= realtime();
+            auto transposed_weights = rnn->weights.t();
+            transposed_weightsT += realtime();
+            weights_cpuT -= realtime();
             // Make the transposed weights contiguous
-            // auto weights_cpu = transposed_weights.contiguous();
+            if(transposed_weights.is_contiguous()){
+                std::cout << "Already contigious" << std::endl;
+                cont ++;
+            }
+            else{
+                std::cout << "Not contigious" << std::endl;
+                ncont ++;
+            }
+
+            auto weights_cpu = transposed_weights.contiguous();
 
             // const char* typeName = typeid(weights_cpu).name();
             // std::cout << "Type of weights_cpu: " << typeName << std::endl;
