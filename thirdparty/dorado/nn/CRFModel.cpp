@@ -344,13 +344,13 @@ struct CudaLSTMStackImpl : Module {
             // auto weights_cpu = rnn->weights.t().contiguous();
             // Divided upper line as below
            
-            // Transpose the weights
-            transposed_weightsT -= realtime();
-            auto transposed_weights = rnn->weights.t();
-            transposed_weightsT += realtime();
+    /////////////////////////////////////////////////////////////////
+
             weights_cpuT -= realtime();
-            // Make the transposed weights contiguous
-            if(transposed_weights.is_contiguous()){
+            auto& weights = rnn->weights; // Assuming rnn->weights is a tensor
+            weights.transposeInPlace(); // Perform in-place transposition
+
+            if(weights.is_contiguous()){
                 // std::cout << "Already contigious" << std::endl;
                 cont ++;
             }
@@ -359,7 +359,27 @@ struct CudaLSTMStackImpl : Module {
                 ncont ++;
             }
 
-            auto weights_cpu = transposed_weights.contiguous();
+            auto weights_cpu = weights.contiguous();
+            weights_cpuT -= realtime();
+
+    /////////////////////////////////////////////////////////////////
+
+            // Transpose the weights
+            // transposed_weightsT -= realtime();
+            // auto transposed_weights = rnn->weights.t();
+            // transposed_weightsT += realtime();
+            // weights_cpuT -= realtime();
+            // Make the transposed weights contiguous
+            // if(transposed_weights.is_contiguous()){
+            //     // std::cout << "Already contigious" << std::endl;
+            //     cont ++;
+            // }
+            // else{
+            //     // std::cout << "Not contigious" << std::endl;
+            //     ncont ++;
+            // }
+
+            // auto weights_cpu = transposed_weights.contiguous();
 
             // const char* typeName = typeid(weights_cpu).name();
             // std::cout << "Type of weights_cpu: " << typeName << std::endl;
