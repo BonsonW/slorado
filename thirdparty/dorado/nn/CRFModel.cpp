@@ -351,11 +351,11 @@ struct CudaLSTMStackImpl : Module {
             weights_cpuT -= realtime();
             // Make the transposed weights contiguous
             if(transposed_weights.is_contiguous()){
-                std::cout << "Already contigious" << std::endl;
+                // std::cout << "Already contigious" << std::endl;
                 cont ++;
             }
             else{
-                std::cout << "Not contigious" << std::endl;
+                // std::cout << "Not contigious" << std::endl;
                 ncont ++;
             }
 
