@@ -347,7 +347,7 @@ struct CudaLSTMStackImpl : Module {
     /////////////////////////////////////////////////////////////////
 
             weights_cpuT -= realtime();
-            auto& transposed_weights = rnn->weights; // Assuming rnn->weights is a tensor
+            auto transposed_weights = rnn->weights.t(); // Assuming rnn->weights is a tensor
             // weights.transposeInPlace(); // Perform in-place transposition
 
             if(transposed_weights.is_contiguous()){
