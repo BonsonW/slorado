@@ -347,11 +347,14 @@ struct CudaLSTMStackImpl : Module {
     /////////////////////////////////////////////////////////////////
 
             weights_cpuT -= realtime();
-            if (rnn->weights == transWeights){
-                cout ++;
-            } else {
-                transWeights == rnn->weights;
-                ncount ++;            }
+            const std::type_info& type = typeid(rrn->weights);
+            std::cout << "Type of rrn->weights: " << type.name() << std::endl
+
+            // if (rnn->weights == transWeights){
+            //     cout ++;
+            // } else {
+            //     transWeights == rnn->weights;
+            //     ncount ++;            }
 
             auto transposed_weights = rnn->weights.t();
             // auto transposed_weights = rnn->weights.t(); // Assuming rnn->weights is a tensor

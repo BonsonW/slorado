@@ -70,7 +70,7 @@ double transposed_weightsT;
 double weightCPUcalls;
 double cont;
 double ncont;
-auto transWeights;
+// auto transWeights;
 
 double matMul;
 double cublasGemmExT;
