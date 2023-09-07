@@ -340,12 +340,12 @@ struct CudaLSTMStackImpl : Module {
             state_bufT += realtime();
             weights_cpuT -= realtime();
             //---------------------------------------
-            // auto weights_cpu = rnn->weights.t().contiguous();
+            auto weights_cpu = rnn->weights.t().contiguous();
             // Divided upper line as below
            
     /////////////////////////////////////////////////////////////////
 
-            weights_cpuT -= realtime();
+            // weights_cpuT -= realtime();
             // const std::type_info& type = typeid(rnn->weights);
             // std::cout << "Type of rnn->weights: " << type.name() << std::endl;
 
@@ -355,7 +355,7 @@ struct CudaLSTMStackImpl : Module {
             //     transWeights == rnn->weights;
             //     ncount ++;            }
 
-            auto transposed_weights = rnn->weights.t();
+            // auto transposed_weights = rnn->weights.t();
             // auto transposed_weights = rnn->weights.t(); // Assuming rnn->weights is a tensor
             // // weights.transposeInPlace(); // Perform in-place transposition
             // if(transposed_weights.is_contiguous()){
@@ -387,7 +387,7 @@ struct CudaLSTMStackImpl : Module {
             //     ncont ++;
             // }
 
-            auto weights_cpu = transposed_weights.contiguous();
+            // auto weights_cpu = transposed_weights.contiguous();
 
             // const char* typeName = typeid(weights_cpu).name();
             // std::cout << "Type of weights_cpu: " << typeName << std::endl;
