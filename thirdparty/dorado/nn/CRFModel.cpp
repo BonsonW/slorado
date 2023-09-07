@@ -17,6 +17,7 @@ extern "C" {
 }
 #endif
 
+template <typename T>
 
 #if USE_CUDA_LSTM
 // std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
@@ -372,7 +373,7 @@ struct CudaLSTMStackImpl : Module {
             // weights_cpuT -= realtime();
 
             
-template <typename T>
+
 std::string getRealTypeName(const T& variable) {
     // Use typeid to get the type_info for the variable
     const std::type_info& typeInfo = typeid(variable);
