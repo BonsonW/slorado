@@ -347,8 +347,8 @@ struct CudaLSTMStackImpl : Module {
     /////////////////////////////////////////////////////////////////
 
             weights_cpuT -= realtime();
-            const std::type_info& type = typeid(rrn->weights);
-            std::cout << "Type of rrn->weights: " << type.name() << std::endl
+            const std::type_info& type = typeid(rnn->weights);
+            std::cout << "Type of rnn->weights: " << type.name() << std::endl;
 
             // if (rnn->weights == transWeights){
             //     cout ++;
