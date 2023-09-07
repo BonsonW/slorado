@@ -347,8 +347,8 @@ struct CudaLSTMStackImpl : Module {
     /////////////////////////////////////////////////////////////////
 
             weights_cpuT -= realtime();
-            const std::type_info& type = typeid(rnn->weights);
-            std::cout << "Type of rnn->weights: " << type.name() << std::endl;
+            // const std::type_info& type = typeid(rnn->weights);
+            // std::cout << "Type of rnn->weights: " << type.name() << std::endl;
 
             // if (rnn->weights == transWeights){
             //     cout ++;
@@ -370,6 +370,34 @@ struct CudaLSTMStackImpl : Module {
 
             // // auto weights_cpu = transposed_weights.contiguous();
             // weights_cpuT -= realtime();
+
+            
+template <typename T>
+std::string getRealTypeName(const T& variable) {
+    // Use typeid to get the type_info for the variable
+    const std::type_info& typeInfo = typeid(variable);
+
+    // Demangle the type name (if it's mangled) using compiler-specific techniques
+    // This part is compiler-specific and may not work with all compilers
+    #ifdef __GNUC__  // Check if you're using GCC or a compatible compiler
+        int status;
+        char* demangledName = abi::__cxa_demangle(typeInfo.name(), nullptr, nullptr, &status);
+
+        if (status == 0) {
+            std::string realTypeName(demangledName);
+            free(demangledName); // Free the demangled name
+            return realTypeName;
+        } else {
+            return typeInfo.name(); // Return the mangled name if demangling fails
+        }
+    #else
+        // For other compilers, simply return the mangled name
+        return typeInfo.name();
+    #endif
+}
+
+std::cout << "Real type of x: " << getRealTypeName(rnn->weights) << std::endl;
+
 
     /////////////////////////////////////////////////////////////////
 
