@@ -347,21 +347,26 @@ struct CudaLSTMStackImpl : Module {
     /////////////////////////////////////////////////////////////////
 
             weights_cpuT -= realtime();
+            if (rnn->weights == transWeights){
+                cout ++;
+            } else {
+                transWeights == rnn->weights;
+                ncount ++;            }
+
             auto transposed_weights = rnn->weights.t();
             // auto transposed_weights = rnn->weights.t(); // Assuming rnn->weights is a tensor
             // // weights.transposeInPlace(); // Perform in-place transposition
+            // if(transposed_weights.is_contiguous()){
+            //     // std::cout << "Already contigious" << std::endl;
+            //     cont ++;
+            // }
+            // else{
+            //     // std::cout << "Not contigious" << std::endl;
+            //     ncont ++;
+            // }
 
-            if(transposed_weights.is_contiguous()){
-                // std::cout << "Already contigious" << std::endl;
-                cont ++;
-            }
-            else{
-                // std::cout << "Not contigious" << std::endl;
-                ncont ++;
-            }
-
-            // auto weights_cpu = transposed_weights.contiguous();
-            weights_cpuT -= realtime();
+            // // auto weights_cpu = transposed_weights.contiguous();
+            // weights_cpuT -= realtime();
 
     /////////////////////////////////////////////////////////////////
 
