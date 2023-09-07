@@ -372,7 +372,7 @@ struct CudaLSTMStackImpl : Module {
 
             
 
-std::string getRealTypeName(const T& variable) {
+std::string getRealTypeName(const auto& variable) {
     // Use typeid to get the type_info for the variable
     const std::type_info& typeInfo = typeid(variable);
 
