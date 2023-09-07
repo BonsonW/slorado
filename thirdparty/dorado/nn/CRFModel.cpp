@@ -17,8 +17,6 @@ extern "C" {
 }
 #endif
 
-template <typename T>
-
 #if USE_CUDA_LSTM
 // std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
 static bool cuda_lstm_is_quantized(int layer_size) {
