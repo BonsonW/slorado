@@ -352,7 +352,7 @@ struct CudaLSTMStackImpl : Module {
             state_bufT += realtime();
             weights_cpuT -= realtime();
             //---------------------------------------
-            // auto weights_cpu = rnn->weights.t().contiguous();
+            auto weights_cpu = rnn->weights.t().contiguous();
             // rnn->weightsT = rnn->weights.t();
             // Divided upper line as below
             if ( i == 1 ){
@@ -427,20 +427,20 @@ struct CudaLSTMStackImpl : Module {
 
             // --------------------------------------
             // weights_cpuT += realtime();
-            // auto weights = weights_cpu.to(in.device());
-            weightsT -= realtime();
-            auto weights = rnn1WeightsT.to(in.device());
-            if(i==1){
-                weights = rnn1WeightsT.to(in.device());
-            } else if(i==2){
-                weights = rnn2WeightsT.to(in.device());
-            } else if(i==3){
-                weights = rnn3WeightsT.to(in.device());
-            } else if(i==4){
-                weights = rnn4WeightsT.to(in.device());
-            } else {
-                weights = rnn5WeightsT.to(in.device());
-            }
+            auto weights = weights_cpu.to(in.device());
+            // weightsT -= realtime();
+            // auto weights = rnn1WeightsT.to(in.device());
+            // if(i==1){
+            //     weights = rnn1WeightsT.to(in.device());
+            // } else if(i==2){
+            //     weights = rnn2WeightsT.to(in.device());
+            // } else if(i==3){
+            //     weights = rnn3WeightsT.to(in.device());
+            // } else if(i==4){
+            //     weights = rnn4WeightsT.to(in.device());
+            // } else {
+            //     weights = rnn5WeightsT.to(in.device());
+            // }
 
             weightsT += realtime();
             biasT -= realtime();
