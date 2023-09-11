@@ -73,7 +73,7 @@ double cont;
 double ncont;
 // auto transWeights;
 
-torch::Tensor weightsTrans
+torch::Tensor weightsTrans;
 
 double matMul;
 double cublasGemmExT;
