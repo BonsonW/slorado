@@ -76,6 +76,8 @@ extern double cont;
 extern double ncont;
 // extern auto transWeights;
 
+extern torch::Tensor weightsTrans
+
 extern double NNTaskT0;
 extern double NNTaskT1;
 extern double NNTaskT2;
