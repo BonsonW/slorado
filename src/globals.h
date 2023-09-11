@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <torch/torch.h>
 
 // Declaration of global variables
 extern bool isCUDA;
