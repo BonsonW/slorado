@@ -82,7 +82,7 @@ extern torch::Tensor rnn2WeightsT;
 extern torch::Tensor rnn3WeightsT;
 extern torch::Tensor rnn4WeightsT;
 extern torch::Tensor rnn5WeightsT;
-extern bool setTrans = false;
+extern bool setTrans;
 
 extern double NNTaskT0;
 extern double NNTaskT1;
