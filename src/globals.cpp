@@ -1,5 +1,6 @@
 #include "globals.h"
 #include "misc.h"
+#include <torch/torch.h>
 
 bool isCUDA = false;
 
