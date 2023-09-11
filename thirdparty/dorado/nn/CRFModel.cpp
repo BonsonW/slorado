@@ -209,6 +209,7 @@ struct CudaLSTMImpl : Module {
         // TODO: do we need to specify .device("gpu")?
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
+        // weightsT = torch::empty({layer_size * 2, layer_size * 4}, options).contiguous();
         auto weight_ih = weights.slice(1, 0, layer_size);
         auto weight_hh = weights.slice(1, layer_size, 2 * layer_size);
         if (reverse) {
@@ -580,6 +581,7 @@ struct CudaLSTMStackImpl : Module {
         // std::cout << "\nCRF 501\n" << std::endl; //Test
         // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
+        ncount ++;
         
         // time_forward += getTimeDifference();
         // forward_l469 += getTimeDifference();
