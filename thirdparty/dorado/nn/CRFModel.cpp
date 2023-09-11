@@ -209,7 +209,7 @@ struct CudaLSTMImpl : Module {
         // TODO: do we need to specify .device("gpu")?
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
-        // weightsT = torch::empty({layer_size * 2, layer_size * 4}, options).contiguous();
+        weightsT = torch::empty({layer_size * 2, layer_size * 4}, options).contiguous();
         auto weight_ih = weights.slice(1, 0, layer_size);
         auto weight_hh = weights.slice(1, layer_size, 2 * layer_size);
         if (reverse) {
@@ -226,7 +226,7 @@ struct CudaLSTMImpl : Module {
         cudaLSTMImplT += realtime();
     }
 
-    torch::Tensor weights, bias;
+    torch::Tensor weights,weightsT, bias;
     bool reverse;
 };
 
@@ -342,6 +342,7 @@ struct CudaLSTMStackImpl : Module {
             weights_cpuT -= realtime();
             //---------------------------------------
             auto weights_cpu = rnn->weights.t().contiguous();
+            rnn->weightsT = rnn->weights.t();
             // Divided upper line as below
            
     /////////////////////////////////////////////////////////////////
@@ -359,14 +360,14 @@ struct CudaLSTMStackImpl : Module {
             // auto transposed_weights = rnn->weights.t();
             // auto transposed_weights = rnn->weights.t(); // Assuming rnn->weights is a tensor
             // // weights.transposeInPlace(); // Perform in-place transposition
-            // if(transposed_weights.is_contiguous()){
-            //     // std::cout << "Already contigious" << std::endl;
-            //     cont ++;
-            // }
-            // else{
-            //     // std::cout << "Not contigious" << std::endl;
-            //     ncont ++;
-            // }
+            if(rnn->weightsT.is_contiguous()){
+                // std::cout << "Already contigious" << std::endl;
+                cont ++;
+            }
+            else{
+                // std::cout << "Not contigious" << std::endl;
+                ncont ++;
+            }
 
             // // auto weights_cpu = transposed_weights.contiguous();
             // weights_cpuT -= realtime();
@@ -581,7 +582,6 @@ struct CudaLSTMStackImpl : Module {
         // std::cout << "\nCRF 501\n" << std::endl; //Test
         // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
-        ncont ++;
         
         // time_forward += getTimeDifference();
         // forward_l469 += getTimeDifference();
