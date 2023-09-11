@@ -581,7 +581,7 @@ struct CudaLSTMStackImpl : Module {
         // std::cout << "\nCRF 501\n" << std::endl; //Test
         // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
-        ncount ++;
+        ncont ++;
         
         // time_forward += getTimeDifference();
         // forward_l469 += getTimeDifference();
