@@ -333,18 +333,31 @@ struct CudaLSTMStackImpl : Module {
             host_transpose_f16T += realtime();
         }
 
+        if(!setTrans){
+            rnn1WeightsT = rnn1->weights.t().contiguous();
+            rnn2WeightsT = rnn2->weights.t().contiguous();
+            rnn3WeightsT = rnn3->weights.t().contiguous();
+            rnn4WeightsT = rnn4->weights.t().contiguous();
+            rnn5WeightsT = rnn5->weights.t().contiguous();
+            setTrans = true;
+        }
+
         forward_cublasT2 -= realtime();
+        int i = 0;
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
+            i ++;
             rnnIterate -= realtime();
             state_bufT -= realtime();
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
             state_bufT += realtime();
             weights_cpuT -= realtime();
             //---------------------------------------
-            auto weights_cpu = rnn->weights.t().contiguous();
+            // auto weights_cpu = rnn->weights.t().contiguous();
             // rnn->weightsT = rnn->weights.t();
             // Divided upper line as below
-           
+            if ( i == 1 ){
+
+            }
     /////////////////////////////////////////////////////////////////
 
             // weights_cpuT -= realtime();
@@ -414,8 +427,20 @@ struct CudaLSTMStackImpl : Module {
 
             // --------------------------------------
             // weights_cpuT += realtime();
+            // auto weights = weights_cpu.to(in.device());
             weightsT -= realtime();
-            auto weights = weights_cpu.to(in.device());
+            if(i==1){
+                auto weights = rnn1WeightsT.to(in.device());
+            } else if(i==2){
+                auto weights = rnn2WeightsT.to(in.device());
+            } else if(i==3){
+                auto weights = rnn3WeightsT.to(in.device());
+            } else if(i==4){
+                auto weights = rnn4WeightsT.to(in.device());
+            } else {
+                auto weights = rnn5WeightsT.to(in.device());
+            }
+
             weightsT += realtime();
             biasT -= realtime();
             auto bias = rnn->bias.to(in.device());

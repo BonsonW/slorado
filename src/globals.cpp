@@ -73,7 +73,12 @@ double cont;
 double ncont;
 // auto transWeights;
 
-torch::Tensor weightsTrans;
+torch::Tensor rnn1WeightsT;
+torch::Tensor rnn2WeightsT;
+torch::Tensor rnn3WeightsT;
+torch::Tensor rnn4WeightsT;
+torch::Tensor rnn5WeightsT;
+bool setTrans = false;
 
 double matMul;
 double cublasGemmExT;
