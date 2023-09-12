@@ -443,9 +443,9 @@ struct CudaLSTMStackImpl : Module {
             //     cont ++;
             // } else if(i==5 && (weights.equal(rnn5WeightsT.to(in.device())))){
             //     cont ++;
-            } else {
-                ncont ++;
-            }
+            // } else {
+            //     ncont ++;
+            // }
             i ++;
             weightsT -= realtime();
             // auto weights = rnn1WeightsT.to(in.device());
