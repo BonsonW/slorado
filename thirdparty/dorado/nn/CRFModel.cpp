@@ -340,6 +340,7 @@ struct CudaLSTMStackImpl : Module {
             rnn4WeightsT = rnn4->weights.t().contiguous();
             rnn5WeightsT = rnn5->weights.t().contiguous();
             setTrans = true;
+            std::cout << "\nSet Transposed weights\n" << std::endl; //Test
         }
 
         forward_cublasT2 -= realtime();
@@ -428,7 +429,21 @@ struct CudaLSTMStackImpl : Module {
             // --------------------------------------
             // weights_cpuT += realtime();
             auto weights = weights_cpu.to(in.device());
-            // weightsT -= realtime();
+            if(i==1 && weights == rnn1WeightsT.to(in.device())){
+                cont ++;
+            } else if(i==2 && weights == rnn2WeightsT.to(in.device())){
+                cont ++;
+            } else if(i==3 && weights == rnn3WeightsT.to(in.device())){
+                cont ++;
+            } else if(i==4 && weights == rnn4WeightsT.to(in.device())){
+                cont ++;
+            } else if(i==5 && weights == rnn5WeightsT.to(in.device())){
+                cont ++;
+            } else {
+                ncont ++;
+            }
+
+            weightsT -= realtime();
             // auto weights = rnn1WeightsT.to(in.device());
             // if(i==1){
             //     weights = rnn1WeightsT.to(in.device());
@@ -441,6 +456,7 @@ struct CudaLSTMStackImpl : Module {
             // } else {
             //     weights = rnn5WeightsT.to(in.device());
             // }
+
 
             weightsT += realtime();
             biasT -= realtime();
