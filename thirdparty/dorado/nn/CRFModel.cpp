@@ -334,11 +334,16 @@ struct CudaLSTMStackImpl : Module {
         }
 
         if(!setTrans){
-            rnn1WeightsT = rnn1->weights.t().contiguous();
-            rnn2WeightsT = rnn2->weights.t().contiguous();
-            rnn3WeightsT = rnn3->weights.t().contiguous();
-            rnn4WeightsT = rnn4->weights.t().contiguous();
-            rnn5WeightsT = rnn5->weights.t().contiguous();
+            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn1->weights.t().contiguous()));
+            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn2->weights.t().contiguous()));
+            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn3->weights.t().contiguous()));
+            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn4->weights.t().contiguous()));
+            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn5->weights.t().contiguous()));
+            // rnn1WeightsT = rnn1->weights.t().contiguous();
+            // rnn2WeightsT = rnn2->weights.t().contiguous();
+            // rnn3WeightsT = rnn3->weights.t().contiguous();
+            // rnn4WeightsT = rnn4->weights.t().contiguous();
+            // rnn5WeightsT = rnn5->weights.t().contiguous();
             setTrans = true;
             std::cout << "\nSet Transposed weights\n" << std::endl; //Test
         }
@@ -346,7 +351,6 @@ struct CudaLSTMStackImpl : Module {
         forward_cublasT2 -= realtime();
         int i = 0;
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
-            i ++;
             rnnIterate -= realtime();
             state_bufT -= realtime();
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
@@ -429,20 +433,20 @@ struct CudaLSTMStackImpl : Module {
             // --------------------------------------
             // weights_cpuT += realtime();
             auto weights = weights_cpu.to(in.device());
-            if(i==1 && (weights.equal(rnn1WeightsT.to(in.device())))){
+            if(weights.equal(transposedRNNWeights[i].to(in.device()))){
                 cont ++;
-            } else if(i==2 && (weights.equal(rnn2WeightsT.to(in.device())))){
-                cont ++;
-            } else if(i==3 && (weights.equal(rnn3WeightsT.to(in.device())))){
-                cont ++;
-            } else if(i==4 && (weights.equal(rnn4WeightsT.to(in.device())))){
-                cont ++;
-            } else if(i==5 && (weights.equal(rnn5WeightsT.to(in.device())))){
-                cont ++;
+            // } else if(i==2 && (weights.equal(transposedRNNWeights[i].to(in.device())))){
+            //     cont ++;
+            // } else if(i==3 && (weights.equal(rnn3WeightsT.to(in.device())))){
+            //     cont ++;
+            // } else if(i==4 && (weights.equal(rnn4WeightsT.to(in.device())))){
+            //     cont ++;
+            // } else if(i==5 && (weights.equal(rnn5WeightsT.to(in.device())))){
+            //     cont ++;
             } else {
                 ncont ++;
             }
-
+            i ++;
             weightsT -= realtime();
             // auto weights = rnn1WeightsT.to(in.device());
             // if(i==1){
