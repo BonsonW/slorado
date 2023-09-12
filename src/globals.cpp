@@ -73,7 +73,8 @@ double cont;
 double ncont;
 // auto transWeights;
 
-torch::Tensor transposedRNNWeights;
+std::vector<at::Tensor> transposedRNNWeights;
+// torch::Tensor transposedRNNWeights;
 torch::Tensor rnn1WeightsT;
 torch::Tensor rnn2WeightsT;
 torch::Tensor rnn3WeightsT;
