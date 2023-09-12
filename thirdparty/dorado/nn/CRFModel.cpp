@@ -334,11 +334,11 @@ struct CudaLSTMStackImpl : Module {
         }
 
         if(!setTrans){
-            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn1->weights.t().contiguous()));
-            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn2->weights.t().contiguous()));
-            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn3->weights.t().contiguous()));
-            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn4->weights.t().contiguous()));
-            transposedRNNWeights.push_back(transposedRNNWeights.push_back(rnn5->weights.t().contiguous()));
+            transposedRNNWeights.push_back((rnn1->weights.t().contiguous()));
+            transposedRNNWeights.push_back((rnn2->weights.t().contiguous()));
+            transposedRNNWeights.push_back((rnn3->weights.t().contiguous()));
+            transposedRNNWeights.push_back((rnn4->weights.t().contiguous()));
+            transposedRNNWeights.push_back((rnn5->weights.t().contiguous()));
             // rnn1WeightsT = rnn1->weights.t().contiguous();
             // rnn2WeightsT = rnn2->weights.t().contiguous();
             // rnn3WeightsT = rnn3->weights.t().contiguous();
