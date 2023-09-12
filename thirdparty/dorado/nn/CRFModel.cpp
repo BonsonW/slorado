@@ -360,9 +360,6 @@ struct CudaLSTMStackImpl : Module {
             // auto weights_cpu = rnn->weights.t().contiguous();
             // rnn->weightsT = rnn->weights.t();
             // Divided upper line as below
-            if ( i == 1 ){
-
-            }
     /////////////////////////////////////////////////////////////////
 
             // weights_cpuT -= realtime();
