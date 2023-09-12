@@ -429,15 +429,15 @@ struct CudaLSTMStackImpl : Module {
             // --------------------------------------
             // weights_cpuT += realtime();
             auto weights = weights_cpu.to(in.device());
-            if(i==1 && (static_cast<bool>(weights == rnn1WeightsT.to(in.device())))){
+            if(i==1 && (weights == rnn1WeightsT.to(in.device()) ? true : false)){
                 cont ++;
-            } else if(i==2 && (static_cast<bool>(weights == rnn2WeightsT.to(in.device())))){
+            } else if(i==2 && (weights == rnn2WeightsT.to(in.device()) ? true : false)){
                 cont ++;
-            } else if(i==3 && (static_cast<bool>(weights == rnn3WeightsT.to(in.device())))){
+            } else if(i==3 && (weights == rnn3WeightsT.to(in.device()) ? true : false)){
                 cont ++;
-            } else if(i==4 && (static_cast<bool>(weights == rnn4WeightsT.to(in.device())))){
+            } else if(i==4 && (weights == rnn4WeightsT.to(in.device()) ? true : false)){
                 cont ++;
-            } else if(i==5 && (static_cast<bool>(weights == rnn5WeightsT.to(in.device())))){
+            } else if(i==5 && (weights == rnn5WeightsT.to(in.device()) ? true : false)){
                 cont ++;
             } else {
                 ncont ++;
