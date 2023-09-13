@@ -357,7 +357,7 @@ struct CudaLSTMStackImpl : Module {
             state_bufT += realtime();
             weights_cpuT -= realtime();
             //---------------------------------------
-            auto weights_cpu = rnn->weights.t().contiguous();
+            // auto weights_cpu = rnn->weights.t().contiguous();
             // rnn->weightsT = rnn->weights.t();
             // Divided upper line as below
     /////////////////////////////////////////////////////////////////
@@ -415,11 +415,11 @@ struct CudaLSTMStackImpl : Module {
             // size_t dataSizeBytes = weights_cpu.numel() * weights_cpu.element_size();
             // std::cout << "Size of the data in weights_cpu: " << dataSizeBytes << " bytes" << std::endl;
 
-
-            weightCPUcalls ++;
             weights_cpuT += realtime();
+            weightCPUcalls ++;
 
-            // auto weights = transposedRNNWeights[i].to(in.device());
+            weightsT -= realtime();
+            auto weights = transposedRNNWeights[i].to(in.device());
 
             // double numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
             // std::cout << "\ncount: " << numElements  << std::endl;
@@ -432,9 +432,9 @@ struct CudaLSTMStackImpl : Module {
 
             // --------------------------------------
             // weights_cpuT += realtime();
-            auto weights = weights_cpu.to(in.device());
-            if(weights.equal(transposedRNNWeights[i].to(in.device()))){
-                cont ++;
+            // auto weights = weights_cpu.to(in.device());
+            // if(weights.equal(transposedRNNWeights[i].to(in.device()))){
+            //     cont ++;
             // } else if(i==2 && (weights.equal(transposedRNNWeights[i].to(in.device())))){
             //     cont ++;
             // } else if(i==3 && (weights.equal(rnn3WeightsT.to(in.device())))){
@@ -443,11 +443,11 @@ struct CudaLSTMStackImpl : Module {
             //     cont ++;
             // } else if(i==5 && (weights.equal(rnn5WeightsT.to(in.device())))){
             //     cont ++;
-            } else {
-                ncont ++;
-            }
+            // } else {
+            //     ncont ++;
+            // }
             i ++;
-            weightsT -= realtime();
+            
             // auto weights = rnn1WeightsT.to(in.device());
             // if(i==1){
             //     weights = rnn1WeightsT.to(in.device());
