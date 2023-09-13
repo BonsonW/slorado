@@ -357,7 +357,7 @@ struct CudaLSTMStackImpl : Module {
             state_bufT += realtime();
             weights_cpuT -= realtime();
             //---------------------------------------
-            // auto weights_cpu = rnn->weights.t().contiguous();
+            auto weights_cpu = rnn->weights.t().contiguous();
             // rnn->weightsT = rnn->weights.t();
             // Divided upper line as below
     /////////////////////////////////////////////////////////////////
@@ -419,7 +419,7 @@ struct CudaLSTMStackImpl : Module {
             weightCPUcalls ++;
 
             weightsT -= realtime();
-            auto weights = transposedRNNWeights[i].to(in.device());
+            // auto weights = transposedRNNWeights[i].to(in.device());
 
             // double numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
             // std::cout << "\ncount: " << numElements  << std::endl;
@@ -432,7 +432,7 @@ struct CudaLSTMStackImpl : Module {
 
             // --------------------------------------
             // weights_cpuT += realtime();
-            // auto weights = weights_cpu.to(in.device());
+            auto weights = weights_cpu.to(in.device());
             // if(weights.equal(transposedRNNWeights[i].to(in.device()))){
             //     cont ++;
             // } else if(i==2 && (weights.equal(transposedRNNWeights[i].to(in.device())))){
