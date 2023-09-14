@@ -354,26 +354,27 @@ struct CudaLSTMStackImpl : Module {
             state_bufT += realtime();
 
 //Previous Method////////////////////////////////////////////////////////////////////////////////////////
-            weights_cpuT -= realtime();
-            auto weights_cpu = rnn->weights.t().contiguous();
-            weights_cpuT += realtime();
-            weightCPUcalls ++;
+            // weights_cpuT -= realtime();
+            // auto weights_cpu = rnn->weights.t().contiguous();
+            // weights_cpuT += realtime();
+            // weightCPUcalls ++;
 
-            weightsT -= realtime();
-            auto weights = weights_cpu.to(in.device());
-            weightsT += realtime();
+            // weightsT -= realtime();
+            // auto weights = weights_cpu.to(in.device());
+            // weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            if((typeid(weights_cpu).name()) == (typeid(transposedRNNWeights[i]).name())){
-                cont ++;
-            } else {
-                ncont ++;
-            }
+            // if((typeid(weights_cpu).name()) == (typeid(transposedRNNWeights[i]).name())){
+            //     cont ++;
+            // } else {
+            //     ncont ++;
+            // }
+
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
-            // weightsT -= realtime();
-            // auto weights = transposedRNNWeights[i].to(in.device());
+            weightsT -= realtime();
+            auto weights = transposedRNNWeights[i].to(in.device());
             i ++;
-            // weightsT += realtime();
+            weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             biasT -= realtime();
