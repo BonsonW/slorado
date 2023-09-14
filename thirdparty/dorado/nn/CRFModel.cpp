@@ -364,7 +364,7 @@ struct CudaLSTMStackImpl : Module {
             weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            if(weights_cpu.equal(transposedRNNWeights[i])){
+            if((weights_cpu.to(in.device())).equal((transposedRNNWeights[i]).to(in.device()))){
                 cont ++;
             } else {
                 ncont ++;
