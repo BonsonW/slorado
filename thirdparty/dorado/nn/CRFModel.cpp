@@ -363,7 +363,7 @@ struct CudaLSTMStackImpl : Module {
             auto weights = weights_cpu.to(in.device());
             weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-typeid(weights_cpu).name()
+
             if((typeid(weights_cpu).name()).equal(typeid(transposedRNNWeights[i]).name())){
                 cont ++;
             } else {
