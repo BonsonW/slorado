@@ -373,6 +373,9 @@ struct CudaLSTMStackImpl : Module {
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
             weightsT -= realtime();
             auto weights = transposedRNNWeights[i].to(in.device());
+            const std::type_info& type = typeid(weights);
+            std::cout << "Type of weights: " << type.name() << std::endl;
+
             i ++;
             weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
