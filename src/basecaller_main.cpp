@@ -324,8 +324,8 @@ int basecaller_main(int argc, char* argv[]) {
             // fprintf(stderr, "\n[%s]                             - transposed_weights time: %.3f sec",__func__, transposed_weightsT); 
             fprintf(stderr, "\n[%s]                             - Transpose weights time: %.3f sec",__func__, weights_cpuT); 
             fprintf(stderr, "\n[%s]                                 - No of times called contiguous(): %.0f",__func__, weightCPUcalls);
-            fprintf(stderr, "\n[%s]                                 - No of times weights matched    : %.0f",__func__, cont);
-            fprintf(stderr, "\n[%s]                                 - No of times weights missmatched: %.0f",__func__, ncont);
+            // fprintf(stderr, "\n[%s]                                 - No of times weights matched    : %.0f",__func__, cont);
+            // fprintf(stderr, "\n[%s]                                 - No of times weights missmatched: %.0f",__func__, ncont);
             fprintf(stderr, "\n[%s]                             - Transfer weights to GPU time: %.3f sec",__func__, weightsT);
             fprintf(stderr, "\n[%s]                             - Transfer bias to GPU time: %.3f sec",__func__, biasT);   
             fprintf(stderr, "\n[%s]                             - matmul_f16()  time: %.3f sec",__func__, matmul_f16T);

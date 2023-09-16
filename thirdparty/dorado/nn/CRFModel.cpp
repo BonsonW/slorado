@@ -357,7 +357,7 @@ struct CudaLSTMStackImpl : Module {
             // weights_cpuT -= realtime();
             // auto weights_cpu = rnn->weights.t().contiguous();
             // weights_cpuT += realtime();
-            // weightCPUcalls ++;
+            weightCPUcalls ++;
 
             // weightsT -= realtime();
             // auto weights = weights_cpu.to(in.device());
