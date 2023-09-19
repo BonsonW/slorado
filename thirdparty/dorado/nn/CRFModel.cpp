@@ -335,18 +335,18 @@ struct CudaLSTMStackImpl : Module {
 
 //New Method////////////////////////////////////////////////////////////////////////////////////////////
         // Assign the transposed variables to the global array at the first time
-        if(!setTrans){
-            transposedRNNWeights.push_back((rnn1->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn2->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn3->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn4->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn5->weights.t().contiguous()));
-            setTrans = true;
-        }
+        // if(!setTrans){
+        //     transposedRNNWeights.push_back((rnn1->weights.t().contiguous()));
+        //     transposedRNNWeights.push_back((rnn2->weights.t().contiguous()));
+        //     transposedRNNWeights.push_back((rnn3->weights.t().contiguous()));
+        //     transposedRNNWeights.push_back((rnn4->weights.t().contiguous()));
+        //     transposedRNNWeights.push_back((rnn5->weights.t().contiguous()));
+        //     setTrans = true;
+        // }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         forward_cublasT2 -= realtime();
-        int i = 0;
+        // int i = 0;
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rnnIterate -= realtime();
             state_bufT -= realtime();
@@ -354,14 +354,14 @@ struct CudaLSTMStackImpl : Module {
             state_bufT += realtime();
 
 //Previous Method////////////////////////////////////////////////////////////////////////////////////////
-            // weights_cpuT -= realtime();
-            // auto weights_cpu = rnn->weights.t().contiguous();
-            // weights_cpuT += realtime();
+            weights_cpuT -= realtime();
+            auto weights_cpu = rnn->weights.t().contiguous();
+            weights_cpuT += realtime();
             weightCPUcalls ++;
 
-            // weightsT -= realtime();
-            // auto weights = weights_cpu.to(in.device());
-            // weightsT += realtime();
+            weightsT -= realtime();
+            auto weights = weights_cpu.to(in.device());
+            weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             // if((typeid(weights_cpu).name()) == (typeid(transposedRNNWeights[i]).name())){
@@ -371,13 +371,10 @@ struct CudaLSTMStackImpl : Module {
             // }
 
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
-            weightsT -= realtime();
-            torch::Tensor weights = transposedRNNWeights[i].to(in.device());
-            const std::type_info& type = typeid(weights);
-            std::cout << "Type of weights: " << type.name() << std::endl;
-
-            i ++;
-            weightsT += realtime();
+            // weightsT -= realtime();
+            // torch::Tensor weights = transposedRNNWeights[i].to(in.device());
+            // i ++;
+            // weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             biasT -= realtime();
