@@ -7,66 +7,73 @@
 
 #define EPS 1e-9f;
 
-std::pair<float, float> normalisation(torch::Tensor& x) {
+using Slice = torch::indexing::Slice;
+
+std::pair<float, float> normalisation(torch::Tensor& x, SignalNormalisationParams& scaling_params) {
     //Calculate shift and scale factors for normalisation.
-    auto quantiles = quantile_counting(x, torch::tensor({0.2, 0.9}));
-    float q20 = quantiles[0].item<float>();
-    float q90 = quantiles[1].item<float>();
-    float shift = std::max(10.0f, 0.51f * (q20 + q90));
-    float scale = std::max(1.0f, 0.53f * (q90 - q20));
+    auto quantiles = quantile_counting(x, torch::tensor({scaling_params.quantile_a, scaling_params.quantile_b}));
+    float qa = quantiles[0].item<float>();
+    float qb = quantiles[1].item<float>();
+    float shift = std::max(10.0f, scaling_params.shift_multiplier * (qa + qb));
+    float scale = std::max(1.0f, scaling_params.scale_multiplier * (qb - qa));
     return std::make_pair(shift, scale);
 }
 
-std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826){
+std::pair<float, float> med_mad(torch::Tensor &x, float factor=1.4826){
     torch::Tensor med = x.median();
     torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
 
     return {med.item<float>(), mad.item<float>()};
 }
 
-void scale_signal(torch::Tensor &signal, float scaling, float offset) {
-    auto t1 = normalisation(signal);
+void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams& scaling_params) {
+    auto t1 = scaling_params.quantile_scaling
+                ? normalisation(signal, scaling_params)
+                : med_mad(signal);
+
     auto shift = std::get<0>(t1);
     auto scale = std::get<1>(t1);
 
     signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
 
-    scale = scaling * scale;
-    shift = scaling * (shift + offset);
+    // scale = scaling * scale;
+    // shift = scaling * (shift + offset);
 
-    float threshold = shift + scale * 2.4;
+    // float threshold = shift + scale * 2.4;
 
     // 8000 value may be changed in future. Currently this is found to work well.
-    int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}), threshold);
-    signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
+    int max_samples = std::min(8000, static_cast<int>(signal.size(0) / 2));
+    int trim_start = trim(signal.index({Slice(torch::indexing::None, max_samples)}));
+    signal = signal.index({Slice(trim_start, torch::indexing::None)});
 }
 
-int trim(
-    torch::Tensor signal,
-    int window_size,
-    float threshold,
-    int min_elements,
-    int max_samples,
-    float max_trim
-) {
-    int min_trim = 10;
+int trim(const torch::Tensor &signal, float threshold, int window_size, int min_elements) {
+    const int min_trim = 10;
+    const int num_samples = static_cast<int>(signal.size(0)) - min_trim;
+    const int num_windows = num_samples / window_size;
+
+    // Access via raw pointers because of torch indexing overhead.
+    const auto signal_f32 = signal.to(torch::kFloat32);
+    assert(signal_f32.is_contiguous());
+    const float *const signal_f32_ptr = signal_f32.data_ptr<float>();
+
     bool seen_peak = false;
-    int num_samples = std::min(max_samples, static_cast<int>(signal.size(0)) - min_trim);
-    int num_windows = num_samples / window_size;
+    for (int pos = 0; pos < num_windows; ++pos) {
+        const int start = pos * window_size + min_trim;
+        const int end = start + window_size;
+        assert(start < signal.size(0));
+        assert(end <= signal.size(0));  // end is exclusive
 
-    for (int pos = 0; pos < num_windows; pos++) {
-        int start = pos * window_size + min_trim;
-        int end = start + window_size;
+        const auto num_large_enough =
+                std::count_if(&signal_f32_ptr[start], &signal_f32_ptr[end],
+                              [threshold](float elem) { return elem > threshold; });
 
-        auto window = signal.index({torch::indexing::Slice(start, end)});
-        auto elements = window > threshold;
-
-        if ((elements.sum().item<int>() > min_elements) || seen_peak) {
+        if (num_large_enough > min_elements || seen_peak) {
             seen_peak = true;
-            if (window[-1].item<float>() > threshold) {
+            if (signal_f32_ptr[end - 1] > threshold) {
                 continue;
             }
-            if (end >= num_samples || end >= (max_trim * signal.size(0))) {
+            if (end >= num_samples) {
                 return min_trim;
             } else {
                 return end;

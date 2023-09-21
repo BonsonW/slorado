@@ -277,7 +277,9 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     if (len_raw_signal > 0) {
         torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
 
-        scale_signal(signal, rec->range / rec->digitisation, rec->offset);
+        auto scale_params = SignalNormalisationParams();
+
+        scale_signal(signal, rec->range / rec->digitisation, rec->offset, scale_params);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
 

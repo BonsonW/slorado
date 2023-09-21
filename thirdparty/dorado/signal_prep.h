@@ -12,17 +12,24 @@
 #include "utils/tensor_utils.h"
 #include "Chunk.h"
 
+struct SignalNormalisationParams {
+    float quantile_a = 0.2f;
+    float quantile_b = 0.9f;
+    float shift_multiplier = 0.51f;
+    float scale_multiplier = 0.53f;
+    bool quantile_scaling = true;
+};
+
 torch::Tensor tensor_from_record(slow5_rec_t *rec);
 std::pair<float, float> normalisation(torch::Tensor& x);
 int trim(
-    torch::Tensor signal,
-    int window_size = 40,
+    const torch::Tensor &signal,
     float threshold = 2.4,
-    int min_elements = 3,
-    int max_samples = 8000,
-    float max_trim = 0.3
+    int window_size = 40,
+    int min_elements = 3
 );
-void scale_signal(torch::Tensor &signal, float scaling, float offset);
+
+void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams& scale_params);
 std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap);
 std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, size_t chunk_size);
 
