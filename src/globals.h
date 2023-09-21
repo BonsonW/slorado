@@ -94,6 +94,8 @@ extern double matMul;
 extern double cublasGemmExT;
 extern double assertT;
 
+extern double beam_searchT;               
+
 // Function to measure time difference
 double getTimeDifference();
 

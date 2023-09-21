@@ -90,6 +90,9 @@ double NNTaskT0;
 double NNTaskT1;
 double NNTaskT2;
 
+double beam_searchT;               
+
+
 // Function to measure time difference in seconds
 double getTimeDifference() {
     return endTime - startTime;
