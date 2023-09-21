@@ -12,6 +12,7 @@
 #include <numeric>
 
 #include "../../src/misc.h"
+#include "../../src/globals.h"
 
 //#define REMOVE_FIXED_BEAM_STAYS
 
