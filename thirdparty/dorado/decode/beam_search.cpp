@@ -1,7 +1,6 @@
 #include "beam_search.h"
 
 #include "fast_hash.h"
-#include "toml.h"
 
 #include <math.h>
 
@@ -11,6 +10,8 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+
+#include "../../src/misc.h"
 
 //#define REMOVE_FIXED_BEAM_STAYS
 
