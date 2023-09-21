@@ -1,6 +1,7 @@
 #include "beam_search.h"
 
 #include "fast_hash.h"
+#include "toml.h"
 
 #include <math.h>
 
