@@ -10,15 +10,8 @@
 #include <slow5/slow5.h>
 
 #include "utils/tensor_utils.h"
+#include "nn/CRFModel.h"
 #include "Chunk.h"
-
-struct SignalNormalisationParams {
-    float quantile_a = 0.2f;
-    float quantile_b = 0.9f;
-    float shift_multiplier = 0.51f;
-    float scale_multiplier = 0.53f;
-    bool quantile_scaling = true;
-};
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec);
 std::pair<float, float> normalisation(torch::Tensor& x);

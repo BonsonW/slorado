@@ -1,1 +1,0 @@
-make clean && make cuda=1 koi=1 -j CUDA_ROOT=/install/cuda-11.3/

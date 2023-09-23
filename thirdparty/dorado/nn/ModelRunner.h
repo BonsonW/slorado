@@ -12,10 +12,11 @@
 
 class ModelRunnerBase {
 public:
-    virtual void accept_chunk(int chunk_idx, at::Tensor slice) = 0;
+    virtual void accept_chunk(int chunk_idx, const torch::Tensor& slice) = 0;
     virtual std::vector<DecodedChunk> call_chunks(int num_chunks) = 0;
     virtual size_t model_stride() const = 0;
     virtual size_t chunk_size() const = 0;
+    virtual CRFModelConfig config() const = 0;
 };
 
 using Runner = std::shared_ptr<ModelRunnerBase>;
@@ -27,10 +28,11 @@ public:
                 const std::string &device,
                 int chunk_size,
                 int batch_size);
-    void accept_chunk(int chunk_idx, at::Tensor slice) final;
+    void accept_chunk(int chunk_idx, const torch::Tensor& slice) final;
     std::vector<DecodedChunk> call_chunks(int num_chunks) final;
     size_t model_stride() const final { return m_model_stride; }
     size_t chunk_size() const final { return m_input.size(2); }
+    CRFModelConfig config() const final { return m_model_config; }
 
 private:
     std::string m_device;
@@ -40,6 +42,7 @@ private:
     DecoderOptions m_decoder_options;
     torch::nn::ModuleHolder<torch::nn::AnyModule> m_module{nullptr};
     size_t m_model_stride;
+    CRFModelConfig m_model_config;
 };
 
 template <typename T>
@@ -47,12 +50,12 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
                             const std::string &device,
                             int chunk_size,
                             int batch_size) {
-    const auto model_config = load_crf_model_config(model_path);
-    m_model_stride = static_cast<size_t>(model_config.stride);
+    m_model_config = load_crf_model_config(model_path);
+    m_model_stride = static_cast<size_t>(m_model_config.stride);
 
     m_decoder_options = DecoderOptions();
-    m_decoder_options.q_shift = model_config.qbias;
-    m_decoder_options.q_scale = model_config.qscale;
+    m_decoder_options.q_shift = m_model_config.qbias;
+    m_decoder_options.q_scale = m_model_config.qscale;
     m_decoder = std::make_unique<T>();
     m_device = device;
 
@@ -61,18 +64,18 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
 #ifdef USE_GPU
     #ifdef USE_CUDA_LSTM
         m_options = torch::TensorOptions().dtype(T::dtype).device(device); //todo
-        m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
+        m_module = load_crf_model(model_path, m_model_config, batch_size, chunk_size, m_options);
         chunk_size -= chunk_size % m_model_stride;
         m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(T::dtype).device(torch::kCPU)); //todo
     #else
         m_options = torch::TensorOptions().dtype(CPUDecoder::dtype).device(device); //todo
-        m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
+        m_module = load_crf_model(model_path, m_model_config, batch_size, chunk_size, m_options);
         chunk_size -= chunk_size % m_model_stride;
         m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(CPUDecoder::dtype).device(torch::kCPU)); //todo
     #endif
 #else
     m_options = torch::TensorOptions().dtype(CPUDecoder::dtype).device(device); //todo
-    m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
+    m_module = load_crf_model(model_path, m_model_config, batch_size, chunk_size, m_options);
     chunk_size -= chunk_size % m_model_stride;
     m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(CPUDecoder::dtype).device(torch::kCPU)); //todo
 #endif
@@ -88,7 +91,7 @@ template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int n
 #endif
 }
 
-template<typename T> void ModelRunner<T>::accept_chunk(int num_chunks, at::Tensor slice) {
+template<typename T> void ModelRunner<T>::accept_chunk(int num_chunks, const torch::Tensor& slice) {
     m_input.index_put_({num_chunks, 0}, slice);
 }
 

@@ -18,10 +18,11 @@ std::shared_ptr<CudaCaller> create_cuda_caller(const std::string& model_path,
 class CudaModelRunner : public ModelRunnerBase {
 public:
     CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_size, int batch_size);
-    void accept_chunk(int chunk_idx, at::Tensor slice) final;
+    void accept_chunk(int chunk_idx, const torch::Tensor& slice) final;
     std::vector<DecodedChunk> call_chunks(int num_chunks) final;
     size_t model_stride() const final;
     size_t chunk_size() const final;
+    CRFModelConfig config() const final;
 
 private:
     std::shared_ptr<CudaCaller> m_caller;

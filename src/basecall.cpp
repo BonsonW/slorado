@@ -43,6 +43,7 @@ void basecall_chunks(
     ModelRunnerBase &model_runner,
     timestamps_t *ts
 ) {
+    LOG_DEBUG("%s", "accepting chunks");
     for (size_t i = 0; i < tensors.size(); ++i) {
         ts->time_accept -= realtime();
         model_runner.accept_chunk(i, tensors[i]);

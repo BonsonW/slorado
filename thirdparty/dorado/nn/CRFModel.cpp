@@ -618,6 +618,8 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     }
 
     CRFModelConfig config;
+    config.signal_norm_params = SignalNormalisationParams();
+
     config.qscale = 1.0f;
     config.qbias = 0.0f;
 
@@ -697,6 +699,14 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     // CUDA and CPU paths do not output explicit stay scores from the NN.
     config.outsize = pow(4, config.state_len) * 4;
 
+    if (toml_key_exists(config_toml, "normalisation")) {
+        toml_table_t *norm = toml_table_in(config_toml, "normalisation");
+        config.signal_norm_params.quantile_a = (float)toml_double_in(norm, "quantile_a").u.d;
+        config.signal_norm_params.quantile_b = (float)toml_double_in(norm, "quantile_b").u.d;
+        config.signal_norm_params.shift_multiplier = (float)toml_double_in(norm, "shift_multiplier").u.d;
+        config.signal_norm_params.scale_multiplier = (float)toml_double_in(norm, "scale_multiplier").u.d;
+    }
+
     toml_free(config_toml);
 
     return config;
@@ -754,7 +764,7 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
     } else
 #endif
     {
-        const bool expand_blanks = true;
+        const bool expand_blanks = false;
         auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);
         return populate_model(model, path, options, model_config.decomposition,
                               model_config.bias);

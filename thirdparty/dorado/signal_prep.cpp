@@ -36,13 +36,9 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNorm
 
     signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
 
-    // scale = scaling * scale;
-    // shift = scaling * (shift + offset);
-
-    // float threshold = shift + scale * 2.4;
-
     // 8000 value may be changed in future. Currently this is found to work well.
     int max_samples = std::min(8000, static_cast<int>(signal.size(0) / 2));
+
     int trim_start = trim(signal.index({Slice(torch::indexing::None, max_samples)}));
     signal = signal.index({Slice(trim_start, torch::indexing::None)});
 }
@@ -85,7 +81,7 @@ int trim(const torch::Tensor &signal, float threshold, int window_size, int min_
 }
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {
-    std::vector<int16_t> tmp(rec->raw_signal,rec->raw_signal+rec->len_raw_signal);
+    std::vector<int16_t> tmp(rec->raw_signal, rec->raw_signal+rec->len_raw_signal);
     std::vector<int16_t> floatTmp(tmp.begin(), tmp.end());
 
     torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);

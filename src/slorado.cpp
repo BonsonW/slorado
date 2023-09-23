@@ -276,8 +276,9 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 
     if (len_raw_signal > 0) {
         torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
-
-        auto scale_params = SignalNormalisationParams();
+        
+        // hacky gettting first runner
+        auto scale_params = core->runners[0][0].get()->config().signal_norm_params;
 
         scale_signal(signal, rec->range / rec->digitisation, rec->offset, scale_params);
 
@@ -443,7 +444,7 @@ void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
     opt->batch_size = 2000;
     opt->gpu_batch_size = 800;
-    opt->batch_size_bytes = 20*1000*1000;
+    opt->batch_size_bytes = 200*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;
