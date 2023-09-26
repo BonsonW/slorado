@@ -379,8 +379,8 @@ struct CudaLSTMStackImpl : Module {
 
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
             weightsT -= realtime();
-            // torch::Tensor weights = transposedRNNWeights[i].to(in.device());
-            torch::Tensor weights = GPUWeights[i];
+            torch::Tensor weights = transposedRNNWeights[i].to(in.device());
+            // torch::Tensor weights = GPUWeights[i];
             i ++;
             weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
