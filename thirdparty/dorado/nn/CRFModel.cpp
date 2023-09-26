@@ -342,7 +342,14 @@ struct CudaLSTMStackImpl : Module {
             transposedRNNWeights.push_back((rnn4->weights.t().contiguous()));
             transposedRNNWeights.push_back((rnn5->weights.t().contiguous()));
             setTrans = true;
+
+            GPUWeights.push_back(transposedRNNWeights[0].to(in.device()));
+            GPUWeights.push_back(transposedRNNWeights[1].to(in.device()));
+            GPUWeights.push_back(transposedRNNWeights[2].to(in.device()));
+            GPUWeights.push_back(transposedRNNWeights[3].to(in.device()));
+            GPUWeights.push_back(transposedRNNWeights[4].to(in.device()));
         }
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         forward_cublasT2 -= realtime();
@@ -372,7 +379,7 @@ struct CudaLSTMStackImpl : Module {
 
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
             weightsT -= realtime();
-            torch::Tensor weights = transposedRNNWeights[i].to(in.device());
+            // torch::Tensor weights = transposedRNNWeights[i].to(in.device());
             i ++;
             weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -390,7 +397,7 @@ struct CudaLSTMStackImpl : Module {
 
                 // Timestep matrix mulitplication
                 matmul_f16T -= realtime();
-                matmul_f16(timestep_in, weights, gate_buf);
+                matmul_f16(timestep_in, GPUWeights[i-1], gate_buf);
                 host_lstm_step_f16(stream, batch_size, layer_size, bias.data_ptr(),
                                    gate_buf.data_ptr(), state_buf.data_ptr(),
                                    timestep_out.data_ptr());

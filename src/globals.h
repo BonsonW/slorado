@@ -78,6 +78,8 @@ extern double ncont;
 // extern auto transWeights;
 
 extern std::vector<at::Tensor> transposedRNNWeights;
+extern std::vector<at::Tensor> GPUWeights;
+
 // extern torch::Tensor transposedRNNWeights;
 extern torch::Tensor rnn1WeightsT;
 extern torch::Tensor rnn2WeightsT;

@@ -74,7 +74,7 @@ double ncont;
 // auto transWeights;
 
 std::vector<at::Tensor> transposedRNNWeights;
-
+std::vector<at::Tensor> GPUWeights;
 // torch::Tensor transposedRNNWeights;
 torch::Tensor rnn1WeightsT;
 torch::Tensor rnn2WeightsT;
