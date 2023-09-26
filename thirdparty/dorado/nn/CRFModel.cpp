@@ -380,6 +380,7 @@ struct CudaLSTMStackImpl : Module {
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
             weightsT -= realtime();
             // torch::Tensor weights = transposedRNNWeights[i].to(in.device());
+            torch::Tensor weights = GPUWeights[i];
             i ++;
             weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -397,7 +398,7 @@ struct CudaLSTMStackImpl : Module {
 
                 // Timestep matrix mulitplication
                 matmul_f16T -= realtime();
-                matmul_f16(timestep_in, GPUWeights[i-1], gate_buf);
+                matmul_f16(timestep_in, weights, gate_buf);
                 host_lstm_step_f16(stream, batch_size, layer_size, bias.data_ptr(),
                                    gate_buf.data_ptr(), state_buf.data_ptr(),
                                    timestep_out.data_ptr());
