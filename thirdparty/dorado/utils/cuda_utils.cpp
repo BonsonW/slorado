@@ -5,7 +5,7 @@
 
 #include "../nn/CRFModel.h"
 #include "torch/torch.h"
-#include "vinograd.cuh"
+#include "vinograd.h"
 
 
 extern "C" {
