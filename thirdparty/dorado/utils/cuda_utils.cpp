@@ -6,6 +6,8 @@
 #include "../nn/CRFModel.h"
 #include "torch/torch.h"
 
+
+
 extern "C" {
 #include "koi.h"
 }
@@ -21,9 +23,14 @@ extern "C" {
 #include <regex>
 #include <string>
 #include <vector>
+#include "vinograd.cuh"
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
-    std::cout << "\nmatMul\n" << std::endl; //Test
+    // std::cout << "\nmatMul\n" << std::endl; //Test
+    matMul ++;
     // matMul -= realtime();
     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
     constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
@@ -100,5 +107,22 @@ void matmul_f16(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C
     //     float const cublas_time = run_N_times(matmul_f16_cublas);
     //     return cublas_time < torch_time ? matmul_f16_cublas : matmul_f16_torch;
     // }();
-    matmul_f16_cublas(A, B, C);
+    // matmul_f16_cublas(A, B, C);
+    // void winograd_mm(torch::Tensor const  &A,torch::Tensor const &B,torch::Tensor &C){
+    winograd_mm(A, B, C);
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+
+
