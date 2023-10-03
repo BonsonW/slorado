@@ -1,5 +1,5 @@
 CC       = cc
-CXX		 = nvcc
+CXX		 = c++
 
 LIBTORCH_DIR ?= thirdparty/torch/libtorch
 CPPFLAGS += -I slow5lib/include/ \
@@ -65,10 +65,7 @@ ifdef cuda
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)
 	OBJ += $(BUILD_DIR)/GPUDecoder.o
-	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
-ifndef jetson
-	LIBS += -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda_cu.so"
-endif
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so" -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda_cu.so"
 ifdef koi
 	OBJ += $(BUILD_DIR)/CudaCRFModel.o $(BUILD_DIR)/cuda_utils.o
 	CPPFLAGS += -I thirdparty/koi_lib/include
