@@ -49,6 +49,7 @@ SOFTWARE.
 //std::string generateSplitBar(const long* values, int size);   ////////////////////////////////
 void generateSplitBar(const long* values, const std::string* names, int size);
 
+
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
     {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
@@ -83,16 +84,16 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
-    fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
+    // fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\nadvanced options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
-    fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
+    // fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 #ifdef HAVE_ACC
-    fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
+    // fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
 #endif
 }
 
@@ -245,12 +246,14 @@ int basecaller_main(int argc, char* argv[]) {
 
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
         //load a databatch
+        double realtime_d = realtime();
+        
         status = load_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
-
+        double realtime_p = realtime();
         //process a databatch
         process_db(core, db);
 
@@ -267,6 +270,8 @@ int basecaller_main(int argc, char* argv[]) {
         if(opt.debug_break==counter){
             break;
         }
+        //fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_d, counter);
+        //fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_p, counter);
         counter++;
     }
 
