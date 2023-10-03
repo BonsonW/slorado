@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <torch/torch.h>
 
 // Declaration of global variables
 extern bool isCUDA;
@@ -50,7 +51,42 @@ extern double NCudaCallerT;
 extern double NNTaskT;
 extern double call_chunksT;
 extern double cuda_thread_fnT;
+extern double cuda_thread_fnT2;
+extern double cuda_thread_fnT3;
+extern double cuda_thread_fnT4;
+extern double cuda_thread_fnT5;
+extern double cuda_thread_fnT6;
 extern double SubCudaCallerT;
+extern double forward_cublasT;
+extern double forward_cublasT2;
+extern double forward_cublasT3;
+extern double cudaLSTMImplT;
+extern double convolutionImplT;
+extern double cudaLSTMStackImplT;
+extern double matmul_f16T;
+extern double host_transpose_f16T;
+extern double rnnIterate;
+extern double forLoopRest;
+extern double state_bufT;
+extern double weights_cpuT;
+extern double weightsT;
+extern double biasT;
+extern double transposed_weightsT;
+extern double weightCPUcalls;
+extern double cont;
+extern double ncont;
+// extern auto transWeights;
+
+extern std::vector<at::Tensor> transposedRNNWeights;
+extern std::vector<at::Tensor> GPUWeights;
+
+// extern torch::Tensor transposedRNNWeights;
+extern torch::Tensor rnn1WeightsT;
+extern torch::Tensor rnn2WeightsT;
+extern torch::Tensor rnn3WeightsT;
+extern torch::Tensor rnn4WeightsT;
+extern torch::Tensor rnn5WeightsT;
+extern bool setTrans;
 
 extern double NNTaskT0;
 extern double NNTaskT1;
@@ -59,6 +95,8 @@ extern double NNTaskT2;
 extern double matMul;
 extern double cublasGemmExT;
 extern double assertT;
+
+extern double beam_searchT;               
 
 // Function to measure time difference
 double getTimeDifference();

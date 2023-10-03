@@ -72,6 +72,7 @@ public:
         std::condition_variable cv;
         torch::Tensor out;
         bool done{false};
+        
         int num_chunks;
         // endTime = realtime();
         // NNTaskT += getTimeDifference();
@@ -102,11 +103,13 @@ public:
         
         std::unique_lock<std::mutex> lock(task.mut);
 
-        NNTaskT2 -= realtime();
         while (!task.done) {
+            NNTaskT2 -= realtime();
             task.cv.wait(lock);
+            NNTaskT2 += realtime();
+
         }
-        NNTaskT2 += realtime();
+        // NNTaskT2 += realtime();
 
 
         output.copy_(task.out);
@@ -124,27 +127,44 @@ public:
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
 
         while (true) {
+            // cuda_thread_fnT -= realtime();
             std::unique_lock<std::mutex> input_lock(m_input_lock);
             while (m_input_queue.empty() && !m_terminate) {
+                if(m_input_queue.size() > 0){            
+                    std::cout << "\nlength: " << m_input_queue.size() << "\n" << std::endl; //Test
+                }
                 m_input_cv.wait_for(input_lock, 100ms);
             }
             // TODO: finish work before terminating?
+            // cuda_thread_fnT += realtime();
             if (m_terminate) {
                 return;
             }
+            cuda_thread_fnT2 -= realtime();
 
+            // cuda_thread_fnT3 -= realtime();
             NNTask *task = m_input_queue.back();
+            // cuda_thread_fnT3 += realtime();
+            // cuda_thread_fnT4 -= realtime();
             m_input_queue.pop_back();
             input_lock.unlock();
+            // cuda_thread_fnT4 += realtime();
+
 
             std::unique_lock<std::mutex> task_lock(task->mut);
+            cuda_thread_fnT5 -= realtime();
             auto scores = m_module->forward(task->input);
+            cuda_thread_fnT5 += realtime();
+            cuda_thread_fnT6 -= realtime();
             torch::cuda::synchronize();
             task->out = m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device);
+            cuda_thread_fnT6 += realtime();
             stream.synchronize();
             task->done = true;
             task->cv.notify_one();
             task_lock.unlock();
+            cuda_thread_fnT2 += realtime();
+
         }
         // endTime = realtime();
         // cuda_thread_fnT += getTimeDifference();

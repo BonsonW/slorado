@@ -1,5 +1,6 @@
 #include "globals.h"
 #include "misc.h"
+#include <torch/torch.h>
 
 bool isCUDA = false;
 
@@ -46,7 +47,41 @@ double NCudaCallerT;
 double NNTaskT;
 double call_chunksT;
 double cuda_thread_fnT;
+double cuda_thread_fnT2;
+double cuda_thread_fnT3;
+double cuda_thread_fnT4;
+double cuda_thread_fnT5;
+double cuda_thread_fnT6;
 double SubCudaCallerT;
+double forward_cublasT;
+double forward_cublasT2;
+double forward_cublasT3;
+double cudaLSTMImplT;
+double convolutionImplT;
+double cudaLSTMStackImplT;
+double matmul_f16T;
+double host_transpose_f16T;
+double rnnIterate;
+double forLoopRest;
+double state_bufT;
+double weights_cpuT;
+double weightsT;
+double biasT;
+double transposed_weightsT;
+double weightCPUcalls;
+double cont;
+double ncont;
+// auto transWeights;
+
+std::vector<at::Tensor> transposedRNNWeights;
+std::vector<at::Tensor> GPUWeights;
+// torch::Tensor transposedRNNWeights;
+torch::Tensor rnn1WeightsT;
+torch::Tensor rnn2WeightsT;
+torch::Tensor rnn3WeightsT;
+torch::Tensor rnn4WeightsT;
+torch::Tensor rnn5WeightsT;
+bool setTrans = false;
 
 double matMul;
 double cublasGemmExT;
@@ -54,6 +89,9 @@ double assertT;
 double NNTaskT0;
 double NNTaskT1;
 double NNTaskT2;
+
+double beam_searchT;               
+
 
 // Function to measure time difference in seconds
 double getTimeDifference() {
