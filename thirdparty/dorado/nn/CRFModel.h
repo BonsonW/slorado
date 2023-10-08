@@ -3,6 +3,7 @@
 #include <torch/torch.h>
 
 #include <vector>
+#include <string>
 
 struct SignalNormalisationParams {
     float quantile_a = 0.2f;
@@ -29,13 +30,16 @@ struct CRFModelConfig {
     // blank scores are explicitly stored in the linear layer output.
     int outsize;
     float blank_score;
-    float scale;
+    float scale = 1.0;
+    int sample_rate = -1;
     int num_features;
+
+    std::string model_path;
 
     SignalNormalisationParams signal_norm_params;
 };
 
-CRFModelConfig load_crf_model_config(const std::string& path);
+CRFModelConfig load_crf_model_config(const std::string& model_path);
 
 std::vector<torch::Tensor> load_crf_model_weights(const std::string& dir,
                                                   bool decomposition,
