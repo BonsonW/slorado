@@ -10,19 +10,24 @@
 
 class CudaCaller;
 
-std::shared_ptr<CudaCaller> create_cuda_caller(const std::string& model_path,
+std::shared_ptr<CudaCaller> create_cuda_caller(const CRFModelConfig& model_config,
                                                int chunk_size,
                                                int batch_size,
-                                               const std::string& device);
+                                               const std::string& device,
+                                               float memory_limit_fraction = 1.f,
+                                               bool exclusive_gpu_access = true);
 
 class CudaModelRunner : public ModelRunnerBase {
 public:
-    CudaModelRunner(std::shared_ptr<CudaCaller> caller, int chunk_size, int batch_size);
+    explicit CudaModelRunner(std::shared_ptr<CudaCaller> caller);
     void accept_chunk(int chunk_idx, const torch::Tensor& slice) final;
     std::vector<DecodedChunk> call_chunks(int num_chunks) final;
+    const CRFModelConfig& config() const final;
     size_t model_stride() const final;
     size_t chunk_size() const final;
-    CRFModelConfig config() const final;
+    size_t batch_size() const final;
+    void terminate() final;
+    void restart() final;
 
 private:
     std::shared_ptr<CudaCaller> m_caller;

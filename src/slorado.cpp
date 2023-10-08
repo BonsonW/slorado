@@ -80,10 +80,18 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->ts.time_init_runners -= realtime();
 
+    std::string model_path = model;
+
+    LOG_DEBUG("Loading model config from %s", model);
+
+    CRFModelConfig model_config = load_crf_model_config(model_path);
+
+    LOG_DEBUG("%s", "Finished loading model config");
+    
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model_config, opt.device, opt.chunk_size, opt.gpu_batch_size));
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
         }
@@ -105,13 +113,14 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
         for (auto device: devices) {
 #ifdef USE_CUDA_LSTM
-            auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
+            auto caller = create_cuda_caller(model_config, opt.chunk_size, opt.gpu_batch_size, device);
 #endif
+            LOG_DEBUG("%s", "Assigning runners");
             for (int i = 0; i < opt.num_runners; ++i) {
 #ifdef USE_CUDA_LSTM
-                core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
+                core->runners->push_back(std::make_shared<CudaModelRunner>(caller));
 #else
-                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model_config, device, opt.chunk_size, opt.gpu_batch_size));
 #endif
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
@@ -121,7 +130,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 #else
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model_config, opt.device, opt.chunk_size, opt.gpu_batch_size));
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
         }
@@ -131,7 +140,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     }
 #endif
 
-    LOG_DEBUG("%s", "successfully initialized runners");
+    LOG_DEBUG("%s", "Successfully initialized runners");
 
     core->ts.time_init_runners += realtime();
 

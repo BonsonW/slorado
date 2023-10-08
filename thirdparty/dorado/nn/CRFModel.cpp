@@ -935,11 +935,7 @@ std::vector<torch::Tensor> load_crf_model_weights(const std::string &dir,
 
     return load_tensors(dir, tensors);
 }
-
-ModuleHolder<AnyModule> load_crf_model(const std::string &path,
-                                       const CRFModelConfig &model_config,
-                                       const int batch_size,
-                                       const int chunk_size,
+ModuleHolder<AnyModule> load_crf_model(const CRFModelConfig &model_config,
                                        const torch::TensorOptions &options) {
     auto model = CRFModel(model_config);
     return populate_model(model, model_config.model_path, options,
