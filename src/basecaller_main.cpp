@@ -76,7 +76,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [%d]\n", opt.gpu_batch_size);
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
     fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
-    fprintf(fp_help, "  -c INT                      chunk size [%d]\n", opt.chunk_size);
+    fprintf(fp_help, "  -c INT                      chunk size [%zu]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     // fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
@@ -142,7 +142,7 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 'c') {
             opt.chunk_size = atoi(optarg);
             if (opt.chunk_size < 1) {
-                ERROR("Chunk size should larger than 0. You entered %d", opt.chunk_size);
+                ERROR("Chunk size should larger than 0. You entered %zu", opt.chunk_size);
                 exit(EXIT_FAILURE);
             }
         } else if (c == 'p') {
@@ -219,7 +219,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"input path:         %s\n", data);
     fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
     fprintf(stderr,"device:             %s\n", opt.device);
-    fprintf(stderr,"chunk size:         %d\n", opt.chunk_size);
+    fprintf(stderr,"chunk size:         %zu\n", opt.chunk_size);
     fprintf(stderr,"batch size:         %d\n", opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);

@@ -73,8 +73,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     init_timestamps(&core->ts);
 
-    core->opt = opt;
-
     core->runners = new std::vector<Runner>();
     core->runner_ts = new std::vector<timestamps_t *>();
 
@@ -133,6 +131,12 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     LOG_DEBUG("%s", "successfully initialized runners");
 
+    auto adjusted_chunk_size = core->runners->front()->chunk_size();
+    if (opt.chunk_size != adjusted_chunk_size) {
+        LOG_DEBUG("Adjusting chunk size to %zu", adjusted_chunk_size);
+        opt.chunk_size = adjusted_chunk_size;
+    }
+
     core->ts.time_init_runners += realtime();
 
     //realtime0
@@ -147,6 +151,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->sum_bytes=0;
     core->total_reads=0; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+
+    core->opt = opt;
 
 #ifdef HAVE_ACC
     if (core->opt.flag & SLORADO_ACC) {
