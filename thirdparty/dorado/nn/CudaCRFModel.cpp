@@ -38,13 +38,9 @@ public:
         m_options = torch::TensorOptions().dtype(GPUDecoder::dtype).device(device);
         assert(m_options.device().is_cuda());
 
-        LOG_DEBUG("%s", "Loading crf model");
-
         torch::InferenceMode guard;
         m_module = load_crf_model(model_config, m_options);
         
-        LOG_DEBUG("%s", "Setting batch size");
-
         // Batch size will be rounded up to a multiple of batch_size_granularity, regardless of
         // user choice. This makes sure batch size is compatible with GPU kernels.
         if (batch_size == 0) {
@@ -61,8 +57,6 @@ public:
 
         c10::cuda::CUDAGuard device_guard(m_options.device());
         c10::cuda::CUDACachingAllocator::emptyCache();
-
-        LOG_DEBUG("%s", "Statring threads");
 
         start_threads();
     }
@@ -214,12 +208,6 @@ public:
         c10::cuda::CUDAGuard device_guard(m_options.device());
         auto stream = c10::cuda::getCurrentCUDAStream(m_options.device().index());
 
-        const std::string loop_scope_str =
-                "cuda_thread_fn_device_" + std::to_string(m_options.device().index());
-        const std::string input_q_cv_scope_str =
-                "input_queue_cv_device_" + std::to_string(m_options.device().index());
-        const std::string gpu_lock_scope_str =
-                "gpu_lock_" + std::to_string(m_options.device().index());
         while (true) {
             std::unique_lock<std::mutex> input_lock(m_input_lock);
             if (m_input_queue.empty() && m_terminate.load()) {
@@ -236,7 +224,7 @@ public:
 
             auto run_basecalling = [&]() {
                 auto scores = m_module->forward(task->input.to(m_options.device(), true));
-                task->out.copy_(m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device));
+                task->out.copy_(m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options));
                 stream.synchronize();
             };
 
@@ -290,7 +278,6 @@ std::shared_ptr<CudaCaller> create_cuda_caller(const CRFModelConfig &model_confi
                                                const std::string &device,
                                                float memory_limit_fraction,
                                                bool exclusive_gpu_access) {
-    LOG_DEBUG("%s", "Creating cuda caller");
     return std::make_shared<CudaCaller>(model_config, chunk_size, batch_size, device,
                                         memory_limit_fraction, exclusive_gpu_access);
 }
@@ -298,16 +285,10 @@ std::shared_ptr<CudaCaller> create_cuda_caller(const CRFModelConfig &model_confi
 CudaModelRunner::CudaModelRunner(std::shared_ptr<CudaCaller> caller)
         : m_caller(caller),
           m_stream(c10::cuda::getStreamFromPool(false, m_caller->m_options.device().index())) {
-
-    LOG_DEBUG("%s", "Getting opts");
     auto opts = torch::TensorOptions().device(torch::kCPU).pinned_memory(true);
-
-    LOG_DEBUG("%s", "Initializing input tensor");
     m_input = torch::empty(
             {caller->m_batch_size, caller->m_num_input_features, caller->m_in_chunk_size},
             opts.dtype(m_caller->m_options.dtype()));
-
-    LOG_DEBUG("%s", "Initializing output tensor");
     m_output = torch::empty({3, caller->m_batch_size, caller->m_out_chunk_size},
                             opts.dtype(torch::kInt8));
 }
@@ -327,11 +308,3 @@ size_t CudaModelRunner::chunk_size() const { return m_input.size(2); }
 size_t CudaModelRunner::batch_size() const { return m_input.size(0); }
 void CudaModelRunner::terminate() { m_caller->terminate(); }
 void CudaModelRunner::restart() { m_caller->restart(); }
-
-// std::string CudaModelRunner::get_name() const {
-//     // The name must be unique across multiple instances.
-//     // We could take a unique ID at setup time, but for now just use the address.
-//     std::ostringstream name_stream;
-//     name_stream << "CudaModelRunner_" << this;
-//     return name_stream.str();
-// }

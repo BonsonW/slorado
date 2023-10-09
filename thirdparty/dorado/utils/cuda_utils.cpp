@@ -3,9 +3,9 @@
 #include "../nn/CRFModel.h"
 #include "torch/torch.h"
 
-extern "C" {
-#include "koi.h"
-}
+// extern "C" {
+// #include "koi.h"
+// }
 
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
@@ -114,4 +114,28 @@ size_t available_memory(torch::Device device) {
     c10::cuda::CUDAGuard device_guard(device);
     cudaMemGetInfo(&free, &total);
     return free;
+}
+
+std::vector<std::string> parse_cuda_device_string(std::string device_string) {
+    std::vector<std::string> devices;
+    std::regex e("[0-9]+");
+    std::smatch m;
+
+    if (device_string.substr(0, 5) != "cuda:") {
+        return devices;  // empty vector;
+    } else if (device_string == "cuda:all" || device_string == "cuda:auto") {
+        auto num_devices = torch::cuda::device_count();
+        for (size_t i = 0; i < num_devices; i++) {
+            devices.push_back("cuda:" + std::to_string(i));
+        }
+    } else {
+        while (std::regex_search(device_string, m, e)) {
+            for (auto x : m) {
+                devices.push_back("cuda:" + x.str());
+            }
+            device_string = m.suffix().str();
+        }
+    }
+
+    return devices;
 }

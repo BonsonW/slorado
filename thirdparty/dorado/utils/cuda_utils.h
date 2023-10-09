@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+std::vector<std::string> parse_cuda_device_string(std::string device_string);
+
 void matmul_f16(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C);
 
 size_t available_memory(torch::Device device);

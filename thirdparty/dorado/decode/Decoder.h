@@ -25,6 +25,5 @@ class Decoder {
 public:
     virtual std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
                                                   int num_chunks,
-                                                  const DecoderOptions& options,
-                                                  std::string& device) = 0;
+                                                  const DecoderOptions& options) = 0;
 };

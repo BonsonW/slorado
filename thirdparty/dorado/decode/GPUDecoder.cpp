@@ -1,6 +1,7 @@
 #include "GPUDecoder.h"
 
 #include "Decoder.h"
+#include "../utils/cuda_utils.h"
 
 #include <c10/cuda/CUDAGuard.h>
 #include <torch/torch.h>
@@ -13,8 +14,8 @@ extern "C" {
 }
 #endif
 
-torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
-#ifdef USE_CUDA_LSTM
+torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options) {
+    c10::cuda::CUDAGuard device_guard(scores.device());
     long int N = scores.sizes()[0];
     long int T = scores.sizes()[1];
     long int C = scores.sizes()[2];
@@ -27,59 +28,58 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     auto tensor_options_int8 =
             torch::TensorOptions().dtype(torch::kInt8).device(scores.device()).requires_grad(false);
 
-    if (!initialized) {
-        chunks = torch::empty({N, 4}, tensor_options_int32);
-        chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
-        chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
-        chunks.index({torch::indexing::Slice(), 1}) = int(T);
-        chunks.index({torch::indexing::Slice(), 3}) = 0;
+    auto chunks = torch::empty({N, 4}, tensor_options_int32);
+    chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
+    chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
+    chunks.index({torch::indexing::Slice(), 1}) = int(T);
+    chunks.index({torch::indexing::Slice(), 3}) = 0;
 
-        chunk_results = torch::empty({N, 8}, tensor_options_int32);
+    auto chunk_results = torch::empty({N, 8}, tensor_options_int32);
 
-        chunk_results = chunk_results.contiguous();
+    chunk_results = chunk_results.contiguous();
 
-        aux = torch::empty(N * (T + 1) * (C + 4 * options.beam_width), tensor_options_int8);
-        path = torch::zeros(N * (T + 1), tensor_options_int32);
+    auto aux = torch::empty(N * (T + 1) * (C + 4 * options.beam_width), tensor_options_int8);
+    auto path = torch::zeros(N * (T + 1), tensor_options_int32);
 
-        moves_sequence_qstring = torch::zeros({3, N * T}, tensor_options_int8);
-
-        initialized = true;
-    }
+    auto moves_sequence_qstring = torch::zeros({3, N * T}, tensor_options_int8);
 
     moves_sequence_qstring.index({torch::indexing::Slice()}) = 0.0;
     auto moves = moves_sequence_qstring[0];
     auto sequence = moves_sequence_qstring[1];
     auto qstring = moves_sequence_qstring[2];
 
-    host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
-                         aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
-                         sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
-                         options.beam_width, options.beam_cut, options.blank_score);
-
-    host_beam_search_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
-                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
-                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
-                          options.beam_width, options.beam_cut, options.blank_score);
-
-    host_compute_posts_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
-                            aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
-                            sequence.data_ptr(), qstring.data_ptr(), options.q_scale,
-                            options.q_shift, options.beam_width, options.beam_cut,
-                            options.blank_score);
-
-    host_run_decode(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
-                    aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
-                    qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
-                    options.beam_cut, options.blank_score, options.move_pad);
-
+    {
+        handle_cuda_result(host_back_guide_step(
+                chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
+                qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
+                options.beam_cut, options.blank_score));
+    }
+    {
+        handle_cuda_result(host_beam_search_step(
+                chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
+                qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
+                options.beam_cut, options.blank_score));
+    }
+    {
+        handle_cuda_result(host_compute_posts_step(
+                chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
+                qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
+                options.beam_cut, options.blank_score));
+    }
+    {
+        handle_cuda_result(host_run_decode(
+                chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
+                qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
+                options.beam_cut, options.blank_score, options.move_pad));
+    }
     return moves_sequence_qstring.reshape({3, N, -1});
-#else
-    return torch::empty({1});
-#endif
 }
 
 std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstring_cpu) {
-#ifdef USE_CUDA_LSTM
     assert(moves_sequence_qstring_cpu.device() == torch::kCPU);
     auto moves_cpu = moves_sequence_qstring_cpu[0];
     auto sequence_cpu = moves_sequence_qstring_cpu[1];
@@ -102,14 +102,10 @@ std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstr
     }
 
     return called_chunks;
-#else
-    return std::vector<DecodedChunk>();
-#endif
 }
 
 std::vector<DecodedChunk> GPUDecoder::beam_search(const torch::Tensor &scores,
                                                   int num_chunks,
-                                                  const DecoderOptions &options,
-                                                  std::string &device) {
-    return cpu_part(gpu_part(scores, num_chunks, options, device));
+                                                  const DecoderOptions &options) {
+    return cpu_part(gpu_part(scores, num_chunks, options));
 }

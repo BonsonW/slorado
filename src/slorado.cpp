@@ -67,13 +67,11 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->sp = slow5_open(slow5file,"r");
     if (core->sp == NULL) {
-        VERBOSE("Error opening SLOW5 file %s\n",slow5file);
+        VERBOSE("Error opening SLOW5 file %s\n", slow5file);
         exit(EXIT_FAILURE);
     }
 
     init_timestamps(&core->ts);
-
-    core->opt = opt;
 
     core->runners = new std::vector<Runner>();
     core->runner_ts = new std::vector<timestamps_t *>();
@@ -113,9 +111,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
         for (auto device: devices) {
 #ifdef USE_CUDA_LSTM
-            auto caller = create_cuda_caller(model_config, opt.chunk_size, opt.gpu_batch_size, device);
+            std::shared_ptr<CudaCaller> caller = create_cuda_caller(model_config, opt.chunk_size, 0, "cuda:0");
 #endif
-            LOG_DEBUG("%s", "Assigning runners");
             for (int i = 0; i < opt.num_runners; ++i) {
 #ifdef USE_CUDA_LSTM
                 core->runners->push_back(std::make_shared<CudaModelRunner>(caller));
@@ -144,7 +141,14 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->ts.time_init_runners += realtime();
 
-    //realtime0
+    auto adjusted_chunk_size = core->runners->front()->chunk_size();
+
+    if (opt.chunk_size != adjusted_chunk_size) {
+        LOG_DEBUG("Adjusted chunk size to %zu", adjusted_chunk_size);
+        opt.chunk_size = adjusted_chunk_size;
+    }
+
+    // realtime0
     core->realtime0=realtime0;
 
     core->load_db_time=0;
@@ -156,6 +160,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->sum_bytes=0;
     core->total_reads=0; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+    core->opt = opt;
 
 #ifdef HAVE_ACC
     if (core->opt.flag & SLORADO_ACC) {
@@ -294,7 +299,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
 
         (*db->chunks)[i] = chunks;
-        LOG_DEBUG("%s","assigned chunks");
+        LOG_DEBUG("assigned chunks of size %zu", opt.chunk_size);
 
         std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
 

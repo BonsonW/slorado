@@ -1040,6 +1040,22 @@ CRFModelConfig load_crf_model_config(const std::string &model_path) {
     // CUDA and CPU paths do not output explicit stay scores from the NN.
     config.outsize = pow(4, config.state_len) * 4;
 
+    // // Fetch signal normalisation parameters. todo
+    // // Use default values if normalisation section is not found.
+    // if (config_toml.contains("normalisation")) {
+    //     const auto &norm = toml::find(config_toml, "normalisation");
+    //     config.signal_norm_params.quantile_a = toml::find<float>(norm, "quantile_a");
+    //     config.signal_norm_params.quantile_b = toml::find<float>(norm, "quantile_b");
+    //     config.signal_norm_params.shift_multiplier = toml::find<float>(norm, "shift_multiplier");
+    //     config.signal_norm_params.scale_multiplier = toml::find<float>(norm, "scale_multiplier");
+    // }
+
+    // // Set quantile scaling method based on the model filename
+    // std::string model_name = std::filesystem::canonical(config.model_path).filename().string();
+    // if (model_name.rfind("dna_r9.4.1", 0) == 0) {
+    //     config.signal_norm_params.quantile_scaling = false;
+    // }
+
     toml_free(config_toml);
 
     return config;
