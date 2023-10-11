@@ -78,13 +78,10 @@ endif
 endif
 
 ifdef rocc
-#	CUDA_ROOT ?= /usr/local/cuda
-#	CUDA_LIB ?= $(CUDA_ROOT)/lib64
-#	CUDA_INC ?= $(CUDA_ROOT)/include
-    CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)
+    CPPFLAGS += -DUSE_GPU=1
 	OBJ += $(BUILD_DIR)/GPUDecoder.o
-	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_global_deps.so"
-	LDFLAGS += -L $(CUDA_LIB)/ -lrt -ldl
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
+	LDFLAGS += -lrt -ldl
 endif
 
 CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
