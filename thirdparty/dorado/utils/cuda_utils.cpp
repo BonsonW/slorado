@@ -10,6 +10,7 @@
 
 extern "C" {
 #include "koi.h"
+//#include "winograd.cu"
 }
 
 #include <ATen/cuda/CUDAContext.h>
@@ -23,8 +24,8 @@ extern "C" {
 #include <regex>
 #include <string>
 #include <vector>
-#include "vinograd.cuh"
 
+// void winograd_mm(torch::Tensor const&,torch::Tensor const&,torch::Tensor&);
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -109,7 +110,7 @@ void matmul_f16(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C
     // }();
     // matmul_f16_cublas(A, B, C);
     // void winograd_mm(torch::Tensor const  &A,torch::Tensor const &B,torch::Tensor &C){
-    winograd_mm(A, B, C);
+    // winograd_mm(A, B, C);
 }
 
 
