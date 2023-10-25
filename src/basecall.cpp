@@ -50,7 +50,7 @@ void basecall_chunks(
         ts->time_accept += realtime();
     }
 
-    LOG_DEBUG("%s", "decoding chunks");
+    LOG_DEBUG("%s", "basecalling chunks");
     ts->time_decode -= realtime();
     std::vector<DecodedChunk> decoded_chunks = model_runner.call_chunks(chunks.size());
     ts->time_decode += realtime();

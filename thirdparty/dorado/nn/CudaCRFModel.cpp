@@ -195,11 +195,13 @@ public:
         }
         m_input_cv.notify_one();
 
+        LOG_DEBUG("%s", "running nn");
         std::unique_lock<std::mutex> lock(task->mut);
         while (!task->done) {
             task->cv.wait(lock);
         }
 
+        LOG_DEBUG("%s", "decoding chunks");
         return m_decoder->cpu_part(output);
     }
 
@@ -210,6 +212,10 @@ public:
 
         while (true) {
             std::unique_lock<std::mutex> input_lock(m_input_lock);
+            while (m_input_queue.empty() && !m_terminate.load()) {
+                m_input_cv.wait_for(input_lock, 100ms);
+            }
+            
             if (m_input_queue.empty() && m_terminate.load()) {
                 return;
             }

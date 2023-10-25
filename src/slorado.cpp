@@ -457,7 +457,7 @@ void free_db(db_t* db) {
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
     opt->batch_size = 2000;
-    opt->gpu_batch_size = 800;
+    opt->gpu_batch_size = 0;
     opt->batch_size_bytes = 200*1000*1000;
     opt->num_thread = 8;
 
