@@ -3,7 +3,6 @@
 #include "beam_search.h"
 
 #include <math.h>
-#include <torch/torch.h>
 
 #include <vector>
 

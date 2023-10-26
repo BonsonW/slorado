@@ -38,7 +38,7 @@ scripts/download-models.sh
 <details open><summary> <b>Option 1:</b>  CUDA GPU version that uses ONT's closed-source koi library binaries (CUDA >=11.3 needed). This is the fastest: </summary>
 
 ```
-scripts/install-torch12.sh
+scripts/install-torch2.sh
 make cuda=1 koi=1 -j
 ```
 
@@ -57,7 +57,7 @@ make cuda=1 koi=1 -j CUDA_ROOT=/local/path/cuda/
 <details><summary> <b>Option 2:</b> CUDA GPU version without close-source koi library (CUDA >=10.2 is adequate). Uses CPU decoder, thus considerably slow: </summary>
     
 ```
-scripts/install-torch12.sh
+scripts/install-torch2.sh
 make cuda=1 -j
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
@@ -66,7 +66,7 @@ make cuda=1 -j
 <details><summary> <b>Option 3:</b>  CPU-only version (horribly slow): </summary>
 
 ```
-scripts/install-torch12.sh
+scripts/install-torch2.sh
 make -j
 ./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
 ```
@@ -89,7 +89,7 @@ make -j
 
     ```
     pip3 install --upgrade pip
-    pip3 install --no-cache  https://developer.download.nvidia.com/compute/redist/jp/v50/pytorch/torch-1.12.0a0+8a1a93a9.nv22.5-cp38-cp38-linux_aarch64.whl
+    pip3 install --no-cache  https://developer.download.nvidia.com/compute/redist/jp/v51/pytorch/torch-2.0.0a0+8aa34602.nv23.03-cp38-cp38-linux_aarch64.whl
     ```
 
 3. Clone and build.
@@ -130,7 +130,7 @@ Currently, slorado does not implement automatic batch size selection based on av
 | -t INT            | number of processing threads.                         | 8              |
 | -K INT            | batch size (max number of reads loaded at once).      | 2000           |
 | -C INT            | gpu batch size (max number of chunks loaded at once)  | 800            |
-| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 20.0M          |
+| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 200.0M         |
 | -o FILE           | output to file                                        | stdout         |
 | -c INT            | chunk size                                            | 8000           |
 | -p INT            | overlap                                               | 150            |

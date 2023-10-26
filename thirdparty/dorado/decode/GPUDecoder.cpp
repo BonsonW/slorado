@@ -2,12 +2,11 @@
 
 #include "Decoder.h"
 
-#include <c10/cuda/CUDAGuard.h>
-#include <torch/torch.h>
 #include "error.h"
 
 #ifdef USE_CUDA_LSTM
 #include <cuda_runtime.h>
+#include <c10/cuda/CUDAGuard.h>
 extern "C" {
 #include "koi.h"
 }
