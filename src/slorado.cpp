@@ -447,7 +447,7 @@ void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
     opt->batch_size = 2000;
     opt->gpu_batch_size = 800;
-    opt->batch_size_bytes = 20*1000*1000;
+    opt->batch_size_bytes = 200*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;
