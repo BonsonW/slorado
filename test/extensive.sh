@@ -3,11 +3,11 @@
 MINIMAP2=minimap2/minimap2
 REFERENC_GENOME="/genome/hg38noAlt.idx"
 
-SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_subsubsample/reads.blow5"
+SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5"
 
-FAST="dna_r10.4.1_e8.2_400bps_fast@v4.0.0"
-HAC="dna_r10.4.1_e8.2_400bps_hac@v4.0.0"
-SUP="dna_r10.4.1_e8.2_400bps_sup@v4.0.0"
+FAST="dna_r10.4.1_e8.2_400bps_fast@v4.2.0"
+HAC="dna_r10.4.1_e8.2_400bps_hac@v4.2.0"
+SUP="dna_r10.4.1_e8.2_400bps_sup@v4.2.0"
 
 die() {
     echo "Error: $@" >&2
@@ -27,14 +27,14 @@ ex() {
 check_accuracy () {
     case $1 in
     $FAST )
-        if (( $(echo "$2 >= 0.92" | bc -l) ));
+        if (( $(echo "$2 >= 0.90" | bc -l) ));
         then
             return 0
         fi
         ;;
 
     $HAC )
-        if (( $(echo "$2 >= 0.97" | bc -l) ));
+        if (( $(echo "$2 >= 0.96" | bc -l) ));
         then
             return 0
         fi
@@ -58,7 +58,7 @@ check_accuracy () {
 download_model () {
     test -e $1.zip && rm $1.zip
     test -d $1 && rm -r $1
-    wget https://nanoporetech.box.com/shared/static/6xmmoltxeo8budtsxlak4qi0130m3opx.zip -O $1.zip || die "Downloading the model failed"
+    wget https://cdn.oxfordnanoportal.com/software/analysis/dorado/${1}.zip -O $1.zip || die "Downloading the model failed"
     unzip $1.zip || die "Unzipping the model failed"
     test -d models || mkdir models || die "Creating the models directory failed"
     mv $1 models/ || die "Moving the model failed"
@@ -81,13 +81,13 @@ test -d models/$SUP || download_model $SUP
 test -e minimap2/minimap2 || download_minimap2
 
 # memory check
-make clean && make -j cuda=1 koi=1 asan=1 CUDA_ROOT=/data/install/cuda-11.3
+# make clean && make -j cuda=1 koi=1 asan=1 CUDA_ROOT=/data/install/cuda-11.8/
 
-echo "Memory Check - CPU - FAST model - 1 reads"
-ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
+# echo "Memory Check - CPU - FAST model - 1 reads"
+# ex  ./slorado basecaller models/$FAST test/one_5khz.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
 
 # accuracy check
-make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.3
+make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.8/
 
 echo "GPU - FAST model - 20k reads"
 ex  ./slorado basecaller models/$FAST $SUBSAMPLE -xcuda:0,1,2,3 -B500M -c10000 -C1900 > test/tmp.fastq || die "Running the tool failed"

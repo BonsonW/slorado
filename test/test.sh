@@ -1,5 +1,7 @@
 #!/bin/bash
 
+FAST="dna_r10.4.1_e8.2_400bps_fast@v4.2.0"
+
 # terminate script
 die() {
 	echo "$1" >&2
@@ -24,13 +26,13 @@ ex() {
 test -z "$DEVICE" && DEVICE=cpu
 
 download_model () {
-    test -e dna_r10.4.1_e8.2_400bps_fast.zip && rm dna_r10.4.1_e8.2_400bps_fast.zip
-    test -d dna_r10.4.1_e8.2_400bps_fast@v4.0.0 && rm -r dna_r10.4.1_e8.2_400bps_fast@v4.0.0
-    wget https://nanoporetech.box.com/shared/static/6xmmoltxeo8budtsxlak4qi0130m3opx.zip -O dna_r10.4.1_e8.2_400bps_fast.zip || die "Downloading the model failed"
-    unzip dna_r10.4.1_e8.2_400bps_fast.zip || die "Unzipping the model failed"
+    test -e $1.zip && rm $1.zip
+    test -d $1 && rm -r $1
+    wget https://cdn.oxfordnanoportal.com/software/analysis/dorado/${1}.zip -O $1.zip || die "Downloading the model failed"
+    unzip $1.zip || die "Unzipping the model failed"
     test -d models || mkdir models || die "Creating the models directory failed"
-    mv dna_r10.4.1_e8.2_400bps_fast@v4.0.0 models/ || die "Moving the model failed"
-    rm -f dna_r10.4.1_e8.2_400bps_fast.zip || die "Removing the model failed"
+    mv $1 models/ || die "Moving the model failed"
+    rm -f $1.zip || die "Removing the model failed"
 }
 
 download_minimap2 () {
@@ -67,13 +69,13 @@ check_accuracy () {
     die "Failed accuracy test with value of $2"
 }
 
-test -d models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 || download_model
+test -d models/$FAST || download_model $FAST
 test -e minimap2/minimap2 || download_minimap2
 
-#make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.3
+#make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.8
 
 # echo "Test 1"
-ex  ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5 --device "$DEVICE" > test/tmp.fastq  || die "Running the tool failed"
+ex  ./slorado basecaller models/$FAST test/one_5khz.blow5 --device "$DEVICE" > test/tmp.fastq  || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont test/chr4_90700000_90900000.fa test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 check_accuracy $(awk '{print $10/$11}' test/tmp.paf | datamash median 1)
 

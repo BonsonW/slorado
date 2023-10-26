@@ -25,7 +25,7 @@ On OS X : brew install zlib
 
 ### 2. Downloading Models
 
-Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.0.0, dna_r10.4.1_e8.2_400bps_hac@v4.0.0 and dna_r10.4.1_e8.2_400bps_sup@v4.0.0). We have tested slorado only on these models.
+Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.2.0, dna_r10.4.1_e8.2_400bps_hac@v4.2.0 and dna_r10.4.1_e8.2_400bps_hac@v4.2.0). We have tested slorado only on these models.
 
 ```
 scripts/download-models.sh
@@ -35,18 +35,18 @@ scripts/download-models.sh
 
 ### Building for x86_64 architceture 
 
-<details open><summary> <b>Option 1:</b>  CUDA GPU version that uses ONT's closed-source koi library binaries (CUDA >=11.3 needed). This is the fastest: </summary>
+<details open><summary> <b>Option 1:</b>  CUDA GPU version that uses ONT's closed-source koi library binaries (CUDA >=11.8 needed). This is the fastest: </summary>
 
 ```
 scripts/install-torch2.sh
 make cuda=1 koi=1 -j
 ```
 
-If you do not have CUDA 11.3 or higher installed system wide, you can install CUDA 11.3 using following commands:
+If you do not have CUDA 11.8 or higher installed system wide, you can install CUDA 11.8 using following commands:
 ```
-wget https://developer.download.nvidia.com/compute/cuda/11.3.0/local_installers/cuda_11.3.0_465.19.01_linux.run
-chmod +x cuda_11.3.0_465.19.01_linux.run
-./cuda_11.3.0_465.19.01_linux.run --toolkit --toolkitpath=/local/path/cuda/
+wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda_11.8.0_520.61.05_linux.run
+chmod +x cuda_11.8.0_520.61.05_linux.run
+./cuda_11.8.0_520.61.05_linux.run --toolkit --toolkitpath=/local/path/cuda/
 ```
 Then compile slorado by specifying the custom CUDA location to CUDA_ROOT variable as:
 ```
@@ -54,12 +54,12 @@ make cuda=1 koi=1 -j CUDA_ROOT=/local/path/cuda/
 ```
 </details>
 
-<details><summary> <b>Option 2:</b> CUDA GPU version without close-source koi library (CUDA >=10.2 is adequate). Uses CPU decoder, thus considerably slow: </summary>
+<details><summary> <b>Option 2:</b> CUDA GPU version without close-source koi library. This version uses teh CPU decoder, thus considerably slow: </summary>
     
 ```
 scripts/install-torch2.sh
 make cuda=1 -j
-./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
 ```
 </details>
 
@@ -68,7 +68,7 @@ make cuda=1 -j
 ```
 scripts/install-torch2.sh
 make -j
-./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
 ```
 
 </details>
@@ -118,7 +118,7 @@ make -j
 ### 4. Running, options and testing
 
 ```
-./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.0.0 test/oneread_r10.blow5
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
 ```
 
 Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. 
