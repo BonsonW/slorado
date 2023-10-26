@@ -29,7 +29,7 @@ jobs:
         apt-get update
         apt-get -y --allow-unauthenticated install cuda
     - name: torch
-      run: scripts/install-torch12.sh
+      run: scripts/install-torch2.sh
     - name: build cuda=1
       run: make cuda=1 -j2
   ubuntu_16:
@@ -45,7 +45,7 @@ jobs:
     - name: install packages
       run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https bc
     - name: torch
-      run: scripts/install-torch12.sh
+      run: scripts/install-torch2.sh
     - name: build
       run: make -j2
     - name: test
@@ -60,7 +60,7 @@ jobs:
     - name: install packages
       run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
     - name: torch
-      run: scripts/install-torch12.sh
+      run: scripts/install-torch2.sh
     - name: build
       run: make -j2
     - name: test
@@ -88,6 +88,6 @@ jobs:
     - name: koi
       run: scripts/install-koi.sh
     - name: torch
-      run: scripts/install-torch12.sh
+      run: scripts/install-torch2.sh
     - name: build koi=1 cuda=1
       run: make -j2 koi=1 cuda=1
