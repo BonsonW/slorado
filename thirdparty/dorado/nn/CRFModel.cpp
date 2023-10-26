@@ -86,8 +86,8 @@ struct ConvolutionImpl : Module {
                                          ntcw_mat.stride(3), x.data_ptr(), ntcw_mat.data_ptr());
                     matmul_f16(ntcw_mat.view({-1, in_size * window_size}), w_device,
                                               res_2D);
-                    host_bias_swish_f16(stream, res_2D.size(0), res_2D.size(1), res_2D.stride(0),
-                                        res_2D.data_ptr(), b_device.data_ptr());
+                    host_bias_swish_f16_clamp(stream, res_2D.size(0), res_2D.size(1), res_2D.stride(0),
+                                        res_2D.data_ptr(), b_device.data_ptr(), std::numeric_limits<float>::max());
 
                     // Output is [N, T_out, C_out], contiguous
                     return res;
@@ -107,8 +107,8 @@ struct ConvolutionImpl : Module {
                                          tncw_mat.stride(3), x.data_ptr(), tncw_mat.data_ptr());
                     matmul_f16(tncw_mat.view({-1, in_size * window_size}), w_device,
                                               res_2D);
-                    host_bias_swish_f16(stream, res_2D.size(0), res_2D.size(1), res_2D.stride(0),
-                                        res_2D.data_ptr(), b_device.data_ptr());
+                    host_bias_swish_f16_clamp(stream, res_2D.size(0), res_2D.size(1), res_2D.stride(0),
+                                        res_2D.data_ptr(), b_device.data_ptr(), std::numeric_limits<float>::max());
 
                     // Output is [T_out + 1, N, 2, C_out], contiguous, which serves as
                     // working memory for CuBLAS LSTM
