@@ -45,7 +45,7 @@ jobs:
     - name: install packages
       run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https bc
     - name: torch
-      run: scripts/install-torch2.sh
+      run: scripts/install-torch2.sh cpu
     - name: build
       run: make -j2
     - name: test
