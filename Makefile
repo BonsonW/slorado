@@ -10,8 +10,8 @@ CPPFLAGS += -I slow5lib/include/ \
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++14
 LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
-			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
-			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
+			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
+			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
 			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
 LDFLAGS  += $(LIBS) -lz -lm -lpthread -lstdc++fs
 BUILD_DIR = build
@@ -59,19 +59,27 @@ endif
 
 # make accel=1 enables the acceelerator (CUDA,OpenCL,FPGA etc if implemented)
 ifdef cuda
-	CUDA_ROOT ?= /usr/local/cuda
-	CUDA_LIB ?= $(CUDA_ROOT)/lib64
-	CUDA_INC ?= $(CUDA_ROOT)/include
-    CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)
+    CPPFLAGS += -DUSE_GPU=1
 	OBJ += $(BUILD_DIR)/GPUDecoder.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 ifdef koi
+	CUDA_ROOT ?= /usr/local/cuda
+	CUDA_LIB ?= $(CUDA_ROOT)/lib64
+	CUDA_INC ?= $(CUDA_ROOT)/include
+	CPPFLAGS +=  -I $(CUDA_INC)
 	OBJ += $(BUILD_DIR)/CudaCRFModel.o $(BUILD_DIR)/cuda_utils.o
 	CPPFLAGS += -I thirdparty/koi_lib/include
 	CPPFLAGS += -DUSE_CUDA_LSTM=1
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl
 endif
-	LDFLAGS += -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
+	LDFLAGS += -lrt -ldl
+else
+ifdef rocm
+	CPPFLAGS += -DUSE_GPU=1
+	OBJ += $(BUILD_DIR)/GPUDecoder.o
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
+	LDFLAGS += -lrt -ldl
+endif
 endif
 
 CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
