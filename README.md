@@ -38,7 +38,7 @@ scripts/download-models.sh
 <details open><summary> <b>Option 1:</b>  CUDA GPU version that uses ONT's closed-source koi library binaries (CUDA >=11.8 needed). This is the fastest: </summary>
 
 ```
-scripts/install-torch2.sh
+scripts/install-torch2.sh cuda
 make cuda=1 koi=1 -j
 ```
 
@@ -57,7 +57,7 @@ make cuda=1 koi=1 -j CUDA_ROOT=/local/path/cuda/
 <details><summary> <b>Option 2:</b> CUDA GPU version without close-source koi library. This version uses teh CPU decoder, thus considerably slow: </summary>
     
 ```
-scripts/install-torch2.sh
+scripts/install-torch2.sh cuda
 make cuda=1 -j
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
 ```
@@ -66,7 +66,7 @@ make cuda=1 -j
 <details><summary> <b>Option 3:</b>  CPU-only version (horribly slow): </summary>
 
 ```
-scripts/install-torch2.sh
+scripts/install-torch2.sh cpu
 make -j
 ./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
 ```
@@ -97,7 +97,7 @@ make -j
     ```
     git clone --recursive https://github.com/BonsonW/slorado.git
     cd slorado
-    make -j cuda=1 jetson=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/pytorch_venv/lib64/python3.8/site-packages/torch/
+    make -j cuda=1 cxx11_abi=1 LIBTORCH_DIR=/path/to/pytorch_venv/lib64/python3.8/site-packages/torch/
     ```
 </details>
 
