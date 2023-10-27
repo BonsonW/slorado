@@ -81,10 +81,10 @@ test -d models/$SUP || download_model $SUP
 test -e minimap2/minimap2 || download_minimap2
 
 # memory check
-# make clean && make -j cuda=1 koi=1 asan=1 CUDA_ROOT=/data/install/cuda-11.8/
+make clean && make -j asan=1 CUDA_ROOT=/data/install/cuda-11.8/
 
-# echo "Memory Check - CPU - FAST model - 1 reads"
-# ex  ./slorado basecaller models/$FAST test/one_5khz.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
+echo "Memory Check - CPU - FAST model - 1 reads"
+ex  ./slorado basecaller models/$FAST test/one_5khz.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
 
 # accuracy check
 make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.8/
