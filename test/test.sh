@@ -72,11 +72,8 @@ check_accuracy () {
 test -d models/$FAST || download_model $FAST
 test -e minimap2/minimap2 || download_minimap2
 
-#make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.8
-
-# echo "Test 1"
 ex  ./slorado basecaller models/$FAST test/one_5khz.blow5 --device "$DEVICE" > test/tmp.fastq  || die "Running the tool failed"
-minimap2/minimap2 -cx map-ont test/chr4_90700000_90900000.fa test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
+minimap2/minimap2 -cx map-ont test/chr3_34011000_34012000.fa test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 check_accuracy $(awk '{print $10/$11}' test/tmp.paf | datamash median 1)
 
 echo "Tests passed"
