@@ -14,6 +14,8 @@
 
 #include "misc.h"
 
+#include "torch/torch.h"
+
 /*
 
 realtime, cputime, peakrss and mm_parse_num
@@ -130,3 +132,28 @@ void print_size(const char* name, uint64_t bytes)
         fprintf(stderr, "[%s] %s : %.1f %s\n", __func__, name, count, suffixes[s]);
 }
 
+std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
+    std::vector<std::string> devices;
+    
+    if (device_arg == "cuda:all" || device_arg == "cuda:auto") {
+        for (size_t i = 0; i < torch::cuda::device_count(); i++) {
+            devices.push_back("cuda:" + std::to_string(i));
+        }
+        return devices;
+    }
+
+    std::string device_name = "";
+    std::string delimiter = ":";
+    size_t pos = device_arg.find(delimiter);
+    device_name = device_arg.substr(0, pos + delimiter.length());
+    device_arg.erase(0, pos + delimiter.length());
+
+    delimiter = ",";
+    while ((pos = device_arg.find(delimiter)) != std::string::npos) {
+        devices.push_back(device_name + device_arg.substr(0, pos));
+        device_arg.erase(0, pos + delimiter.length());
+    }
+    devices.push_back(device_name + device_arg.substr(0, pos));
+
+    return devices;
+}
