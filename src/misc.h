@@ -11,8 +11,6 @@
 #include <sys/time.h>
 #include <stdint.h>
 #include <math.h>
-#include <vector>
-#include <string>
 
 double realtime(void);
 
@@ -26,8 +24,6 @@ void print_size(const char* name, uint64_t bytes);
 int64_t mm_parse_num(const char* str);
 
 void yes_or_no(uint64_t* flag_a, uint64_t flag, const char* opt_name, const char* arg, int yes_to_set);
-
-std::vector<std::string> parse_cuda_device_string(std::string device_string);
 
 
 #endif

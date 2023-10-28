@@ -45,6 +45,7 @@ SOFTWARE.
 #include "dorado/decode/CPUDecoder.h"
 
 #ifdef USE_GPU
+#include "dorado/utils/cuda_utils.h"
 #ifdef USE_CUDA_LSTM
 #include "dorado/nn/CudaCRFModel.h"
 #endif
