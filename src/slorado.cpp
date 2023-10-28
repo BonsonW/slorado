@@ -47,6 +47,7 @@ SOFTWARE.
 #ifdef USE_GPU
 #ifdef USE_CUDA_LSTM
 #include "dorado/nn/CudaCRFModel.h"
+#include "dorado/utils/cuda_utils.h"
 #endif
 #endif
 
@@ -89,19 +90,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         }
     } else {
         std::vector<std::string> devices;
-        std::string device_name = "";
         std::string device_args = std::string(opt.device);
-        std::string delimiter = ":";
-        size_t pos = device_args.find(delimiter);
-        device_name = device_args.substr(0, pos + delimiter.length());
-        device_args.erase(0, pos + delimiter.length());
-
-        delimiter = ",";
-        while ((pos = device_args.find(delimiter)) != std::string::npos) {
-            devices.push_back(device_name + device_args.substr(0, pos));
-            device_args.erase(0, pos + delimiter.length());
-        }
-        devices.push_back(device_name + device_args.substr(0, pos));
+        devices = parse_cuda_device_string(device_args);
 
         for (auto device: devices) {
 #ifdef USE_CUDA_LSTM
