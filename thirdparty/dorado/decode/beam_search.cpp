@@ -1,7 +1,8 @@
 #include "beam_search.h"
 
 #include "fast_hash.h"
-
+#include "error.h"
+#include "misc.h"
 #include <math.h>
 #include <torch/torch.h>
 
@@ -13,14 +14,18 @@
 #include <limits>
 #include <numeric>
 
-double beam_search = 0;
-double generate_sequence = 0;
-double compute = 0;
-double extract_and_write = 0;
-double candidate_list = 0;
-double log_sum_exp_loop = 0;
-double copy_beam_front = 0;
-double init_beam = 0;
+double t_beam_search = 0;
+double t_generate_sequence = 0;
+double t_compute = 0;
+double t_extract_and_write = 0;
+double t_candidate_list = 0;
+double t_log_sum_exp_loop = 0;
+double t_copy_beam_front = 0;
+double t_init_beam = 0;
+double t_find_init_score = 0;
+double t_create_beam = 0;
+double t_block_iter = 0;
+double t_cut_off = 0;
 
 // 16 bit state supports 7-mers with 4 bases.
 typedef uint16_t state_t;
@@ -129,6 +134,8 @@ float beam_search(const T* const scores,
         throw std::range_error("Beamsearch max_beam_width cannot be greater than 256.");
     }
 
+    t_create_beam -= realtime();
+
     // Some values we need
     constexpr uint64_t HASH_SEED = 0x880355f21e6d1965ULL;
     const float log_beam_cut =
@@ -147,7 +154,9 @@ float beam_search(const T* const scores,
     std::vector<float> current_scores(max_beam_candidates);
     std::vector<float> prev_scores(max_beam_candidates);
 
-    find_init_score -= realtime();
+    t_create_beam += realtime();
+
+    t_find_init_score -= realtime();
 
     // Find the score an initial element needs in order to make it into the beam
     T beam_init_threshold = std::numeric_limits<T>::lowest();
@@ -163,9 +172,9 @@ float beam_search(const T* const scores,
         beam_init_threshold = sorted_back_guides[max_beam_width - 1];
     }
 
-    find_init_score += realtime();
+    t_find_init_score += realtime();
 
-    init_beam -= realtime();
+    t_init_beam -= realtime();
 
     // Initialise the beam
     for (size_t state = 0, beam_element = 0; state < num_states && beam_element < max_beam_width;
@@ -179,9 +188,9 @@ float beam_search(const T* const scores,
         }
     }
 
-    init_beam += realtime();
+    t_init_beam += realtime();
 
-    copy_beam_front -= realtime();
+    t_copy_beam_front -= realtime();
 
     // Copy this initial beam front into the beam persistent state
     size_t current_beam_width = std::min(max_beam_width, num_states);
@@ -192,7 +201,9 @@ float beam_search(const T* const scores,
         beam_vector[element_idx].stay = prev_beam_front[element_idx].stay;
     }
 
-    copy_beam_front += realtime();
+    t_copy_beam_front += realtime();
+
+    t_block_iter -= realtime();
 
     // Iterate through blocks, extending beam
     for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
@@ -227,7 +238,7 @@ float beam_search(const T* const scores,
         const uint64_t HASH_PRESENT_MASK = HASH_PRESENT_BITS - 1;
         std::bitset<HASH_PRESENT_BITS> step_hash_present;  // Default constructor zeros content.
 
-        candidate_list -= realtime();
+        t_candidate_list -= realtime();
 
         // Generate list of candidate elements for this timestep (block).
         // As we do so, update the maximum score.
@@ -257,9 +268,9 @@ float beam_search(const T* const scores,
             }
         }
 
-        candidate_list += realtime();
+        t_candidate_list += realtime();
 
-        log_sum_exp_loop -= realtime();
+        t_log_sum_exp_loop -= realtime();
 
         for (size_t prev_elem_idx = 0; prev_elem_idx < current_beam_width; ++prev_elem_idx) {
             const auto& previous_element = prev_beam_front[prev_elem_idx];
@@ -311,7 +322,9 @@ float beam_search(const T* const scores,
             ++new_elem_count;
         }
 
-        log_sum_exp_loop += realtime();
+        t_log_sum_exp_loop += realtime();
+
+        t_cut_off -= realtime();
 
         // Starting point for finding the cutoff score is the beam cut score
         float beam_cutoff_score = max_score - log_beam_cut;
@@ -410,9 +423,13 @@ float beam_search(const T* const scores,
         }
 
         current_beam_width = elem_count;
+
+        t_cut_off += realtime();
     }
 
-    extract_and_write -= realtime();
+    t_block_iter += realtime();
+
+    t_extract_and_write -= realtime();
 
     // Extract final score
     const float final_score = prev_scores[0];
@@ -433,9 +450,9 @@ float beam_search(const T* const scores,
 
     int shifted_states[2 * NUM_BASES];
 
-    extract_and_write += realtime();
+    t_extract_and_write += realtime();
 
-    compute -= realtime();
+    t_compute -= realtime();
 
     // Compute per-base qual data
     for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
@@ -495,7 +512,7 @@ float beam_search(const T* const scores,
         }
     }
 
-    compute += realtime();
+    t_compute += realtime();
 
     return final_score;
 }
@@ -518,7 +535,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         throw std::runtime_error("num_states must be an integral power of 2");
     }
 
-    beam_search -= realtime();
+    t_beam_search -= realtime();
 
     // Posterior probabilities and back guides must be floats regardless of scores type.
     if (posts_t.dtype() != torch::kFloat32 || back_guides_t.dtype() != torch::kFloat32) {
@@ -558,14 +575,14 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
                                  std::string(scores_t.dtype().name()));
     }
 
-    beam_search += realtime();
+    t_beam_search += realtime();
 
-    generate_seq -= realtime();
+    t_generate_sequence -= realtime();
 
     std::string sequence, qstring;
     std::tie(sequence, qstring) = generate_sequence(moves, states, qual_data, q_shift, q_scale);
 
-    generate_seq += realtime();
+    t_generate_sequence += realtime();
 
     return {std::move(sequence), std::move(qstring), std::move(moves)};
 }

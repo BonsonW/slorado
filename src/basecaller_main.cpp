@@ -45,6 +45,19 @@ SOFTWARE.
 #include <stdlib.h>
 #include <unistd.h>
 
+extern double t_beam_search;
+extern double t_generate_sequence;
+extern double t_compute;
+extern double t_extract_and_write;
+extern double t_candidate_list;
+extern double t_log_sum_exp_loop;
+extern double t_copy_beam_front;
+extern double t_init_beam;
+extern double t_find_init_score;
+extern double t_create_beam;
+extern double t_block_iter;
+extern double t_cut_off;
+
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
     {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
@@ -279,6 +292,18 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
             fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
             fprintf(stderr, "\n[%s]          - Synchronisation time: %.3f sec",__func__, core->ts.time_sync);
+            fprintf(stderr, "\n[%s]          - beam_search time: %.3f sec",__func__, t_beam_search);
+            fprintf(stderr, "\n[%s]             - create_beam time: %.3f sec",__func__, t_create_beam);
+            fprintf(stderr, "\n[%s]             - find_init_score time: %.3f sec",__func__, t_find_init_score);
+            fprintf(stderr, "\n[%s]             - compute time: %.3f sec",__func__, t_compute);
+            fprintf(stderr, "\n[%s]             - block_iter time: %.3f sec",__func__, t_block_iter);
+            fprintf(stderr, "\n[%s]                 - candidate_list time: %.3f sec",__func__, t_candidate_list);
+            fprintf(stderr, "\n[%s]                 - log_sum_exp_loop time: %.3f sec",__func__, t_log_sum_exp_loop);
+            fprintf(stderr, "\n[%s]                 - cut_off time: %.3f sec",__func__, t_cut_off);
+            fprintf(stderr, "\n[%s]             - copy_beam_front time: %.3f sec",__func__, t_copy_beam_front);
+            fprintf(stderr, "\n[%s]             - init_beam time: %.3f sec",__func__, t_init_beam);
+            fprintf(stderr, "\n[%s]          - generate_sequence time: %.3f sec\n",__func__, t_generate_sequence);
+
 
     auto runner_ts = *core->runner_ts;
     for (size_t i = 0; i < runner_ts.size(); ++i) {

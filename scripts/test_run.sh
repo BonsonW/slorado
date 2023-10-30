@@ -3,4 +3,4 @@
 make clean && make -j cuda=1 CUDA_ROOT=/install/cuda-11.8/
 
 # ./slorado basecaller -c 10000 -C 128 -B500M --verbose 6 /install/dorado-0.3.4/models/dna_r10.4.1_e8.2_400bps_sup@v4.2.0 test/one_5khz.blow5 > reads.fastq
-./slorado basecaller -c 10000 -C 500 -B500M -x cuda:all /install/dorado-0.3.4/models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 /data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5 > reads.fastq
+./slorado basecaller -c 10000 -C 500 -B500M -x cuda:0 /install/dorado-0.3.4/models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 /data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5 > reads.fastq
