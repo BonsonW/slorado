@@ -43,6 +43,7 @@ SOFTWARE.
 
 #include "dorado/decode/GPUDecoder.h"
 #include "dorado/decode/CPUDecoder.h"
+#include "dorado/decode/logsum.h"
 
 #ifdef USE_GPU
 #ifdef USE_CUDA_LSTM
@@ -61,6 +62,7 @@ SOFTWARE.
 #include <unistd.h>
 #include <vector>
 
+float flogsum_lookup[p7_LOGSUM_TBL];
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -79,6 +81,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->runner_ts = new std::vector<timestamps_t *>();
 
     core->ts.time_init_runners -= realtime();
+
+    p7_FLogsumInit();
 
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {

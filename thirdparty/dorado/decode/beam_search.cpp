@@ -1,4 +1,5 @@
 #include "beam_search.h"
+#include "logsum.h"
 
 #include "fast_hash.h"
 #include "error.h"
@@ -50,6 +51,7 @@ struct BeamFrontElement {
 };
 
 float log_sum_exp(float x, float y, float t) {
+    // return p7_FLogsum(x, y);
     float abs_diff = std::abs(x - y) / t;
     return std::max(x, y) + ((abs_diff < 17.0f) ? (std::log1p(std::exp(-abs_diff)) * t) : 0.0f);
 }
