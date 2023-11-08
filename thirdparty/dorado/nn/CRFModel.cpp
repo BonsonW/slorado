@@ -123,7 +123,6 @@ struct ConvolutionImpl : Module {
                 return activation(conv(x)).transpose(1, 2);
             }
         }
-        endTime = realtime();
                 // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
@@ -143,7 +142,6 @@ struct LinearCRFImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) { 
-        startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         auto N = x.size(0);
         auto T = x.size(1);
@@ -173,8 +171,6 @@ struct LinearCRFImpl : Module {
                             F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
                              .view({N, T, -1});
         }
-        endTime = realtime();
-                forward_l159 += getTimeDifference();
         // Output is [N, T, C], contiguous
         return scores;
     }
