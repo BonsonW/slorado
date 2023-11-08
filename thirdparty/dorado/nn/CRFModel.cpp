@@ -14,7 +14,6 @@
 #include <c10/cuda/CUDAGuard.h>
 extern "C" {
 #include "koi.h"
-}
 #endif
 
 #if USE_CUDA_LSTM

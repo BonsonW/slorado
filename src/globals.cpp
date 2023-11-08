@@ -26,6 +26,8 @@ double CudaCallerT2;
 double CudaCallerT3;
 double CudaCallerT4;
 double CudaCallerT5;
+double forward_l159;
+double forward_l536;
 double load_crf_modelT;
 double load_crf_modelT1;
 double NCudaCallerT;
