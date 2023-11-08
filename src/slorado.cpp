@@ -361,26 +361,26 @@ void process_db(core_t* core,db_t* db){
     work_db(core,db,parse_single);
     double b = realtime();
     core->parse_time += (b-a);
-    LOG_DEBUG("%s","Parsed reads");
+    LOG_DEBUG("%s","Parsed reads");  
 
     a = realtime();
     work_db(core,db,preprocess_signal);
     b = realtime();
     core->preproc_time += (b-a);
     LOG_DEBUG("%s","Preprocessed reads");
-
+    
     a = realtime();
     basecall_db(core,db);
     b = realtime();
     core->basecall_time += (b-a);
     LOG_DEBUG("%s","Basecalled reads");
-
+    
     a = realtime();
     work_db(core,db,postprocess_signal);
     b = realtime();
     core->postproc_time += (b-a);
     LOG_DEBUG("%s","Postprocessed reads");
-
+    
     double proc_end = realtime();
     core->process_db_time += (proc_end-proc_start);
 }
@@ -477,13 +477,4 @@ void init_timestamps(timestamps_t* time_stamps) {
     time_stamps->time_write = 0;
     time_stamps->time_total = 0;
     time_stamps->time_beam_search_emplace = 0;
-    // time_stamps->time_forward = 0;
-    // time_forward = 0;
-    // forward_l62 = 0;
-    // forward_l159 = 0;
-    // forward_l469 = 0;
-    // forward_l536 = 0;
-    // forward_l577 = 0;
-    // forward_l642 = 0;
 }
-
