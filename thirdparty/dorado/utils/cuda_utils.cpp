@@ -23,25 +23,14 @@ extern "C" {
 #include <vector>
 
 void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
-    // std::cout << "\nmatMul\n" << std::endl; //Test
-    matMul ++;
-    // matMul -= realtime();
     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
     constexpr uint16_t HALF_ONE = 0x3C00;  // 1.0 in __half format
-
-    // std::cout << "\nA: " << A.sizes() << std::endl; // Test
-    // std::cout << "\nB: " << B.sizes() << std::endl; // Test
-    // std::cout << "\nC: " << C.sizes() << std::endl; // Test
-
         
-    // assertT -= realtime();
     assert(A.dtype() == torch::kF16 && B.dtype() == torch::kF16 && C.dtype() == torch::kF16);
     assert(A.stride(1) == 1 && B.stride(1) == 1 && C.stride(1) == 1);
     // assert(A.size(0) == C.size(0));  // M
     // assert(B.size(1) == C.size(1));  // N
     // assert(A.size(1) == B.size(0));  // K
-    // assertT += realtime();
-
     cublasGemmExT -= realtime();
 
     auto res =
@@ -55,10 +44,6 @@ void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Te
         // spdlog::error("CuBLAS error {}", int(res));
         exit(EXIT_FAILURE);
     }
-    
-    
-    // matMul += realtime();
-
 }
 
 void matmul_f16_torch(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {

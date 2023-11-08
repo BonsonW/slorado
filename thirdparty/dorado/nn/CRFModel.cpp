@@ -18,7 +18,6 @@ extern "C" {
 #endif
 
 #if USE_CUDA_LSTM
-// std::cout << "\nUse CUDA LSTM\n" << std::endl; //Test
 static bool cuda_lstm_is_quantized(int layer_size) {
 #ifdef DORADO_TX2
     return false;
@@ -40,7 +39,6 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
                                        const torch::TensorOptions &options,
                                        bool decomposition,
                                        bool bias) {
-    // std::cout << "\nCRF 45\n" << std::endl; //Test
     auto state_dict = load_crf_model_weights(path, decomposition, bias);
     model->load_state_dict(state_dict);
     model->to(options.dtype_opt().value().toScalarType());
@@ -56,16 +54,12 @@ struct ConvolutionImpl : Module {
     
     ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
             : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
-            // std::cout << "\nCRF 60\n" << std::endl; //Test
-        // startTime = realtime();
         conv = register_module(
                 "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
         activation = register_module("activation", SiLU());
     }
 
     torch::Tensor forward(torch::Tensor x) { 
-        // std::cout << "\nCRF 70\n" << std::endl; //Test
-        // convolutionImplT -= realtime();
 
     // Perform some task
         // Input x is [N, C_in, T_in], contiguity optional
@@ -84,7 +78,6 @@ struct ConvolutionImpl : Module {
                                         .contiguous();
                 auto b_device = conv->bias.to(x.options());
                 if (cuda_lstm_is_quantized(out_size)) {
-                    // std::cout << "\nCRF 91\n" << std::endl; //Test
                     torch::Tensor res =
                             torch::empty({batch_size, chunk_size_out, out_size}, x.options());
                     auto res_2D = res.view({-1, out_size});
@@ -100,7 +93,6 @@ struct ConvolutionImpl : Module {
                                         res_2D.data_ptr(), b_device.data_ptr());
 
                     // Output is [N, T_out, C_out], contiguous
-                    // convolutionImplT += realtime();
                     return res;
                 } else {
                     auto res = torch::empty({chunk_size_out + 1, batch_size, 2, out_size},
@@ -120,8 +112,6 @@ struct ConvolutionImpl : Module {
                                               res_2D);
                     host_bias_swish_f16(stream, res_2D.size(0), res_2D.size(1), res_2D.stride(0),
                                         res_2D.data_ptr(), b_device.data_ptr());
-
-                    // Output is [T_out + 1, N, 2, C_out], contiguous, which serves as
                     // working memory for CuBLAS LSTM
                     // convolutionImplT += realtime();
                     return res;
@@ -134,11 +124,9 @@ struct ConvolutionImpl : Module {
             }
         }
         endTime = realtime();
-        // time_forward += getTimeDifference();
         // Output is [N, C_out, T_out], contiguous
         return activation(conv(x));
     }
-    // std::cout << "\nCRF 144\n" << std::endl; //Test
     Conv1d conv{nullptr};
     SiLU activation{nullptr};
     int in_size;
@@ -186,7 +174,6 @@ struct LinearCRFImpl : Module {
                              .view({N, T, -1});
         }
         endTime = realtime();
-        // time_forward += getTimeDifference();
         forward_l159 += getTimeDifference();
         // Output is [N, T, C], contiguous
         return scores;
@@ -204,8 +191,6 @@ struct LinearCRFImpl : Module {
 struct CudaLSTMImpl : Module {
     CudaLSTMImpl(int layer_size, bool reverse_) : reverse(reverse_) {
         cudaLSTMImplT -= realtime();
-        // std::cout << "\nCRF 212\n" << std::endl; //Test
-        // startTime = realtime();
         // TODO: do we need to specify .device("gpu")?
         auto options = torch::TensorOptions().dtype(torch::kFloat16);
         weights = torch::empty({layer_size * 4, layer_size * 2}, options).contiguous();
@@ -222,7 +207,6 @@ struct CudaLSTMImpl : Module {
         register_parameter("weight_hh", weight_hh, false);
         register_parameter("bias_ih", bias, false);
         register_parameter("bias_hh", bias_hh, false);
-        // cudaLSTM += realtime();
         cudaLSTMImplT += realtime();
     }
 
@@ -233,7 +217,6 @@ struct CudaLSTMImpl : Module {
 TORCH_MODULE(CudaLSTM);
 
 struct CudaLSTMStackImpl : Module {
-    // std::cout << "\nCRF 240\n" << std::endl; //Test
     CudaLSTMStackImpl(int layer_size_, int batch_size, int chunk_size) : layer_size(layer_size_) {
         cudaLSTMStackImplT -= realtime();
         rnn1 = register_module("rnn_1", CudaLSTM(layer_size, true));
@@ -245,7 +228,6 @@ struct CudaLSTMStackImpl : Module {
         m_quantize = cuda_lstm_is_quantized(layer_size);
 
         if (m_quantize) {
-            // std::cout << "\nCRF 252\n" << std::endl; //Test
             // chunk_size * batch_size can not be > 2**31 (2147483648).
             // For practical purposes this is currently always the case.
             _chunks = torch::empty({batch_size, 4}).to(torch::kInt32);
@@ -278,7 +260,6 @@ struct CudaLSTMStackImpl : Module {
 
     torch::Tensor forward_cublas(torch::Tensor in) {
         forward_cublasT -= realtime();
-        // startTime = realtime();
         // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
         
         c10::cuda::CUDAGuard device_guard(in.device());
@@ -349,7 +330,6 @@ struct CudaLSTMStackImpl : Module {
             GPUWeights.push_back(transposedRNNWeights[3].to(in.device()));
             GPUWeights.push_back(transposedRNNWeights[4].to(in.device()));
         }
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         forward_cublasT2 -= realtime();
@@ -371,15 +351,8 @@ struct CudaLSTMStackImpl : Module {
             // weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            // if((typeid(weights_cpu).name()) == (typeid(transposedRNNWeights[i]).name())){
-            //     cont ++;
-            // } else {
-            //     ncont ++;
-            // }
-
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
             weightsT -= realtime();
-            // torch::Tensor weights = transposedRNNWeights[i].to(in.device());
             torch::Tensor weights = GPUWeights[i];
             i ++;
             weightsT += realtime();
@@ -388,13 +361,11 @@ struct CudaLSTMStackImpl : Module {
             biasT -= realtime();
             auto bias = rnn->bias.to(in.device());
             biasT += realtime();
-            // forLoopRest -= realtime();
             for (int ts = 0; ts < chunk_size; ++ts) {
                 
                 auto timestep_in = working_mem_all[rnn->reverse ? (chunk_size - ts) : ts];
                 auto timestep_out = rnn->reverse ? working_mem_left[chunk_size - ts - 1]
                                                  : working_mem_right[ts];
-                
 
                 // Timestep matrix mulitplication
                 matmul_f16T -= realtime();
@@ -404,7 +375,6 @@ struct CudaLSTMStackImpl : Module {
                                    timestep_out.data_ptr());
                 matmul_f16T += realtime();
             }
-            // forLoopRest += realtime();
             rnnIterate += realtime();
 
         }
@@ -416,8 +386,6 @@ struct CudaLSTMStackImpl : Module {
     }
 
     void rearrange_individual_weights(torch::Tensor buffer) {
-        // std::cout << "\nCRF 361\n" << std::endl; //Test
-        // startTime = realtime();
         torch::Tensor tmp = torch::empty_like(buffer);
         int layer_width = tmp.size(0) / 4;
 
@@ -437,8 +405,6 @@ struct CudaLSTMStackImpl : Module {
     }
 
     void rearrange_weights() {
-        // std::cout << "\nCRF 384\n" << std::endl; //Test
-        // startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             rearrange_individual_weights(rnn->named_parameters()["weight_hh"]);
             rearrange_individual_weights(rnn->named_parameters()["weight_ih"]);
@@ -451,8 +417,6 @@ struct CudaLSTMStackImpl : Module {
 
     std::pair<torch::Tensor, torch::Tensor> quantize_tensor(torch::Tensor tensor,
                                                             int levels = 256) {
-        // std::cout << "\nCRF 400\n" << std::endl; //Test
-        // startTime = realtime();
         //Quantize a tensor to int8, returning per-channel scales and the quantized tensor
         //if weights have not been quantized we get some scaling
         tensor = tensor.transpose(0, 1).contiguous();
@@ -480,8 +444,6 @@ struct CudaLSTMStackImpl : Module {
     }
 
     void quantize_weights() {
-        // std::cout << "\nCRF 430\n" << std::endl; //Test
-        // startTime = realtime();
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             // auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
             auto t0 = quantize_tensor(rnn->named_parameters()["weight_hh"]);
@@ -493,8 +455,6 @@ struct CudaLSTMStackImpl : Module {
     }
 
     torch::Tensor forward_quantized(torch::Tensor x) {
-        // std::cout << "\nCRF 445\n" << std::endl; //Test
-        // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         c10::cuda::CUDAGuard device_guard(x.device());
 
@@ -547,18 +507,12 @@ struct CudaLSTMStackImpl : Module {
 
     // Dispatch to different forward method depending on whether we use quantized LSTMs or not
     torch::Tensor forward(torch::Tensor x) {
-        // std::cout << "\nCRF 501\n" << std::endl; //Test
-        // startTime = realtime();
         // Input x is [N, T, C], contiguity optional
         
-        // time_forward += getTimeDifference();
-        // forward_l469 += getTimeDifference();
         if (m_quantize) {
-            // endTime = realtime();
             // Output is [N, T, C], contiguous
             return forward_quantized(x);
         } else {
-            // endTime = realtime();
             // Output is [N, T, C], non-contiguous
             return forward_cublas(x);
         }
@@ -574,7 +528,6 @@ TORCH_MODULE(CudaLSTMStack);
 
 struct LSTMStackImpl : Module {
     LSTMStackImpl(int size, int batchsize, int chunksize) {
-        std::cout << "\nCRF 528\n" << std::endl; //Test
         // torch::nn::LSTM expects/produces [N, T, C] with batch_first == true
         rnn1 = register_module("rnn1", LSTM(LSTMOptions(size, size).batch_first(true)));
         rnn2 = register_module("rnn2", LSTM(LSTMOptions(size, size).batch_first(true)));
@@ -584,8 +537,6 @@ struct LSTMStackImpl : Module {
     };
 
     torch::Tensor forward(torch::Tensor x) {
-        // forward_l536 -= realtime();
-        // startTime = realtime();
         // Input is [N, T, C], contiguity optional
 
         // auto [y1, h1] = rnn1(x.flip(1));
@@ -594,79 +545,42 @@ struct LSTMStackImpl : Module {
         // auto [y4, h4] = rnn4(y3.flip(1));
         // auto [y5, h5] = rnn5(y4.flip(1));
 
-        // subStartTime = realtime();
         x = x.flip(1);
-        // subEndTime = realtime();
-        // x_flipt += subEndTime - subStartTime;
-
-        // subStartTime = realtime();
+ 
         // rnn1
-        // subStartTimev2 = realtime();
         auto t1 = rnn1(x);
-        // subEndTimev2 = realtime();
-        // rnn1tt1 += getSubTimeDifferencev2();
-
-        // subStartTimev2 = realtime();
         auto y1 = std::get<0>(t1);
-        // subEndTimev2 = realtime();
-        // rnn1ty1 += getSubTimeDifferencev2();
-
-        // subStartTimev2 = realtime();
         auto h1 = std::get<1>(t1);
-        // subEndTimev2 = realtime();
-        // rnn1th1 += getSubTimeDifferencev2();
 
-        // subStartTimev2 = realtime();
         x = y1.flip(1);
-        // subEndTimev2 = realtime();
-        // rnn1tflip += getSubTimeDifferencev2();
 
-        // subEndTime = realtime();
-        // rnn1t += subEndTime - subStartTime;
-
-        // subStartTime = realtime();
         // rnn2
         auto t2 = rnn2(x);
         auto y2 = std::get<0>(t2);
         auto h2 = std::get<1>(t2);
 
         x = y2.flip(1);
-        // subEndTime = realtime();
-        // rnn2t += subEndTime - subStartTime;
 
-        // subStartTime = realtime();
         // rnn3
         auto t3 = rnn3(x);
         auto y3 = std::get<0>(t3);
         auto h3 = std::get<1>(t3);
 
         x = y3.flip(1);
-        // subEndTime = realtime();
-        // rnn3t += subEndTime - subStartTime;
 
-        // subStartTime = realtime();
         // rnn4
         auto t4 = rnn4(x);
         auto y4 = std::get<0>(t4);
         auto h4 = std::get<1>(t4);
 
         x = y4.flip(1);
-        // subEndTime = realtime();
-        // rnn4t += subEndTime - subStartTime;
 
-        // subStartTime = realtime();
         // rnn5
         auto t5 = rnn5(x);
         auto y5 = std::get<0>(t5);
         auto h5 = std::get<1>(t5);
 
         x = y5.flip(1);
-        // subEndTime = realtime();
-        // rnn5t += subEndTime - subStartTime;
-
-        // endTime = realtime();
-        // time_forward += getTimeDifference();
-        // forward_l536 += realtime();
 
         // Output is [N, T, C], non-contiguous
         return x;
@@ -679,11 +593,6 @@ struct ClampImpl : Module {
     ClampImpl(float _min, float _max, bool _active) : min(_min), max(_max), active(_active){};
 
     torch::Tensor forward(torch::Tensor x) {
-        // std::cout << "\nCRF 633\n" << std::endl; //Test
-        // startTime = realtime();
-        // endTime = realtime();
-        // time_forward += getTimeDifference();
-        // forward_l577 += getTimeDifference();
         if (active) {
             return x.clamp(min, max);
         } else {
@@ -703,7 +612,6 @@ TORCH_MODULE(Clamp);
 template <class LSTMStackType>
 struct CRFModelImpl : Module {
     CRFModelImpl(const CRFModelConfig &config, bool expand_blanks, int batch_size, int chunk_size) {
-        // std::cout << "\nCRF 657\n" << std::endl; //Test
         conv1 = register_module("conv1", Convolution(config.num_features, config.conv, 5, 1));
         clamp1 = Clamp(-0.5, 3.5, config.clamp);
         conv2 = register_module("conv2", Convolution(config.conv, 16, 5, 1));
@@ -736,15 +644,10 @@ struct CRFModelImpl : Module {
     }
 
     void load_state_dict(const std::vector<torch::Tensor> &weights) {
-        // std::cout << "\nCRF 690\n" << std::endl; //Test
         module_load_state_dict(*this, weights);
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        // startTime = realtime();
-        // endTime = realtime();
-        // time_forward += getTimeDifference();
-        // forward_l642 += getTimeDifference();
         // Output is [N, T, C]
         return encoder->forward(x);
     }
@@ -766,7 +669,6 @@ using CpuCRFModelImpl = CRFModelImpl<LSTMStack>;
 TORCH_MODULE(CpuCRFModel);
 
 CRFModelConfig load_crf_model_config(const std::string &path) {
-    // std::cout << "\nCRF 720\n" << std::endl; //Test
     FILE* fp;
     char errbuf[200];
 
@@ -920,17 +822,13 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const torch::TensorOptions &options) {
                                     //    std::cout << "\nCRF 872\n" << std::endl; //Test 
 #if USE_CUDA_LSTM
-// std::cout << "\nCRF 874\n" << std::endl; //Test
     if (options.device() != torch::kCPU) {
         const bool expand_blanks = false;
         load_crf_modelT -= realtime();
         auto model = CudaCRFModel(model_config, expand_blanks, batch_size, chunk_size);
         load_crf_modelT += realtime();
-        // load_crf_modelT1 -= realtime();
         return populate_model(model, path, options, model_config.decomposition,
                               model_config.bias);
-        // load_crf_modelT1 -= realtime();
-
     } else
 #endif
     {
@@ -940,352 +838,3 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                               model_config.bias);
     }
 }
-
-/*
-    torch::Tensor forward_cublas(torch::Tensor in) {
-        forward_cublasT -= realtime();
-        // startTime = realtime();
-        // input in is ([N, T, C], contiguity optional) or ([T+1, N, 2, C], contiguous) (see below)
-        
-        c10::cuda::CUDAGuard device_guard(in.device());
-        auto stream = at::cuda::getCurrentCUDAStream().stream();
-        int chunk_size, batch_size;
-        torch::Tensor mat_working_mem;
-        bool input_is_working_mem = (in.dim() == 4 && in.size(2) == 2);
-        if (input_is_working_mem) {
-            mat_working_mem = in;
-            chunk_size = in.size(0) - 1;
-            batch_size = in.size(1);
-            assert(layer_size == in.size(3));
-            assert(in.is_contiguous());
-        } else {
-            batch_size = in.size(0);
-            chunk_size = in.size(1);
-            assert(layer_size == in.size(2));
-            mat_working_mem =
-                    torch::zeros({chunk_size + 1, batch_size, 2, layer_size}, in.options());
-        }
-
-        int gate_size = layer_size * 4;
-        auto gate_buf = torch::empty({batch_size, gate_size}, in.options());
-        forward_cublasT3 -= realtime();
-
-
-        // Working memory is laid out as [T+1][N][2][C] in memory, where the 2 serves to
-        // interleave input and output for each LSTM layer in a specific way. The reverse LSTM
-        // layers (rnn1, rnn3, rnn5) use right as input and left as output, whereas the forward
-        // LSTM layers (rnn2, rnn4) use left as input and right as output.
-        //
-        // The interleaving means that x(t) and h(t-1), i.e. the input for the current timestep
-        // and the output of the previous timestep, appear concatenated in memory and we can
-        // perform a single matmul with the concatenated WU matrix
-        // Note that both working_mem[chunk_size][:][0][:] and working_mem[0][:][1][:] remain
-        // all zeroes, representing the initial LSTM state h(-1) in either direction.
-
-        auto working_mem_all = mat_working_mem.view({chunk_size + 1, batch_size, -1});
-        auto working_mem_left = mat_working_mem.slice(0, 0, chunk_size).select(2, 0);
-        auto working_mem_right = mat_working_mem.slice(0, 1, chunk_size + 1).select(2, 1);
-        forward_cublasT3 += realtime();
-
-        if (!input_is_working_mem) {
-            // NOTE: `host_transpose_f16' does exactly what the commented out assignment
-            // below would do, only ~5x faster (on A100)
-            // working_mem_right = in.transpose(1, 0);
-            host_transpose_f16T -= realtime();
-            host_transpose_f16(stream, in.data_ptr(), in.size(1), in.size(0), in.size(2),
-                               in.stride(1), in.stride(0), in.stride(2),
-                               working_mem_right.stride(0), working_mem_right.stride(1),
-                               working_mem_right.stride(2), working_mem_right.data_ptr());
-            host_transpose_f16T += realtime();
-        }
-
-        if(!setTrans){
-            transposedRNNWeights.push_back((rnn1->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn2->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn3->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn4->weights.t().contiguous()));
-            transposedRNNWeights.push_back((rnn5->weights.t().contiguous()));
-            // rnn1WeightsT = rnn1->weights.t().contiguous();
-            // rnn2WeightsT = rnn2->weights.t().contiguous();
-            // rnn3WeightsT = rnn3->weights.t().contiguous();
-            // rnn4WeightsT = rnn4->weights.t().contiguous();
-            // rnn5WeightsT = rnn5->weights.t().contiguous();
-            setTrans = true;
-            std::cout << "\nSet Transposed weights\n" << std::endl; //Test
-        }
-
-        forward_cublasT2 -= realtime();
-        int i = 0;
-        for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
-            rnnIterate -= realtime();
-            state_bufT -= realtime();
-            auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
-            state_bufT += realtime();
-            weights_cpuT -= realtime();
-            //---------------------------------------
-            auto weights_cpu = rnn->weights.t().contiguous();
-            // rnn->weightsT = rnn->weights.t();
-            // Divided upper line as below
-    /////////////////////////////////////////////////////////////////
-
-            // weights_cpuT -= realtime();
-            // const std::type_info& type = typeid(rnn->weights);
-            // std::cout << "Type of rnn->weights: " << type.name() << std::endl;
-
-            // if (rnn->weights == transWeights){
-            //     cout ++;
-            // } else {
-            //     transWeights == rnn->weights;
-            //     ncount ++;            }
-
-            // auto transposed_weights = rnn->weights.t();
-            // auto transposed_weights = rnn->weights.t(); // Assuming rnn->weights is a tensor
-            // // weights.transposeInPlace(); // Perform in-place transposition
-            // if(rnn->weightsT.is_contiguous()){
-            //     // std::cout << "Already contigious" << std::endl;
-            //     cont ++;
-            // }
-            // else{
-            //     // std::cout << "Not contigious" << std::endl;
-            //     ncont ++;
-            // }
-
-            // // auto weights_cpu = transposed_weights.contiguous();
-            // weights_cpuT -= realtime();
-
-    /////////////////////////////////////////////////////////////////
-
-            // Transpose the weights
-            // transposed_weightsT -= realtime();
-            // auto transposed_weights = rnn->weights.t();
-            // transposed_weightsT += realtime();
-            // weights_cpuT -= realtime();
-            // Make the transposed weights contiguous
-            // if(transposed_weights.is_contiguous()){
-            //     // std::cout << "Already contigious" << std::endl;
-            //     cont ++;
-            // }
-            // else{
-            //     // std::cout << "Not contigious" << std::endl;
-            //     ncont ++;
-            // }
-
-            // auto weights_cpu = transposed_weights.contiguous();
-
-            // const char* typeName = typeid(weights_cpu).name();
-            // std::cout << "Type of weights_cpu: " << typeName << std::endl;
-
-            // size_t sizeInBytes = sizeof(weights_cpu);
-            // std::cout << "Size of weights_cpu: " << sizeInBytes << " bytes" << std::endl;
-
-            // size_t dataSizeBytes = weights_cpu.numel() * weights_cpu.element_size();
-            // std::cout << "Size of the data in weights_cpu: " << dataSizeBytes << " bytes" << std::endl;
-
-            weights_cpuT += realtime();
-            weightCPUcalls ++;
-
-            weightsT -= realtime();
-            // auto weights = transposedRNNWeights[i].to(in.device());
-
-            // double numElements = sizeof(weights_cpu) / sizeof(weights_cpu[0]);
-            // std::cout << "\ncount: " << numElements  << std::endl;
-            // std::cout << "\nsizeof(weights_cpu): " << sizeof(weights_cpu)  << std::endl;
-            // std::cout << "\nsizeof(weights_cpu[0]): " << sizeof(weights_cpu[0])  << std::endl;    
-
-            // int length = weights_cpu.size(0);
-
-            // std::cout << "Length along dimension 0: " << length << std::endl;
-
-            // --------------------------------------
-            // weights_cpuT += realtime();
-            auto weights = weights_cpu.to(in.device());
-            // if(weights.equal(transposedRNNWeights[i].to(in.device()))){
-            //     cont ++;
-            // } else if(i==2 && (weights.equal(transposedRNNWeights[i].to(in.device())))){
-            //     cont ++;
-            // } else if(i==3 && (weights.equal(rnn3WeightsT.to(in.device())))){
-            //     cont ++;
-            // } else if(i==4 && (weights.equal(rnn4WeightsT.to(in.device())))){
-            //     cont ++;
-            // } else if(i==5 && (weights.equal(rnn5WeightsT.to(in.device())))){
-            //     cont ++;
-            // } else {
-            //     ncont ++;
-            // }
-            i ++;
-            
-            // auto weights = rnn1WeightsT.to(in.device());
-            // if(i==1){
-            //     weights = rnn1WeightsT.to(in.device());
-            // } else if(i==2){
-            //     weights = rnn2WeightsT.to(in.device());
-            // } else if(i==3){
-            //     weights = rnn3WeightsT.to(in.device());
-            // } else if(i==4){
-            //     weights = rnn4WeightsT.to(in.device());
-            // } else {
-            //     weights = rnn5WeightsT.to(in.device());
-            // }
-
-
-            weightsT += realtime();
-            biasT -= realtime();
-            auto bias = rnn->bias.to(in.device());
-            biasT += realtime();
-            // forLoopRest -= realtime();
-            for (int ts = 0; ts < chunk_size; ++ts) {
-                
-                auto timestep_in = working_mem_all[rnn->reverse ? (chunk_size - ts) : ts];
-                auto timestep_out = rnn->reverse ? working_mem_left[chunk_size - ts - 1]
-                                                 : working_mem_right[ts];
-                
-
-                // Timestep matrix mulitplication
-                matmul_f16T -= realtime();
-                matmul_f16(timestep_in, weights, gate_buf);
-                host_lstm_step_f16(stream, batch_size, layer_size, bias.data_ptr(),
-                                   gate_buf.data_ptr(), state_buf.data_ptr(),
-                                   timestep_out.data_ptr());
-                matmul_f16T += realtime();
-            }
-            // forLoopRest += realtime();
-            rnnIterate += realtime();
-
-        }
-        forward_cublasT2 += realtime();
-
-        // Output is [N, T, C], non-contiguous
-        forward_cublasT += realtime();
-        return working_mem_left.transpose(1, 0);
-    }
-
-    void rearrange_individual_weights(torch::Tensor buffer) {
-        // std::cout << "\nCRF 361\n" << std::endl; //Test
-        // startTime = realtime();
-        torch::Tensor tmp = torch::empty_like(buffer);
-        int layer_width = tmp.size(0) / 4;
-
-        //Mapping of LSTM gate weights from IFGO to GIFO order.
-        std::vector<std::pair<int, int>> idxs = {std::make_pair(0, 2), std::make_pair(1, 0),
-                                                 std::make_pair(2, 1), std::make_pair(3, 3)};
-
-        for (auto idx : idxs) {
-            int start_idx = idx.second * layer_width;
-            int end_idx = start_idx + layer_width;
-            tmp.index({torch::indexing::Slice(idx.first * layer_width,
-                                              (idx.first + 1) * layer_width)}) =
-                    buffer.index({torch::indexing::Slice(start_idx, end_idx)});
-        }
-
-        buffer.index({torch::indexing::Slice()}) = tmp;
-    }
-
-    void rearrange_weights() {
-        // std::cout << "\nCRF 384\n" << std::endl; //Test
-        // startTime = realtime();
-        for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
-            rearrange_individual_weights(rnn->named_parameters()["weight_hh"]);
-            rearrange_individual_weights(rnn->named_parameters()["weight_ih"]);
-            _r_wih.push_back(rnn->named_parameters()["weight_ih"].transpose(0, 1).contiguous());
-            rearrange_individual_weights(rnn->named_parameters()["bias_hh"]);
-            rearrange_individual_weights(rnn->named_parameters()["bias_ih"]);
-        }
-        _weights_rearranged = true;
-    }
-
-    std::pair<torch::Tensor, torch::Tensor> quantize_tensor(torch::Tensor tensor,
-                                                            int levels = 256) {
-        // std::cout << "\nCRF 400\n" << std::endl; //Test
-        // startTime = realtime();
-        //Quantize a tensor to int8, returning per-channel scales and the quantized tensor
-        //if weights have not been quantized we get some scaling
-        tensor = tensor.transpose(0, 1).contiguous();
-        auto fp_max = torch::abs(std::get<0>(torch::max(tensor, 0)));
-        auto fp_min = torch::abs(std::get<0>(torch::min(tensor, 0)));
-
-        auto fp_range =
-                std::get<0>(
-                        torch::cat(
-                                {fp_min.index({torch::indexing::Slice(), torch::indexing::None}),
-                                 fp_max.index({torch::indexing::Slice(), torch::indexing::None})},
-                                1)
-                                .max(1)) *
-                2;
-        auto quantization_scale = levels / fp_range;
-        auto quantization_max = (levels / 2) - 1;
-
-        auto tensor_quantized = (tensor * quantization_scale)
-                                        .round()
-                                        .clip(-quantization_max, quantization_max)
-                                        .to(torch::kI8);
-
-        return std::pair<torch::Tensor, torch::Tensor>(quantization_scale.to(torch::kFloat32),
-                                                       tensor_quantized);
-    }
-
-    void quantize_weights() {
-        // std::cout << "\nCRF 430\n" << std::endl; //Test
-        // startTime = realtime();
-        for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
-            // auto [factors, quantized] = quantize_tensor(rnn->named_parameters()["weight_hh"]);
-            auto t0 = quantize_tensor(rnn->named_parameters()["weight_hh"]);
-            auto factors = std::get<0>(t0);
-            auto quantized = std::get<1>(t0);
-            _quantization_scale_factors.push_back(factors);
-            _quantized_buffers.push_back(quantized);
-        }
-    }
-
-    torch::Tensor forward_quantized(torch::Tensor x) {
-        // std::cout << "\nCRF 445\n" << std::endl; //Test
-        // startTime = realtime();
-        // Input x is [N, T, C], contiguity optional
-        c10::cuda::CUDAGuard device_guard(x.device());
-
-        x = x.contiguous();
-
-        //If this is the fist time the forward method is being applied, do some startup
-        if (m_quantize && !_weights_rearranged) {
-            rearrange_weights();
-            quantize_weights();
-            _chunks = _chunks.to(x.device());
-        }
-        auto buffer = torch::matmul(x, _r_wih[0]);
-
-        _host_run_lstm_rev_quantized(
-                _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[0].data_ptr(),
-                rnn1->named_parameters()["bias_ih"].data_ptr(),
-                _quantization_scale_factors[0].data_ptr(), x.data_ptr(), _chunks.size(0));
-
-        buffer = torch::matmul(x, _r_wih[1]);
-
-        _host_run_lstm_fwd_quantized(
-                _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[1].data_ptr(),
-                rnn2->named_parameters()["bias_ih"].data_ptr(),
-                _quantization_scale_factors[1].data_ptr(), x.data_ptr(), _chunks.size(0));
-
-        buffer = torch::matmul(x, _r_wih[2]);
-
-        _host_run_lstm_rev_quantized(
-                _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[2].data_ptr(),
-                rnn3->named_parameters()["bias_ih"].data_ptr(),
-                _quantization_scale_factors[2].data_ptr(), x.data_ptr(), _chunks.size(0));
-
-        buffer = torch::matmul(x, _r_wih[3]);
-
-        _host_run_lstm_fwd_quantized(
-                _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[3].data_ptr(),
-                rnn4->named_parameters()["bias_ih"].data_ptr(),
-                _quantization_scale_factors[3].data_ptr(), x.data_ptr(), _chunks.size(0));
-
-        buffer = torch::matmul(x, _r_wih[4]);
-
-        _host_run_lstm_rev_quantized(
-                _chunks.data_ptr(), buffer.data_ptr(), _quantized_buffers[4].data_ptr(),
-                rnn5->named_parameters()["bias_ih"].data_ptr(),
-                _quantization_scale_factors[4].data_ptr(), x.data_ptr(), _chunks.size(0));
-
-        // Output is [N, T, C], contiguous
-        return x;
-    }
-*/
