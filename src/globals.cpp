@@ -55,7 +55,6 @@ double weights_cpuT;
 double weightsT;
 double biasT;
 double transposed_weightsT;
-double weightCPUcalls;
 double cont;
 double ncont;
 

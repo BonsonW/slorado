@@ -59,7 +59,6 @@ extern double weights_cpuT;
 extern double weightsT;
 extern double biasT;
 extern double transposed_weightsT;
-extern double weightCPUcalls;
 extern double cont;
 extern double ncont;
 
