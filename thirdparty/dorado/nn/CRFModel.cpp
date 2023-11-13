@@ -311,7 +311,7 @@ struct CudaLSTMStackImpl : Module {
         }
 
 //New Method////////////////////////////////////////////////////////////////////////////////////////////
-        Assign the transposed variables to the global array at the first time
+        // Assign the transposed variables to the global array at the first time
         if(!setTrans){
             transposedRNNWeights.push_back((rnn1->weights.t().contiguous()));
             transposedRNNWeights.push_back((rnn2->weights.t().contiguous()));
