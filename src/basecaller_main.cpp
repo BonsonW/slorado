@@ -48,6 +48,7 @@ SOFTWARE.
 
 void generateSplitBar(const long* values, const std::string* names, int size);
 
+
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
     {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
@@ -242,11 +243,14 @@ int basecaller_main(int argc, char* argv[]) {
 
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
         //load a databatch
+        double realtime_d = realtime();
+        
         status = load_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
+      
         //process a databatch
         process_db(core, db);
 
@@ -263,6 +267,8 @@ int basecaller_main(int argc, char* argv[]) {
         if(opt.debug_break==counter){
             break;
         }
+        //fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_d, counter);
+        //fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_p, counter);
         counter++;
     }
 
@@ -288,22 +294,20 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
         fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
         fprintf(stderr, "\n[%s]                - beam_search time: %.3f sec",__func__, beam_searchT);
-        fprintf(stderr, "\n\n[%s]              - cudaLSTM time: %.3f sec",__func__, cudaLSTM);            fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImplT time: %.3f sec",__func__, convolutionImplT);
-        fprintf(stderr, "\n[%s]                       - Forward in LinearCRFImpl time: %.3f sec",__func__, forward_l159);
-        fprintf(stderr, "\n[%s]                       - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
-        fprintf(stderr, "\n\n[%s]                     - cudaLSTMImplT time: %.3f sec",__func__, cudaLSTMImplT);
-        fprintf(stderr, "\n\n[%s]                     - cudaLSTMStackImplT time: %.3f sec",__func__, cudaLSTMStackImplT);
-        fprintf(stderr, "\n\n[%s]                         - forward_cublas() time: %.3f sec",__func__, forward_cublasT);
-        fprintf(stderr, "\n[%s]                           - host_transpose_f16() time: %.3f sec",__func__, host_transpose_f16T);
-        fprintf(stderr, "\n[%s]                           - Iterate over RNN layers time: %.3f sec",__func__, rnnIterate);
+        fprintf(stderr, "\n[%s]                - cudaLSTM time: %.3f sec",__func__, cudaLSTM);            fprintf(stderr, "\n\n[%s]                     - Forward in ConvolutionImplT time: %.3f sec",__func__, convolutionImplT);
+        fprintf(stderr, "\n[%s]                    - Forward in LinearCRFImpl time: %.3f sec",__func__, forward_l159);
+        fprintf(stderr, "\n[%s]                    - Forward in LSTMStackImpl time: %.3f sec",__func__, forward_l536);
+        fprintf(stderr, "\n[%s]                    - cudaLSTMImplT time: %.3f sec",__func__, cudaLSTMImplT);
+        fprintf(stderr, "\n[%s]                    - cudaLSTMStackImplT time: %.3f sec",__func__, cudaLSTMStackImplT);
+        fprintf(stderr, "\n[%s]                         - forward_cublas() time: %.3f sec",__func__, forward_cublasT);
+        fprintf(stderr, "\n[%s]                         - host_transpose_f16() time: %.3f sec",__func__, host_transpose_f16T);
+        fprintf(stderr, "\n[%s]                         - Iterate over RNN layers time: %.3f sec",__func__, rnnIterate);
         fprintf(stderr, "\n[%s]                             - Initialize Tensor time: %.3f sec",__func__, state_bufT); 
         fprintf(stderr, "\n[%s]                             - Transpose weights time: %.3f sec",__func__, weights_cpuT); 
-        fprintf(stderr, "\n[%s]                                 - No of times called contiguous(): %.0f",__func__, weightCPUcalls);
-        fprintf(stderr, "\n[%s]                                 - No of times Beam search    : %.0f",__func__, cont);
         fprintf(stderr, "\n[%s]                             - Transfer weights to GPU time: %.3f sec",__func__, weightsT);
         fprintf(stderr, "\n[%s]                             - Transfer bias to GPU time: %.3f sec",__func__, biasT);   
         fprintf(stderr, "\n[%s]                             - matmul_f16()  time: %.3f sec",__func__, matmul_f16T);
-        fprintf(stderr, "\n\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
+        fprintf(stderr, "\n[%s]                 - CudaCaller time: %.3f sec",__func__, CudaCallerT);
         fprintf(stderr, "\n[%s]                 - load_crf_model time: %.3f sec",__func__, CudaCallerT5);
         fprintf(stderr, "\n[%s]                         - Initialize crf_model time: %.3f sec",__func__, load_crf_modelT);
         fprintf(stderr, "\n[%s]                         - Populate crf_model time: %.3f sec",__func__, CudaCallerT5 - load_crf_modelT);
@@ -312,9 +316,9 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "\n[%s]                 -  cuda_thread_fnT time: %.3f sec",__func__, cuda_thread_fnT2);
         fprintf(stderr, "\n[%s]                  -  forward time: %.3f sec",__func__, cuda_thread_fnT5);
         fprintf(stderr, "\n[%s]                  -  synchronize time: %.3f sec",__func__, cuda_thread_fnT6);
-        fprintf(stderr, "\n\n[%s]               - cublasGemmEx time: %.3f sec",__func__, cublasGemmExT);        
-        fprintf(stderr, "\n\n[%s]     - Matmul count: %f ",__func__, matMul);
-        fprintf(stderr, "\n\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
+        fprintf(stderr, "\n[%s]               - cublasGemmEx time: %.3f sec",__func__, cublasGemmExT);        
+        fprintf(stderr, "\n[%s]     - Matmul count: %f ",__func__, matMul);
+        fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
         fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
         fprintf(stderr, "\n[%s] Data output time: %.3f sec : %.2f %\n", __func__,core->output_time,core->output_time*100/total_time);
         fprintf(stderr,"\n");
