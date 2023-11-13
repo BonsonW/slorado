@@ -92,4 +92,3 @@ template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int n
 template<typename T> void ModelRunner<T>::accept_chunk(int num_chunks, at::Tensor slice) {
     m_input.index_put_({num_chunks, 0}, slice);
 }
-

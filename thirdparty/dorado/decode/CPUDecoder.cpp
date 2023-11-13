@@ -148,3 +148,4 @@ std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
     return beam_search_cpu(scores, num_chunks, options, device);
 
 }
+

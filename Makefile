@@ -7,12 +7,12 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I $(LIBTORCH_DIR)/include/torch/csrc/api/include \
 			-I $(LIBTORCH_DIR)/include -I thirdparty/ \
 			-I thirdparty/tomlc99/
-CFLAGS	+= 	-g -Wall -O2
+CFLAGS	+= 	-g  -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++14
-LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
-			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
+LIBS    += -L $(LIBTORCH_DIR)/lib \
+			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so" \
 			-Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
-			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
+		        -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libc10.so"
 LDFLAGS  += $(LIBS) -lz -lm -lpthread -lstdc++fs
 BUILD_DIR = build
 
@@ -45,7 +45,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
 	  $(BUILD_DIR)/toml.o \
-
+	  
 
 # add more objects here if needed
 
@@ -64,15 +64,15 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
     CPPFLAGS += -DUSE_GPU=1 -I $(CUDA_INC)
-	OBJ += $(BUILD_DIR)/GPUDecoder.o
-	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so" -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda_cu.so"
+	OBJ += $(BUILD_DIR)/GPUDecoder.o $(BUILD_DIR)/winograd.o
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so" -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda_cu.so"
 ifdef koi
 	OBJ += $(BUILD_DIR)/CudaCRFModel.o $(BUILD_DIR)/cuda_utils.o
 	CPPFLAGS += -I thirdparty/koi_lib/include
 	CPPFLAGS += -DUSE_CUDA_LSTM=1
-	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl
+	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl 
 endif
-	LDFLAGS += -L $(CUDA_LIB)/ -lcudart_static -lrt -ldl
+	LDFLAGS += -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl  
 endif
 
 CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
@@ -81,18 +81,18 @@ CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
 
 # slorado
 $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
-	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a $(LDFLAGS) -o $@
+	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a  $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h 
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/basecall.o: src/basecall.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h src/globals.h
+$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
@@ -139,8 +139,12 @@ $(BUILD_DIR)/stitch.o: thirdparty/dorado/utils/stitch.cpp
 $(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
+$(BUILD_DIR)/winograd.o: thirdparty/dorado/utils/winograd.cu
+	nvcc  -D_GLIBCXX_USE_CXX11_ABI=0 -I thirdparty/torch/libtorch/include/torch/csrc/api/include -I thirdparty/torch/libtorch/include  -ltorch $< -c -o $@
+
 $(BUILD_DIR)/cuda_utils.o: thirdparty/dorado/utils/cuda_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
 
 
 #toml

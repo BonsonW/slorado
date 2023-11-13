@@ -48,6 +48,7 @@ SOFTWARE.
 
 void generateSplitBar(const long* values, const std::string* names, int size);
 
+
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
     {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
@@ -242,11 +243,14 @@ int basecaller_main(int argc, char* argv[]) {
 
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
         //load a databatch
+        double realtime_d = realtime();
+        
         status = load_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
+      
         //process a databatch
         process_db(core, db);
 
@@ -263,6 +267,8 @@ int basecaller_main(int argc, char* argv[]) {
         if(opt.debug_break==counter){
             break;
         }
+        //fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_d, counter);
+        //fprintf(stderr, "[%.3f]  Counter : %d \n", realtime() - realtime_p, counter);
         counter++;
     }
 
