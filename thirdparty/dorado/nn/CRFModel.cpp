@@ -320,11 +320,11 @@ struct CudaLSTMStackImpl : Module {
             transposedRNNWeights.push_back((rnn5->weights.t().contiguous()));
             setTrans = true;
 
-            GPUWeights.push_back(transposedRNNWeights[0].to(in.device()));
-            GPUWeights.push_back(transposedRNNWeights[1].to(in.device()));
-            GPUWeights.push_back(transposedRNNWeights[2].to(in.device()));
-            GPUWeights.push_back(transposedRNNWeights[3].to(in.device()));
-            GPUWeights.push_back(transposedRNNWeights[4].to(in.device()));
+            // GPUWeights.push_back(transposedRNNWeights[0].to(in.device()));
+            // GPUWeights.push_back(transposedRNNWeights[1].to(in.device()));
+            // GPUWeights.push_back(transposedRNNWeights[2].to(in.device()));
+            // GPUWeights.push_back(transposedRNNWeights[3].to(in.device()));
+            // GPUWeights.push_back(transposedRNNWeights[4].to(in.device()));
         }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -341,16 +341,18 @@ struct CudaLSTMStackImpl : Module {
             // auto weights_cpu = rnn->weights.t().contiguous();
             // weights_cpuT += realtime();
 
-            // weightsT -= realtime();
+            weightsT -= realtime();
             // auto weights = weights_cpu.to(in.device());
-            // weightsT += realtime();
+            auto weights = transposedRNNWeights[i].to(in.device());
+            
+            weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //New Method/////////////////////////////////////////////////////////////////////////////////////////////
-            weightsT -= realtime();
-                        torch::Tensor weights = GPUWeights[i];
+            // weightsT -= realtime();
+            // torch::Tensor weights = GPUWeights[i];
             i ++;
-            weightsT += realtime();
+            // weightsT += realtime();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             biasT -= realtime();
