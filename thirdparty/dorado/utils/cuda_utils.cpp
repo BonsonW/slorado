@@ -6,8 +6,11 @@
 #include "../nn/CRFModel.h"
 #include "torch/torch.h"
 
+
+
 extern "C" {
 #include "koi.h"
+//#include "winograd.cu"
 }
 
 #include <ATen/cuda/CUDAContext.h>
@@ -21,6 +24,10 @@ extern "C" {
 #include <regex>
 #include <string>
 #include <vector>
+
+// void winograd_mm(torch::Tensor const&,torch::Tensor const&,torch::Tensor&);
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void matmul_f16_cublas(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C) {
     constexpr uint16_t HALF_ZERO = 0;      // 0.0 in __half format
@@ -88,3 +95,4 @@ void matmul_f16(torch::Tensor const &A, torch::Tensor const &B, torch::Tensor &C
     // }();
     matmul_f16_cublas(A, B, C);
 }
+
