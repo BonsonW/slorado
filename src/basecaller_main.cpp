@@ -299,7 +299,6 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "\n[%s]                           - Iterate over RNN layers time: %.3f sec",__func__, rnnIterate);
         fprintf(stderr, "\n[%s]                             - Initialize Tensor time: %.3f sec",__func__, state_bufT); 
         fprintf(stderr, "\n[%s]                             - Transpose weights time: %.3f sec",__func__, weights_cpuT); 
-        fprintf(stderr, "\n[%s]                                 - No of times called contiguous(): %.0f",__func__, weightCPUcalls);
         fprintf(stderr, "\n[%s]                                 - No of times Beam search    : %.0f",__func__, cont);
         fprintf(stderr, "\n[%s]                             - Transfer weights to GPU time: %.3f sec",__func__, weightsT);
         fprintf(stderr, "\n[%s]                             - Transfer bias to GPU time: %.3f sec",__func__, biasT);   
