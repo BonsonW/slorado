@@ -44,6 +44,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
 	  $(BUILD_DIR)/toml.o \
+	  $(BUILD_DIR)/globals.o \
 
 
 # add more objects here if needed
@@ -111,6 +112,8 @@ $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
+$(BUILD_DIR)/globals.o: src/globals.cpp src/globals.h src/misc.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/writer.o: src/writer.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@

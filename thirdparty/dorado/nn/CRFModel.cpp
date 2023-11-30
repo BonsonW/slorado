@@ -2,6 +2,7 @@
 #include <string>
 #include <torch/torch.h>
 
+#include "../../../src/globals.h"
 #include "toml.h"
 #include "CRFModel.h"
 #include "error.h"
@@ -295,12 +296,31 @@ struct CudaLSTMStackImpl : Module {
                                in.stride(1), in.stride(0), in.stride(2),
                                working_mem_right.stride(0), working_mem_right.stride(1),
                                working_mem_right.stride(2), working_mem_right.data_ptr());
+
+            // Assign the transposed variables to the global array at the first time
+            if (!setTrans) {
+                transposedRNNWeights.push_back((rnn1->weights.t().contiguous()));
+                transposedRNNWeights.push_back((rnn2->weights.t().contiguous()));
+                transposedRNNWeights.push_back((rnn3->weights.t().contiguous()));
+                transposedRNNWeights.push_back((rnn4->weights.t().contiguous()));
+                transposedRNNWeights.push_back((rnn5->weights.t().contiguous()));
+                setTrans = true;
+
+                GPUWeights.push_back(transposedRNNWeights[0].to(in.device()));
+                GPUWeights.push_back(transposedRNNWeights[1].to(in.device()));
+                GPUWeights.push_back(transposedRNNWeights[2].to(in.device()));
+                GPUWeights.push_back(transposedRNNWeights[3].to(in.device()));
+                GPUWeights.push_back(transposedRNNWeights[4].to(in.device()));
+            }
         }
 
+        int i = 0;
         for (auto &rnn : {rnn1, rnn2, rnn3, rnn4, rnn5}) {
             auto state_buf = torch::zeros({batch_size, layer_size}, in.options());
-            auto weights_cpu = rnn->weights.t().contiguous();
-            auto weights = weights_cpu.to(in.device());
+
+            torch::Tensor weights = GPUWeights[i];
+            i++;
+
             auto bias = rnn->bias.to(in.device());
             for (int ts = 0; ts < chunk_size; ++ts) {
                 auto timestep_in = working_mem_all[rnn->reverse ? (chunk_size - ts) : ts];
