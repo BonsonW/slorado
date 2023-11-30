@@ -44,6 +44,7 @@ SOFTWARE.
 #include "dorado/decode/GPUDecoder.h"
 #include "dorado/decode/CPUDecoder.h"
 #include "dorado/decode/logsum.h"
+#include "dorado/decode/fast_hash.h"
 
 #ifdef USE_GPU
 #ifdef USE_CUDA_LSTM
@@ -63,6 +64,7 @@ SOFTWARE.
 #include <vector>
 
 float flogsum_lookup[p7_LOGSUM_TBL];
+uint64_t kmerhash_lookup[NUM_STATES];
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -83,6 +85,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->ts.time_init_runners -= realtime();
 
     p7_FLogsumInit();
+    kmerhash_init();
 
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {

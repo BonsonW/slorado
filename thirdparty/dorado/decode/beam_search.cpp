@@ -51,9 +51,9 @@ struct BeamFrontElement {
 };
 
 float log_sum_exp(float x, float y, float t) {
-    // return p7_FLogsum(x, y);
-    float abs_diff = std::abs(x - y) / t;
-    return std::max(x, y) + ((abs_diff < 17.0f) ? (std::log1p(std::exp(-abs_diff)) * t) : 0.0f);
+    return p7_FLogsum(x, y);
+    // float abs_diff = std::abs(x - y) / t;
+    // return std::max(x, y) + ((abs_diff < 17.0f) ? (std::log1p(std::exp(-abs_diff)) * t) : 0.0f);
 }
 
 int get_num_states(size_t num_trans_states) {
@@ -317,6 +317,8 @@ float beam_search(const T* const scores,
                             // The stay element will end up last, sorted by score
                             current_scores[stay_elem_idx] = std::numeric_limits<float>::lowest();
                         }
+
+                        break;
                     }
                 }
             }

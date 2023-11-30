@@ -28,6 +28,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#define NUM_STATES 64
+
+int kmerhash_init(void);
+
 /**
  * fasthash32 - 32-bit implementation of fasthash
  * @buf:  data buffer

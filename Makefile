@@ -93,7 +93,7 @@ $(BINARY): $(OBJ) slow5lib/lib/libslow5.a
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h thirdparty/dorado/decode/logsum.h
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h thirdparty/dorado/decode/logsum.h thirdparty/dorado/decode/fast_hash.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/basecall.o: src/basecall.cpp

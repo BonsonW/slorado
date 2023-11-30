@@ -34,6 +34,15 @@ static uint64_t mix(uint64_t h) {
     return h;
 }
 
+int kmerhash_init(void)
+{
+    extern uint64_t kmerhash_lookup[NUM_STATES];
+	for (uint64_t i = 0; i < NUM_STATES; i++) {
+	    kmerhash_lookup[i] = mix(i);
+	}
+	return 1;
+}
+
 uint64_t fasthash64(const void *buf, size_t len, uint64_t seed) {
     const uint64_t m = 0x880355f21e6d1965ULL;
     const uint64_t *pos = (const uint64_t *)buf;
@@ -97,8 +106,10 @@ uint32_t fasthash32(const void *buf, size_t len, uint32_t seed) {
  **/
 uint64_t chainfasthash64(uint64_t hash, uint64_t val) {
     const uint64_t m = 0x880355f21e6d1965ULL;
-
-    hash ^= mix(val);
+    extern uint64_t kmerhash_lookup[NUM_STATES];
+    
+    hash ^= kmerhash_lookup[val];
+    // hash ^= mix(val);
     hash *= m;
     return mix(hash);
 }
