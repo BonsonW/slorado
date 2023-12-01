@@ -23,22 +23,33 @@
  *  Copyright (C) 2020 Oxford Nanopore Technologies
  */
 
-#pragma once
+/*  Modifications licensed by MIT licence.
+ *  Copyright (C) 2023 Bonson Wong (bonson.ym@gmail.com)
+ */
+
+#ifndef FASTHASH_H
+#define FASTHASH_H
 
 #include <stdint.h>
 #include <stdio.h>
 
 #define NUM_STATES 64
 
-int kmerhash_init(void);
+// Compression function for Merkle-Damgard construction.
+// This function is generated using the framework provided.
+#define FASTHASH_MIX(h) ({					\
+			(h) ^= (h) >> 23;				\
+			(h) *= 0x2127599bf4325c37ULL;	\
+			(h) ^= (h) >> 47; })
 
-/**
- * fasthash32 - 32-bit implementation of fasthash
- * @buf:  data buffer
- * @len:  data size
- * @seed: the seed
- */
-uint32_t fasthash32(const void *buf, size_t len, uint32_t seed);
+// Precompute hashes for kmers used in beam-search
+static inline int kmerhash_init(void) {
+    extern uint64_t kmerhash_lookup[NUM_STATES];
+    for (uint64_t i = 0; i < NUM_STATES; i++) {	
+       kmerhash_lookup[i] = FASTHASH_MIX(i);
+    }
+    return 1;
+}
 
 /**
  * fasthash64 - 64-bit implementation of fasthash
@@ -46,11 +57,76 @@ uint32_t fasthash32(const void *buf, size_t len, uint32_t seed);
  * @len:  data size
  * @seed: the seed
  */
-uint64_t fasthash64(const void *buf, size_t len, uint64_t seed);
+static inline uint64_t fasthash64(const void *buf, size_t len, uint64_t seed) {
+	const uint64_t    m = 0x880355f21e6d1965ULL;
+	const uint64_t *pos = (const uint64_t *)buf;
+	const uint64_t *end = pos + (len / 8);
+	const unsigned char *pos2;
+	uint64_t h = seed ^ (len * m);
+	uint64_t v;
+
+	while (pos != end) {
+		v  = *pos++;
+		h ^= FASTHASH_MIX(v);
+		h *= m;
+	}
+
+	pos2 = (const unsigned char*)pos;
+	v = 0;
+
+	switch (len & 7) {
+	case 7: v ^= (uint64_t)pos2[6] << 48;
+	case 6: v ^= (uint64_t)pos2[5] << 40;
+	case 5: v ^= (uint64_t)pos2[4] << 32;
+	case 4: v ^= (uint64_t)pos2[3] << 24;
+	case 3: v ^= (uint64_t)pos2[2] << 16;
+	case 2: v ^= (uint64_t)pos2[1] << 8;
+	case 1: v ^= (uint64_t)pos2[0];
+		h ^= FASTHASH_MIX(v);
+		h *= m;
+	}
+
+	return FASTHASH_MIX(h);
+} 
 
 /**
- * chainfasthash64 - chain values to hash
- * @hash: Hash of previous data
- * @val:  New value to chain to hash
+ * fasthash32 - 32-bit implementation of fasthash
+ * @buf:  data buffer
+ * @len:  data size
+ * @seed: the seed
  */
-uint64_t chainfasthash64(uint64_t hash, uint64_t val);
+static inline uint32_t fasthash32(const void *buf, size_t len, uint32_t seed) {
+	// the following trick converts the 64-bit hashcode to Fermat
+	// residue, which shall retain information from both the higher
+	// and lower parts of hashcode.
+        uint64_t h = fasthash64(buf, len, seed);
+	return h - (h >> 32);
+}
+
+/**  Chain a new value to hash
+ *
+ *   `fasthash64` specialised to case of calculating the new hash
+ *   from the previous data when a new value is appended.
+ *
+ *   Note:
+ *       It is assumed that the value added is always 64bits wide,
+ *   unlike `fasthash64` which combines blocks of bytes into 64bits
+ *   values.
+ *
+ *   Args:
+ *       hash (uint64_t): Hash of previous data
+ *       val  (uint64_t): Value to chain to hash
+ *
+ *   Returns:
+ *       uint64_t: New hash with value added
+ **/
+static inline uint64_t chainfasthash64(uint64_t hash, uint64_t val) {
+    const uint64_t m = 0x880355f21e6d1965ULL;
+    extern uint64_t kmerhash_lookup[NUM_STATES];    
+    hash ^= kmerhash_lookup[val];
+    // hash ^= mix(val);
+    hash *= m;
+    return FASTHASH_MIX(hash);
+}
+
+#endif

@@ -39,7 +39,6 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/writer.o \
 	  $(BUILD_DIR)/beam_search.o \
 	  $(BUILD_DIR)/CPUDecoder.o \
-	  $(BUILD_DIR)/fast_hash.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
@@ -126,9 +125,6 @@ $(BUILD_DIR)/CPUDecoder.o: thirdparty/dorado/decode/CPUDecoder.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/GPUDecoder.o: thirdparty/dorado/decode/GPUDecoder.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/fast_hash.o: thirdparty/dorado/decode/fast_hash.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/nn/CRFModel.cpp
