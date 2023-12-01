@@ -587,6 +587,5 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     std::tie(sequence, qstring) = generate_sequence(moves, states, qual_data, q_shift, q_scale);
 
     t_generate_sequence += realtime();
-
-    return {std::move(sequence), std::move(qstring), std::move(moves)};
+    return std::make_tuple(sequence, qstring, moves);
 }
