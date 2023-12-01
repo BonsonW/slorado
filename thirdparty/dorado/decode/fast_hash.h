@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// 64 (4^3) supports 3-mers, we can support up to 7 (4^7)
 #define NUM_STATES 64
 
 // Compression function for Merkle-Damgard construction.
@@ -89,20 +90,6 @@ static inline uint64_t fasthash64(const void *buf, size_t len, uint64_t seed) {
 	return FASTHASH_MIX(h);
 } 
 
-/**
- * fasthash32 - 32-bit implementation of fasthash
- * @buf:  data buffer
- * @len:  data size
- * @seed: the seed
- */
-static inline uint32_t fasthash32(const void *buf, size_t len, uint32_t seed) {
-	// the following trick converts the 64-bit hashcode to Fermat
-	// residue, which shall retain information from both the higher
-	// and lower parts of hashcode.
-        uint64_t h = fasthash64(buf, len, seed);
-	return h - (h >> 32);
-}
-
 /**  Chain a new value to hash
  *
  *   `fasthash64` specialised to case of calculating the new hash
@@ -122,9 +109,9 @@ static inline uint32_t fasthash32(const void *buf, size_t len, uint32_t seed) {
  **/
 static inline uint64_t chainfasthash64(uint64_t hash, uint64_t val) {
     const uint64_t m = 0x880355f21e6d1965ULL;
-    extern uint64_t kmerhash_lookup[NUM_STATES];    
+    extern uint64_t kmerhash_lookup[NUM_STATES];
+	
     hash ^= kmerhash_lookup[val];
-    // hash ^= mix(val);
     hash *= m;
     return FASTHASH_MIX(hash);
 }

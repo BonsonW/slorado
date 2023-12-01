@@ -34,12 +34,7 @@
  */
 static inline int p7_FLogsumInit(void)
 {
-
-	//   static int firsttime = TRUE;
-	//   if (!firsttime) return 1;
-	//   firsttime = FALSE;
-
-    float temp = 1.0f;
+    float temp = 1.0f; // TODO: dynamically intialize this
 
     extern float flogsum_lookup[p7_LOGSUM_TBL];
 	int i;
