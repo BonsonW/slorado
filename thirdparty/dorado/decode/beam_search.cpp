@@ -130,20 +130,18 @@ static inline void add_candidate_steps(
     std::vector<BeamFrontElement>& current_beam_front,
     std::vector<float>& current_scores,
     std::vector<float>& prev_scores,
-    int current_beam_width,
+    const size_t current_beam_width,
     float score_scale,
-    int& max_score,
-    int& new_elem_count
+    float& max_score,
+    size_t& new_elem_count,
+    const T* const block_scores,
+    const float* const block_back_scores
 ) {
-    const T* const block_scores = scores + (block_idx * scores_block_stride);
-    const float* const block_back_scores = back_guide + ((block_idx + 1) << num_state_bits);
-
     // retrieves the given score as a float, multiplied by score_scale
     // score of the transition
     const auto fetch_block_score = [block_scores, score_scale](size_t idx) {
         return static_cast<float>(block_scores[idx]) * score_scale;
     };
-    
 
     for (size_t prev_elem_idx = 0; prev_elem_idx < current_beam_width; ++prev_elem_idx) {
             const auto& previous_element = prev_beam_front[prev_elem_idx];
@@ -199,7 +197,6 @@ static inline void add_candidate_steps(
         }
 }
 
-template <typename T>
 static inline void add_candidate_stays(
     size_t block_idx,
     std::bitset<HASH_PRESENT_BITS>& step_hash_present,
@@ -207,11 +204,12 @@ static inline void add_candidate_stays(
     std::vector<BeamFrontElement>& current_beam_front,
     std::vector<float>& current_scores,
     std::vector<float>& prev_scores,
-    int current_beam_width,
-    float fixed_stay_score,
-    float temperature,
-    int& max_score,
-    int& new_elem_count
+    const size_t current_beam_width,
+    const float fixed_stay_score,
+    const float temperature,
+    float& max_score,
+    size_t& new_elem_count,
+    const float* const block_back_scores
 ) {
     for (size_t prev_elem_idx = 0; prev_elem_idx < current_beam_width; ++prev_elem_idx) {
         const auto& previous_element = prev_beam_front[prev_elem_idx];
@@ -236,7 +234,6 @@ static inline void add_candidate_stays(
         max_score = std::max(max_score, stay_score);
 
         // determine whether the path including this stay duplicates another sequence ending in a step equal to the state of the stay
-        // this "bloom filter" is supposed to avoid comparing hash against each step generated before
         if (step_hash_present[previous_element.hash & HASH_PRESENT_MASK]) {
         
             // left shift by 2 and then add the previous elem idx
@@ -281,9 +278,13 @@ static inline void add_candidate_stays(
 
 template <typename T>
 static inline void init_beams(
+    const float* const back_guide,
     std::vector<BeamElement>& beam_vector,
     std::vector<BeamFrontElement>& prev_beam_front,
-    std::vector<float>& prev_scores
+    std::vector<float>& prev_scores,
+    const size_t current_beam_width,
+    const size_t max_beam_width,
+    const size_t num_states
 ) {
     // find the score a state needs to make it into the first set of beam elements
     T beam_init_threshold = std::numeric_limits<T>::lowest();
@@ -313,7 +314,6 @@ static inline void init_beams(
     }
 
     // copy all beam fronts into the beam persistent state
-    size_t current_beam_width = std::min(max_beam_width, num_states);
     for (size_t element_idx = 0; element_idx < current_beam_width; ++element_idx) {
         beam_vector[element_idx].state                  = prev_beam_front[element_idx].state;
         beam_vector[element_idx].prev_element_index     = prev_beam_front[element_idx].prev_element_index;
@@ -322,10 +322,12 @@ static inline void init_beams(
 }
 
 static inline float find_cutoff(
-    std::vector<float>& current_scores,
-    float prev_beam_cutoff,
-    int new_elem_count,
-    int max_beam_width
+    const std::vector<float>& current_scores,
+    const float prev_beam_cutoff,
+    const size_t new_elem_count,
+    const size_t max_beam_width,
+    size_t& elem_count,
+    const float max_score
 ) {
     float beam_cutoff_score = prev_beam_cutoff;
     // count the elements which meet the beam cutoff
@@ -342,7 +344,7 @@ static inline float find_cutoff(
     };
 
     // count the elements which meet the min score
-    size_t elem_count = get_elem_count();
+    elem_count = get_elem_count();
 
     if (elem_count > max_beam_width) {
         // binary search to find a score which doesn't return too many scores, but doesn't reduce beam width too much
@@ -386,127 +388,13 @@ static inline float find_cutoff(
     return beam_cutoff_score;
 }
 
-template <typename T>
-static inline void extend_beams(
-    const T* const scores,
-    size_t scores_block_stride,
-    const float* const back_guide,
+void compute_qual_base_data(
+    std::vector<float>& qual_data,
+    std::vector<int32_t>& states,
     const float* const posts,
-    int num_state_bits,
-    size_t num_blocks,
-    size_t max_beam_width,
-    float beam_cut,
-    float fixed_stay_score,
-    float temperature,
-    float score_scale
-) {
-    const size_t num_states = 1 << num_state_bits;
-    const state_t states_mask = static_cast<state_t>(num_states - 1);
-    
-    const float log_beam_cut = (beam_cut > 0.0f) ? (temperature * logf(beam_cut)) : std::numeric_limits<float>::max();
-    size_t max_beam_candidates = (NUM_BASES + 1) * max_beam_width;
-
-    std::vector<BeamFrontElement> current_beam_front(max_beam_candidates);
-    std::vector<BeamFrontElement> prev_beam_front(max_beam_candidates);
-
-    std::vector<float> current_scores(max_beam_candidates);
-    std::vector<float> prev_scores(max_beam_candidates);
-
-    init_beams(beam_vector, prev_beam_front, prev_scores);
-
-    // extend beams
-    for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
-        // a k=1 Bloom filter, indicating the presence of steps with particular sequence hashes
-        // avoids comparing stay hashes against all possible progenitor states where none of them has the requisite sequence hash
-        
-        std::bitset<HASH_PRESENT_BITS> step_hash_present;  // default constructor zeros content
-
-        // Generate list of candidate elements for this timestep (block).
-        // As we do so, update the maximum score.
-        size_t new_elem_count = 0;
-        float max_score = std::numeric_limits<float>::lowest();
-
-        add_candidate_steps(
-            block_idx,
-            states_mask,
-            step_hash_present,
-            scores,
-            scores_block_stride,
-            back_guide,
-            num_state_bits,
-            prev_beam_front,
-            current_beam_front,
-            current_scores,
-            prev_scores,
-            current_beam_width,
-            score_scale,
-            max_score,
-            new_elem_count
-        );
-
-        add_candidate_stays(
-            block_idx,
-            step_hash_present,
-            prev_beam_front,
-            current_beam_front,
-            current_scores,
-            prev_scores,
-            current_beam_width,
-            fixed_stay_score,
-            temperature,
-            max_score,
-            new_elem_count
-        );
-
-        // find a suitable cutoff score
-        float beam_cutoff_score = find_cutoff(current_scores, (max_score - log_beam_cut), new_elem_count, max_beam_width);
-
-        size_t write_idx = 0;
-        for (size_t read_idx = 0; read_idx < new_elem_count; ++read_idx) {
-            if (current_scores[read_idx] >= beam_cutoff_score) {
-                if (write_idx < max_beam_width) {
-                    prev_beam_front[write_idx] = current_beam_front[read_idx];
-                    prev_scores[write_idx] = current_scores[read_idx];
-                    ++write_idx;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        // at the last timestep, we need to ensure the best path corresponds to element 0
-        if (block_idx == num_blocks - 1) {
-            float best_score = std::numeric_limits<float>::lowest();
-            size_t best_score_index = 0;
-            for (size_t i = 0; i < elem_count; i++) {
-                if (prev_scores[i] > best_score) {
-                    best_score = prev_scores[i];
-                    best_score_index = i;
-                }
-            }
-            std::swap(prev_beam_front[0], prev_beam_front[best_score_index]);
-            std::swap(prev_scores[0], prev_scores[best_score_index]);
-        }
-        
-        // copy this new beam front into the beam persistent state
-        size_t beam_offset = (block_idx + 1) * max_beam_width;
-        for (size_t i = 0; i < elem_count; ++i) {
-            // remove backwards contribution from score
-            prev_scores[i] -= float(block_back_scores[prev_beam_front[i].state]);
-
-            beam_vector[beam_offset + i].state = prev_beam_front[i].state;
-            beam_vector[beam_offset + i].prev_element_index = prev_beam_front[i].prev_element_index;
-            beam_vector[beam_offset + i].stay = prev_beam_front[i].stay;
-        }
-
-        // adjust current beam width
-        current_beam_width = elem_count;
-    }
-}
-
-template <typename T>
-float compute_qual(
-
+    const size_t num_blocks,
+    const size_t num_states,
+    const size_t num_state_bits
 ) {
     int shifted_states[2 * NUM_BASES];
     
@@ -602,8 +490,88 @@ float beam_search(
     // create the beam, we need to keep beam_width elements for each block, plus the initial state
     std::vector<BeamElement> beam_vector(max_beam_width * (num_blocks + 1));
 
-    // extend the beams
-    extend_beams();
+    const size_t num_states = 1 << num_state_bits;
+    const state_t states_mask = static_cast<state_t>(num_states - 1);
+    
+    const float log_beam_cut = (beam_cut > 0.0f) ? (temperature * logf(beam_cut)) : std::numeric_limits<float>::max();
+    size_t max_beam_candidates = (NUM_BASES + 1) * max_beam_width;
+
+    std::vector<BeamFrontElement> current_beam_front(max_beam_candidates);
+    std::vector<BeamFrontElement> prev_beam_front(max_beam_candidates);
+
+    std::vector<float> current_scores(max_beam_candidates);
+    std::vector<float> prev_scores(max_beam_candidates);
+
+    size_t current_beam_width = std::min(max_beam_width, num_states);
+    init_beams<T>(back_guide, beam_vector, prev_beam_front, prev_scores, current_beam_width, max_beam_width, num_states);
+
+    // extend beams
+    for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
+        // a k=1 Bloom filter, indicating the presence of steps with particular sequence hashes
+        // avoids comparing stay hashes against all possible progenitor states where none of them has the requisite sequence hash
+        std::bitset<HASH_PRESENT_BITS> step_hash_present;  // default constructor zeros content
+
+        // generate list of candidate elements for this timestep (block)
+        // as we do so, update the maximum score
+        size_t new_elem_count = 0;
+        float max_score = std::numeric_limits<float>::lowest();
+
+        const T* const block_scores = scores + (block_idx * scores_block_stride);
+        const float* const block_back_scores = back_guide + ((block_idx + 1) << num_state_bits);
+
+        add_candidate_steps<T>(block_idx, states_mask, step_hash_present, scores, scores_block_stride, back_guide, num_state_bits,
+                            prev_beam_front, current_beam_front, current_scores, prev_scores, current_beam_width, score_scale,
+                            max_score, new_elem_count, block_scores, block_back_scores);
+
+        add_candidate_stays(block_idx, step_hash_present, prev_beam_front, current_beam_front, current_scores,
+                            prev_scores, current_beam_width, fixed_stay_score, temperature, max_score, new_elem_count, block_back_scores);
+
+        // find a suitable cutoff score
+        float initial_cutoff = max_score - log_beam_cut;
+        size_t elem_count = 0;
+        float beam_cutoff_score = find_cutoff(current_scores, initial_cutoff, new_elem_count, max_beam_width, elem_count, max_score);
+
+        size_t write_idx = 0;
+        for (size_t read_idx = 0; read_idx < new_elem_count; ++read_idx) {
+            if (current_scores[read_idx] >= beam_cutoff_score) {
+                if (write_idx < max_beam_width) {
+                    prev_beam_front[write_idx] = current_beam_front[read_idx];
+                    prev_scores[write_idx] = current_scores[read_idx];
+                    ++write_idx;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // at the last timestep, we need to ensure the best path corresponds to element 0
+        if (block_idx == num_blocks - 1) {
+            float best_score = std::numeric_limits<float>::lowest();
+            size_t best_score_index = 0;
+            for (size_t i = 0; i < elem_count; i++) {
+                if (prev_scores[i] > best_score) {
+                    best_score = prev_scores[i];
+                    best_score_index = i;
+                }
+            }
+            std::swap(prev_beam_front[0], prev_beam_front[best_score_index]);
+            std::swap(prev_scores[0], prev_scores[best_score_index]);
+        }
+        
+        // copy this new beam front into the beam persistent state
+        size_t beam_offset = (block_idx + 1) * max_beam_width;
+        for (size_t i = 0; i < elem_count; ++i) {
+            // remove backwards contribution from score
+            prev_scores[i] -= float(block_back_scores[prev_beam_front[i].state]);
+
+            beam_vector[beam_offset + i].state = prev_beam_front[i].state;
+            beam_vector[beam_offset + i].prev_element_index = prev_beam_front[i].prev_element_index;
+            beam_vector[beam_offset + i].stay = prev_beam_front[i].stay;
+        }
+
+        // adjust current beam width
+        current_beam_width = elem_count;
+    }
 
     // extract final score
     const float final_score = prev_scores[0];
@@ -623,7 +591,7 @@ float beam_search(
     moves[0] = 1;  // always step in the first event
 
     // compute qual data
-    compute_qual();
+    compute_qual_base_data(qual_data, states, posts, num_blocks, num_states, num_state_bits);
 
     return final_score;
 }
@@ -646,8 +614,6 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     if (1 << num_state_bits != num_states) {
         throw std::runtime_error("num_states must be an integral power of 2");
     }
-
-    t_beam_search -= realtime();
 
     // Posterior probabilities and back guides must be floats regardless of scores type.
     if (posts_t.dtype() != torch::kFloat32 || back_guides_t.dtype() != torch::kFloat32) {
