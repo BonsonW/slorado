@@ -10,6 +10,11 @@
 
 #include <string>
 
+std::vector<DecodedChunk> beam_search_cuda(const torch::Tensor& scores,
+                                                  const int num_chunks,
+                                                  const DecoderOptions& options,
+                                                  std::string &device);
+
 class ModelRunnerBase {
 public:
     virtual void accept_chunk(int chunk_idx, at::Tensor slice) = 0;
@@ -84,7 +89,7 @@ template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int n
 #ifdef USE_KOI
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 #else
-    return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device);
+    return beam_search_cuda(scores, num_chunks, m_decoder_options, m_device);
 #endif
 }
 

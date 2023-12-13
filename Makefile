@@ -58,14 +58,23 @@ endif
 
 # make accel=1 enables the acceelerator (CUDA,OpenCL,FPGA etc if implemented)
 ifdef cuda
-    CPPFLAGS += -DUSE_GPU=1
-	OBJ += $(BUILD_DIR)/GPUDecoder.o
-	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
-ifdef koi
 	CUDA_ROOT ?= /usr/local/cuda
+	NVCC ?= nvcc
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS +=  -I $(CUDA_INC)
+    CPPFLAGS += -DUSE_GPU=1
+	OBJ += $(BUILD_DIR)/GPUDecoder.o
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
+
+	ifeq ($(cxx11_abi),) #  cxx11_abi not defined
+	CUDA_CFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
+	endif
+
+	CUDA_CFLAGS += -g  -O2 -std=c++14 -lineinfo $(CUDA_ARCH) -Xcompiler -Wall
+    CUDA_LDFLAGS = -L$(CUDA_LIB) -lcudart_static -lrt -ldl
+	LDFLAGS += $(CUDA_LDFLAGS)
+ifdef koi
 	OBJ += $(BUILD_DIR)/CudaCRFModel.o $(BUILD_DIR)/cuda_utils.o
 	CPPFLAGS += -I thirdparty/koi_lib/include
 	CPPFLAGS += -DUSE_CUDA_LSTM=1
@@ -118,8 +127,11 @@ $(BUILD_DIR)/writer.o: src/writer.cpp
 $(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+# $(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cpp
+# 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cu
+	$(NVCC) -x cu $(CUDA_CFLAGS) $(CPPFLAGS)  -c $< -o $@
 
 $(BUILD_DIR)/CPUDecoder.o: thirdparty/dorado/decode/CPUDecoder.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
