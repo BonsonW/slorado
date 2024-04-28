@@ -288,53 +288,6 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
     }
 }
 
-void basecall_db(core_t* core, db_t* db) {
-    timestamps_t *ts = &(core->ts);
-
-    size_t num_threads = (*core->runners).size();
-    size_t n_reads = (*db->chunks).size();
-
-    std::vector<std::unique_ptr<std::thread>> threads;
-    threads.reserve(num_threads);
-
-    size_t reads_per_thread = (n_reads + num_threads - 1) / num_threads;
-
-    size_t start = 0;
-    size_t end = reads_per_thread;
-
-    bool last = false;
-    for (size_t runner = 0; runner < (*core->runners).size(); ++runner) {
-        threads.emplace_back(
-            new std::thread(
-                basecall_thread,
-                core,
-                db,
-                runner,
-                start,
-                end
-            )
-        );
-        start = end;
-        end = std::min(end + reads_per_thread, n_reads);
-
-        if (last) break;
-        if (end == n_reads) last = true;
-    }
-
-    auto time_sync = 0;
-
-    for (size_t i = 0; i < threads.size(); ++i) {
-        threads[i]->join();
-        if (i == 0) {
-            time_sync -= realtime();
-        }
-        if (i == threads.size()-1) {
-            time_sync += realtime();
-        }
-    }
-    ts->time_sync += time_sync;
-}
-
 
 void postprocess_signal(core_t* core,db_t* db, int32_t i){
     slow5_rec_t* rec = db->slow5_rec[i];
@@ -372,6 +325,7 @@ void process_db(core_t* core,db_t* db){
 
     a = realtime();
     basecall_db(core,db);
+    //basecall_cpu_db(core,db);
     b = realtime();
     core->basecall_time += (b-a);
     LOG_DEBUG("%s","Basecalled reads");

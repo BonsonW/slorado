@@ -12,20 +12,6 @@
 #include "slorado.h"
 #include "misc.h"
 
-void basecall_chunks(
-    std::vector<torch::Tensor> tensors,
-    std::vector<Chunk *> chunks,
-    int chunk_size,
-    ModelRunnerBase &model_runner,
-    timestamps_t *ts
-);
-
-void basecall_thread(
-    core_t* core,
-    db_t* db,
-    size_t runner_idx,
-    size_t start,
-    size_t end
-);
-
+void basecall_db(core_t* core, db_t* db);
+void basecall_cpu_db(core_t* core, db_t* db);
 #endif
