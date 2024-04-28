@@ -7,10 +7,81 @@
 #ifdef USE_CUDA_LSTM
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAGuard.h>
-extern "C" {
-#include "koi.h"
-}
+// extern "C" {
+// #include "koi.h"
+// }
 #endif
+
+int back_guide_step(void *chunks,
+                         void *chunk_results,
+                         int num_chunks,
+                         void *post,
+                         int post_stride,
+                         void *aux_buffer,
+                         void *path,
+                         void *moves,
+                         void *weights,
+                         void *sequence,
+                         void *q_string,
+                         float qscale,
+                         float qshift,
+                         int beam_width,
+                         float beam_cut,
+                         float fixed_stay_score);
+
+int beam_search_step(void *chunks,
+                          void *chunk_results,
+                          int num_chunks,
+                          void *post,
+                          int post_stride,
+                          void *aux_buffer,
+                          void *path,
+                          void *moves,
+                          void *weights,
+                          void *sequence,
+                          void *q_string,
+                          float qscale,
+                          float qshift,
+                          int beam_width,
+                          float beam_cut,
+                          float fixed_stay_score);
+
+int compute_posts_step(void *chunks,
+                            void *chunk_results,
+                            int num_chunks,
+                            void *post,
+                            int post_stride,
+                            void *aux_buffer,
+                            void *path,
+                            void *moves,
+                            void *weights,
+                            void *sequence,
+                            void *q_string,
+                            float qscale,
+                            float qshift,
+                            int beam_width,
+                            float beam_cut,
+                            float fixed_stay_score);
+
+
+
+int run_decode(void *chunks,
+                    void *chunk_results,
+                    int num_chunks,
+                    void *post,
+                    int post_stride,
+                    void *aux_buffer,
+                    void *path,
+                    void *moves,
+                    void *weights,
+                    void *sequence,
+                    void *q_string,
+                    float qscale,
+                    float qshift,
+                    int beam_width,
+                    float beam_cut,
+                    float fixed_stay_score,
+                    int move_pad);
 
 torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
 #ifdef USE_CUDA_LSTM
@@ -50,23 +121,23 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     auto sequence = moves_sequence_qstring[1];
     auto qstring = moves_sequence_qstring[2];
 
-    host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
                          options.beam_width, options.beam_cut, options.blank_score);
 
-    host_beam_search_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    beam_search_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                           aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                           sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
                           options.beam_width, options.beam_cut, options.blank_score);
 
-    host_compute_posts_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    compute_posts_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                             aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                             sequence.data_ptr(), qstring.data_ptr(), options.q_scale,
                             options.q_shift, options.beam_width, options.beam_cut,
                             options.blank_score);
 
-    host_run_decode(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    run_decode(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
                     aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
                     qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
                     options.beam_cut, options.blank_score, options.move_pad);
