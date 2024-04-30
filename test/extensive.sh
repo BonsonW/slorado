@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MINIMAP2=minimap2/minimap2
+MINIMAP2="/install/minimap2-2.26/minimap2"
 REFERENC_GENOME="/genome/hg38noAlt.idx"
 
 SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5"
