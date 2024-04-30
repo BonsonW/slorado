@@ -1,6 +1,7 @@
 #include "CPUDecoder.h"
 
 #include "beam_search.h"
+#include "error.h"
 
 #include <math.h>
 
@@ -86,6 +87,45 @@ torch::Tensor backward_scores(const torch::Tensor& scores, const float fixed_sta
     return scan(Ms_T.flip(0), fixed_stay_score, idx_T.to(torch::kInt64), vT).flip(0);
 }
 
+typedef struct {
+    core_t* core;
+    db_t* db;
+    int32_t i;
+    int32_t start;
+    int32_t end;
+} model_thread_arg_t;
+
+void* pthread_single_beam_search(void* voidargs) {
+    int t_first_chunk = i * chunks_per_thread + std::min(i, num_threads_with_one_more_chunk);
+    int t_num_chunks = chunks_per_thread + int(i < num_threads_with_one_more_chunk);
+
+    using Slice = torch::indexing::Slice;
+    auto t_scores = scores_cpu.index({Slice(), Slice(t_first_chunk, t_first_chunk + t_num_chunks)});
+
+    torch::Tensor fwd = forward_scores(t_scores, options.blank_score);
+    torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
+
+    torch::Tensor posts = torch::softmax(fwd + bwd, -1);
+
+    t_scores = t_scores.transpose(0, 1);
+    bwd = bwd.transpose(0, 1).contiguous();
+    posts = posts.transpose(0, 1).contiguous();
+
+    for (int i = 0; i < t_num_chunks; i++) {
+        auto decode_result = beam_search_decode(
+                t_scores[i], bwd[i], posts[i], options.beam_width, options.beam_cut,
+                options.blank_score, options.q_shift, options.q_scale,
+                options.temperature, 1.0f);
+        chunk_results[t_first_chunk + i] = DecodedChunk{
+                std::get<0>(decode_result),
+                std::get<1>(decode_result),
+                std::get<2>(decode_result),
+        };
+    }
+
+    pthread_exit(0);
+}
+
 std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
@@ -97,45 +137,34 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
 
     std::vector<DecodedChunk> chunk_results(num_chunks);
 
-    std::vector<std::unique_ptr<std::thread>> threads;
-    threads.reserve(num_threads);
-    for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back(new std::thread(
-                [&](int i) {
-                    int t_first_chunk =
-                            i * chunks_per_thread + std::min(i, num_threads_with_one_more_chunk);
-                    int t_num_chunks = chunks_per_thread + int(i < num_threads_with_one_more_chunk);
-
-                    using Slice = torch::indexing::Slice;
-                    auto t_scores = scores_cpu.index(
-                            {Slice(), Slice(t_first_chunk, t_first_chunk + t_num_chunks)});
-
-                    torch::Tensor fwd = forward_scores(t_scores, options.blank_score);
-                    torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
-
-                    torch::Tensor posts = torch::softmax(fwd + bwd, -1);
-
-                    t_scores = t_scores.transpose(0, 1);
-                    bwd = bwd.transpose(0, 1).contiguous();
-                    posts = posts.transpose(0, 1).contiguous();
-
-                    for (int i = 0; i < t_num_chunks; i++) {
-                        auto decode_result = beam_search_decode(
-                                t_scores[i], bwd[i], posts[i], options.beam_width, options.beam_cut,
-                                options.blank_score, options.q_shift, options.q_scale,
-                                options.temperature, 1.0f);
-                        chunk_results[t_first_chunk + i] = DecodedChunk{
-                                std::get<0>(decode_result),
-                                std::get<1>(decode_result),
-                                std::get<2>(decode_result),
-                        };
-                    }
-                },
-                i));
+    //create threads
+    pthread_t tids[num_threads];
+    model_thread_arg_t pt_args[num_threads];
+    int32_t t, ret;
+    int32_t i = 0;
+    //set the data structures
+    for (t = 0; t < num_threads; t++) {
+        pt_args[t].core = core;
+        pt_args[t].db = db;
+        pt_args[t].start = i;
+        pt_args[t].runner = t;
+        i += step;
+        if (i > n_reads) {
+            pt_args[t].end = n_reads;
+        } else {
+            pt_args[t].end = i;
+        }
     }
 
-    for (auto& thread : threads) {
-        thread->join();
+    for (int t = 0; t < num_threads; t++) {
+        ret = pthread_create(&tids[t], NULL, pthread_single_beam_search,
+                                (void*)(&pt_args[t]));
+        NEG_CHK(ret);
+    }
+
+    for (t = 0; t < num_threads; t++) {
+        int ret = pthread_join(tids[t], NULL);
+        NEG_CHK(ret);
     }
 
     return chunk_results;
