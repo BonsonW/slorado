@@ -29,8 +29,8 @@ SOFTWARE.
 ******************************************************************************/
 
 #include <cstdint>
-#include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 #include <slow5/slow5.h>
 
 #include "basecall.h"

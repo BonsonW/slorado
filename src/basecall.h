@@ -7,11 +7,10 @@
 #ifndef BASECALL
 #define BASECALL
 
-#include <vector>
-
 #include "slorado.h"
 #include "misc.h"
 
 void basecall_db(core_t* core, db_t* db);
-void basecall_cpu_db(core_t* core, db_t* db);
+// void basecall_cpu_db(core_t* core, db_t* db);
+
 #endif
