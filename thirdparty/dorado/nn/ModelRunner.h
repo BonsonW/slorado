@@ -59,17 +59,10 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
     LOG_DEBUG("initialized model runner for device %s", device.c_str());
 
 #ifdef USE_GPU
-    #ifdef USE_CUDA_LSTM
-        m_options = torch::TensorOptions().dtype(T::dtype).device(device); //todo
-        m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
-        chunk_size -= chunk_size % m_model_stride;
-        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(T::dtype).device(torch::kCPU)); //todo
-    #else
-        m_options = torch::TensorOptions().dtype(CPUDecoder::dtype).device(device); //todo
-        m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
-        chunk_size -= chunk_size % m_model_stride;
-        m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(CPUDecoder::dtype).device(torch::kCPU)); //todo
-    #endif
+    m_options = torch::TensorOptions().dtype(T::dtype).device(device); //todo
+    m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
+    chunk_size -= chunk_size % m_model_stride;
+    m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(T::dtype).device(torch::kCPU)); //todo
 #else
     m_options = torch::TensorOptions().dtype(CPUDecoder::dtype).device(device); //todo
     m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
@@ -80,10 +73,11 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
 
 template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks) {
     torch::InferenceMode guard;
-    auto scores = m_module->forward(m_input.to(m_options.device_opt().value()));
 #ifdef USE_KOI
+    auto scores = (m_module->forward(m_input.to(m_options.device_opt().value())));
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 #else
+    auto scores = (m_module->forward(m_input.to(m_options.device_opt().value()))).to(CPUDecoder::dtype);
     return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device);
 #endif
 }
