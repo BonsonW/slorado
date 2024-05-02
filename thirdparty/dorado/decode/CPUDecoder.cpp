@@ -6,6 +6,10 @@
 
 #include <vector>
 
+#include "misc.h"
+
+double t_beam_search = 0;
+
 at::Tensor scan(const torch::Tensor& Ms,
                 const float fixed_stay_score,
                 const torch::Tensor& idx,
@@ -95,6 +99,8 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
     int chunks_per_thread = num_chunks / num_threads;
     int num_threads_with_one_more_chunk = num_chunks % num_threads;
 
+    t_beam_search -= realtime();
+
     std::vector<DecodedChunk> chunk_results(num_chunks);
 
     std::vector<std::unique_ptr<std::thread>> threads;
@@ -139,6 +145,8 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
     for (auto& thread : threads) {
         thread->join();
     }
+    
+    t_beam_search += realtime();
 
     return chunk_results;
 }

@@ -15,7 +15,6 @@
 #include <limits>
 #include <numeric>
 
-double t_beam_search = 0;
 double t_generate_sequence = 0;
 double t_compute = 0;
 double t_extract_and_write = 0;
