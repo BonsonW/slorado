@@ -21,17 +21,8 @@ torch::Tensor quantile(const torch::Tensor t, const torch::Tensor q);
 // Only `interpolation='lower'` is currently implemented.
 torch::Tensor quantile_counting(const torch::Tensor t, const torch::Tensor q);
 
-// temporary
-inline void module_load_state_dict(torch::nn::Module& module,
-                            const std::vector<torch::Tensor>& weights,
-                            const std::vector<torch::Tensor>& buffers = {}) {
-    assert(weights.size() == module.parameters().size());
-    for (size_t idx = 0; idx < weights.size(); idx++) {
-        module.parameters()[idx].data() = weights[idx].data();
-    }
-
-    assert(buffers.size() == module.buffers().size());
-    for (size_t idx = 0; idx < buffers.size(); idx++) {
-        module.buffers()[idx].data() = buffers[idx].data();
-    }
-}
+// Quantize a tensor to int8, returning a pair of tensors `{scales, quantized_tensor}`, where:
+// `scales` is the same size as `tensor` with dimension 0 dropped, dtype float
+// `quantized_tensor` is the same size as `tensor`, dtype int8
+// such that `quantized_tensor / scales ~= tensor`
+std::pair<at::Tensor, at::Tensor> quantize_tensor(const at::Tensor& tensor);

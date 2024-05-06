@@ -42,6 +42,8 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
+	  $(BUILD_DIR)/crf_utils.o \
+	  $(BUILD_DIR)/math_utils.o \
 	  $(BUILD_DIR)/toml.o \
 
 
@@ -142,6 +144,11 @@ $(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
 $(BUILD_DIR)/cuda_utils.o: thirdparty/dorado/utils/cuda_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
+$(BUILD_DIR)/crf_utils.o: thirdparty/dorado/utils/crf_utils.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/math_utils.o: thirdparty/dorado/utils/math_utils.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 #toml
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c

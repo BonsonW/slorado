@@ -73,7 +73,7 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
 
 template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int num_chunks) {
     torch::InferenceMode guard;
-#ifdef USE_KOI
+#ifdef USE_CUDA_LSTM
     auto scores = (m_module->forward(m_input.to(m_options.device_opt().value())));
     return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
 #else
