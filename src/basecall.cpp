@@ -50,14 +50,6 @@ void basecall_chunks(
     int chunk_size,
     ModelRunnerBase &model_runner,
     timestamps_t *ts
-);
-
-void basecall_chunks(
-    std::vector<torch::Tensor> tensors,
-    std::vector<Chunk *> chunks,
-    int chunk_size,
-    ModelRunnerBase &model_runner,
-    timestamps_t *ts
 ) {
     for (size_t i = 0; i < tensors.size(); ++i) {
         ts->time_accept -= realtime();
