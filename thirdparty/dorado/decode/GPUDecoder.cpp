@@ -14,6 +14,8 @@ extern "C" {
 
 torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
 #ifdef USE_CUDA_LSTM
+    c10::cuda::CUDAGuard device_guard(scores.device());
+
     long int N = scores.sizes()[0];
     long int T = scores.sizes()[1];
     long int C = scores.sizes()[2];
@@ -50,25 +52,29 @@ torch::Tensor GPUDecoder::gpu_part(torch::Tensor scores, int num_chunks, Decoder
     auto sequence = moves_sequence_qstring[1];
     auto qstring = moves_sequence_qstring[2];
 
-    host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    auto m_score_clamp_val = 0.f;
+
+    auto stream = at::cuda::getCurrentCUDAStream().stream();
+
+    host_back_guide_step(stream, chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), m_score_clamp_val, C,
                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
-                         options.beam_width, options.beam_cut, options.blank_score);
+                         int(options.beam_width), options.beam_cut, options.blank_score);
 
-    host_beam_search_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    host_beam_search_step(stream, chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), m_score_clamp_val, C,
                           aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                           sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
-                          options.beam_width, options.beam_cut, options.blank_score);
+                          int(options.beam_width), options.beam_cut, options.blank_score);
 
-    host_compute_posts_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    host_compute_posts_step(stream, chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), m_score_clamp_val, C,
                             aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
                             sequence.data_ptr(), qstring.data_ptr(), options.q_scale,
-                            options.q_shift, options.beam_width, options.beam_cut,
+                            options.q_shift, int(options.beam_width), options.beam_cut,
                             options.blank_score);
 
-    host_run_decode(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+    host_run_decode(stream, chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), m_score_clamp_val, C,
                     aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
-                    qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
+                    qstring.data_ptr(), options.q_scale, options.q_shift, int(options.beam_width),
                     options.beam_cut, options.blank_score, options.move_pad);
 
     return moves_sequence_qstring.reshape({3, N, -1});
