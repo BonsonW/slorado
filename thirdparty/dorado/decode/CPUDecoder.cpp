@@ -120,8 +120,7 @@ void* pthread_single_beam_search(void* voidargs) {
     for (int c = args->start; c < args->end; c++, i++) {
         auto decode_result = beam_search_decode(
                 t_scores[i], bwd[i], posts[i], options->beam_width, options->beam_cut,
-                options->blank_score, options->q_shift, options->q_scale,
-                options->temperature, 1.0f);
+                options->blank_score, options->q_shift, options->q_scale, 1.0f);
         (*args->chunk_results)[c] = DecodedChunk{
                 std::get<0>(decode_result),
                 std::get<1>(decode_result),
@@ -136,7 +135,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
-    const auto scores_cpu = scores.to(torch::kCPU);
+    const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype);
     int num_threads = std::min(num_chunks, 4);
     int chunks_per_thread = num_chunks / num_threads;
     int num_threads_with_one_more_chunk = num_chunks % num_threads;
