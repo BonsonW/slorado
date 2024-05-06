@@ -49,7 +49,6 @@ struct CRFModelConfig {
     float qscale;
     float qbias;
     int lstm_size;
-    int conv;
     int insize;
     int stride;
     bool bias;
@@ -65,7 +64,7 @@ struct CRFModelConfig {
     float scale;
     int num_features;
 
-    SignalNormalisationParams signal_norm_params;
+    // SignalNormalisationParams signal_norm_params;
     std::vector<ConvParams> convs;
 };
 

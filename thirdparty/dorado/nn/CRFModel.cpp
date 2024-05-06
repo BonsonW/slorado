@@ -777,16 +777,17 @@ at::Tensor CRFModelImpl::run_koi(at::Tensor in) {
 #endif
 
 at::Tensor CRFModelImpl::forward(at::Tensor x) {
-    if (x.device() == torch::kCPU) {
-        // Output is [T, N, C], which CPU decoding requires.
-        return encoder->forward(x).transpose(0, 1);
-    }
+    // if (x.device() == torch::kCPU) {
+    //     // Output is [T, N, C], which CPU decoding requires.
+    //     return encoder->forward(x).transpose(0, 1);
+    // }
 #if USE_CUDA_LSTM
     if (x.is_cuda() && x.dtype() == torch::kF16) {
         // Output is [N, T, C]
         return run_koi(x);
     }
 #endif
-    // Output is [N, T, C]
-    return encoder->forward(x);
+    return encoder->forward(x).transpose(0, 1);
+    // // Output is [N, T, C]
+    // return encoder->forward(x);
 }

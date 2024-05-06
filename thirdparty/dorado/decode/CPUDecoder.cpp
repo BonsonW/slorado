@@ -2,12 +2,11 @@
 
 #include "beam_search.h"
 #include "error.h"
-
-#include <math.h>
-
-#include <vector>
-
 #include "misc.h"
+
+#include <ATen/ATen.h>
+#include <math.h>
+#include <vector>
 
 double t_beam_search = 0;
 
@@ -100,6 +99,7 @@ typedef struct {
 } decode_thread_arg_t;
 
 void* pthread_single_beam_search(void* voidargs) {
+    at::InferenceMode inference_mode_guard;
 
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
     const DecoderOptions *options = args->options;
@@ -136,7 +136,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
-    const auto scores_cpu = scores.to(torch::kCPU).transpose(0, 1);
+    const auto scores_cpu = scores.to(torch::kCPU);
     int num_threads = std::min(num_chunks, 4);
     int chunks_per_thread = num_chunks / num_threads;
     int num_threads_with_one_more_chunk = num_chunks % num_threads;
