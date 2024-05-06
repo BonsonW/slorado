@@ -83,7 +83,7 @@ template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int n
 #endif
 }
 
-template<typename T> void ModelRunner<T>::accept_chunk(int num_chunks, at::Tensor slice) {
-    m_input.index_put_({num_chunks, 0}, slice);
+template<typename T> void ModelRunner<T>::accept_chunk(int chunk_idx, at::Tensor slice) {
+    m_input.index_put_({chunk_idx, torch::indexing::Ellipsis}, slice);
 }
 

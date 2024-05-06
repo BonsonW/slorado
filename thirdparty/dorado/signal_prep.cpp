@@ -107,27 +107,18 @@ std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<C
 
     for (size_t i = 0; i < chunks.size(); ++i) {
         auto input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks[i]->input_offset, chunks[i]->input_offset + chunk_size)});
-        size_t slice_size;
-        if (input_slice.ndimension() == 1) slice_size = input_slice.size(0);
-        else slice_size = input_slice.sizes()[1];
+        if (input_slice.ndimension() == 1) input_slice = input_slice.unsqueeze(0);
+        size_t slice_size = input_slice.size(1);
 
         // repeat-pad any non-full chunks
-        // Stereo and Simplex encoding need to be treated differently
         if (slice_size != chunk_size) {
-            if (input_slice.ndimension() == 1) {
-                auto t0 = std::div((int)chunk_size, (int)slice_size);
-                auto n = t0.quot;
-                auto overhang = t0.rem;
-                input_slice = torch::concat({input_slice.repeat({n}), input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, overhang)})});
-            } else if (input_slice.ndimension() == 2) {
-                auto t0 = std::div((int)chunk_size, (int)slice_size);
-                auto n = t0.quot;
-                auto overhang = t0.rem;
-                input_slice = torch::concat(
-                            {input_slice.repeat({1, n}),
-                             input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, overhang)})},
-                            1);
-            }
+            auto t0 = std::div((int)chunk_size, (int)slice_size);
+            auto n = t0.quot;
+            auto overhang = t0.rem;
+            input_slice = torch::concat(
+                {input_slice.repeat({1, n}),
+                input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, overhang)})},
+                1);
         }
         tensors.push_back(input_slice);
     }
