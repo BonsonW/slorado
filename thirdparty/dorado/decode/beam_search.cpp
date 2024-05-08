@@ -1,5 +1,6 @@
 #include "beam_search.h"
 #include "logsum.h"
+#include "misc.h"
 
 #include <math.h>
 
@@ -10,6 +11,18 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+
+double t_generate_sequence = 0;
+double t_compute = 0;
+double t_extract_and_write = 0;
+double t_candidate_list = 0;
+double t_log_sum_exp_loop = 0;
+double t_copy_beam_front = 0;
+double t_init_beam = 0;
+double t_find_init_score = 0;
+double t_create_beam = 0;
+double t_block_iter = 0;
+double t_cut_off = 0;
 
 // 16 bit state supports 7-mers with 4 bases.
 typedef uint16_t state_t;
@@ -187,6 +200,7 @@ float beam_search(const T* const scores,
         beam_vector[element_idx].stay = prev_beam_front[element_idx].stay;
     }
 
+    t_block_iter -= realtime();
     // Iterate through blocks, extending beam
     for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
         const T* const block_scores = scores + (block_idx * scores_block_stride);
@@ -304,43 +318,12 @@ float beam_search(const T* const scores,
             // Count the elements which meet the beam cutoff.
             size_t elem_count = 0;
             const float* score_ptr = current_scores.data();
-#if !ENABLE_NEON_IMPL
             for (int i = int(new_elem_count); i; --i) {
                 if (*score_ptr >= beam_cutoff_score) {
                     ++elem_count;
                 }
                 ++score_ptr;
             }
-#else
-            uint32x4_t counts_x4_a = vdupq_n_u32(0u);
-            uint32x4_t counts_x4_b = vdupq_n_u32(0u);
-            const float32x4_t cutoff_x4 = vdupq_n_f32(beam_cutoff_score);
-
-            // 8 fold unrolled version has the small upside that both loads
-            // can be done with a single ldp instruction.
-            const int kUnroll = 8;
-            for (int i = int(new_elem_count) / kUnroll; i; --i) {
-                // True comparison sets lane bits to 0xffffffff, or -1 in two's complement,
-                // which we subtract to increment our counts.
-                float32x4_t scores_x4_a = vld1q_f32(score_ptr);
-                uint32x4_t comparisons_x4_a = vcgeq_f32(scores_x4_a, cutoff_x4);
-                counts_x4_a = vsubq_u32(counts_x4_a, comparisons_x4_a);
-
-                float32x4_t scores_x4_b = vld1q_f32(score_ptr + 4);
-                uint32x4_t comparisons_x4_b = vcgeq_f32(scores_x4_b, cutoff_x4);
-                counts_x4_b = vsubq_u32(counts_x4_b, comparisons_x4_b);
-
-                score_ptr += 8;
-            }
-            // Add together the result of 2 horizontal adds.
-            elem_count = vaddvq_u32(counts_x4_a) + vaddvq_u32(counts_x4_b);
-            for (int i = new_elem_count % kUnroll; i; --i) {
-                if (*score_ptr >= beam_cutoff_score) {
-                    ++elem_count;
-                }
-                ++score_ptr;
-            }
-#endif
             return elem_count;
         };
 
@@ -426,6 +409,7 @@ float beam_search(const T* const scores,
 
         current_beam_width = elem_count;
     }
+    t_block_iter += realtime();
 
     // Extract final score
     const float final_score = prev_scores[0];
@@ -446,6 +430,7 @@ float beam_search(const T* const scores,
 
     int shifted_states[2 * NUM_BASES];
 
+    t_compute -= realtime();
     // Compute per-base qual data
     for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
         int state = states[block_idx];
@@ -506,6 +491,7 @@ float beam_search(const T* const scores,
                     (int(base) == base_to_emit ? block_prob : wrong_base_prob);
         }
     }
+    t_compute += realtime();
 
     return final_score;
 }
@@ -578,7 +564,10 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
                                  std::string(scores_t.dtype().name()));
     }
 
+    t_generate_sequence -= realtime();
     auto t0 = generate_sequence(moves, states, qual_data, q_shift, q_scale);
+    t_generate_sequence += realtime();
+
     auto sequence = std::get<0>(t0);
     auto qstring = std::get<1>(t0);
 

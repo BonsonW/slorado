@@ -9,6 +9,12 @@
 #include <vector>
 
 double t_beam_search = 0;
+double t_prep_tensor = 0;
+double t_slice = 0;
+double t_forward = 0;
+double t_backward = 0;
+double t_posts = 0;
+double t_contig = 0;
 
 at::Tensor scan(const torch::Tensor& Ms,
                 const float fixed_stay_score,
@@ -100,21 +106,35 @@ typedef struct {
 
 void* pthread_single_beam_search(void* voidargs) {
     at::InferenceMode inference_mode_guard;
+    t_prep_tensor -= realtime();
 
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
     const DecoderOptions *options = args->options;
 
+    t_slice -= realtime();
     using Slice = torch::indexing::Slice;
     auto t_scores = args->scores_cpu->index({Slice(), Slice(args->start, args->end)});
+    t_slice += realtime();
 
+    t_forward -= realtime();
     torch::Tensor fwd = forward_scores(t_scores, options->blank_score);
+    t_forward += realtime();
+
+    t_backward -= realtime();
     torch::Tensor bwd = backward_scores(t_scores, options->blank_score);
+    t_backward += realtime();
 
+    t_posts -= realtime();
     torch::Tensor posts = torch::softmax(fwd + bwd, -1);
+    t_posts += realtime();
 
+    t_contig -= realtime();
     t_scores = t_scores.transpose(0, 1);
     bwd = bwd.transpose(0, 1).contiguous();
     posts = posts.transpose(0, 1).contiguous();
+    t_contig += realtime();
+
+    t_prep_tensor += realtime();
 
     int i = 0;
     for (int c = args->start; c < args->end; c++, i++) {
@@ -127,7 +147,6 @@ void* pthread_single_beam_search(void* voidargs) {
                 std::get<2>(decode_result),
         };
     }
-
     pthread_exit(0);
 }
 
@@ -136,7 +155,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
     const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype);
-    int num_threads = std::min(num_chunks, 4);
+    int num_threads = std::min(num_chunks, 1);
     int chunks_per_thread = num_chunks / num_threads;
     int num_threads_with_one_more_chunk = num_chunks % num_threads;
 

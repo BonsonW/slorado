@@ -57,6 +57,14 @@ extern double t_find_init_score;
 extern double t_create_beam;
 extern double t_block_iter;
 extern double t_cut_off;
+extern double t_prep_tensor;
+
+extern double t_prep_tensor;
+extern double t_slice;
+extern double t_forward;
+extern double t_backward;
+extern double t_posts;
+extern double t_contig;
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
@@ -293,6 +301,12 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
             fprintf(stderr, "\n[%s]          - Synchronisation time: %.3f sec",__func__, core->ts.time_sync);
             fprintf(stderr, "\n[%s]          - beam_search time: %.3f sec",__func__, t_beam_search);
+            fprintf(stderr, "\n[%s]             - prep_tensor time: %.3f sec",__func__, t_prep_tensor);
+            fprintf(stderr, "\n[%s]                 - slice time: %.3f sec",__func__, t_slice);
+            fprintf(stderr, "\n[%s]                 - forward time: %.3f sec",__func__, t_forward);
+            fprintf(stderr, "\n[%s]                 - backward time: %.3f sec",__func__, t_backward);
+            fprintf(stderr, "\n[%s]                 - posts time: %.3f sec",__func__, t_posts);
+            fprintf(stderr, "\n[%s]                 - contig time: %.3f sec",__func__, t_contig);
             fprintf(stderr, "\n[%s]             - create_beam time: %.3f sec",__func__, t_create_beam);
             fprintf(stderr, "\n[%s]             - find_init_score time: %.3f sec",__func__, t_find_init_score);
             fprintf(stderr, "\n[%s]             - compute time: %.3f sec",__func__, t_compute);
