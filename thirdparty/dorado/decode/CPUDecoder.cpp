@@ -7,84 +7,144 @@
 
 #include <vector>
 
-at::Tensor scan(const torch::Tensor& Ms,
-                const float fixed_stay_score,
-                const torch::Tensor& idx,
-                const torch::Tensor& v0) {
-    const int T = Ms.size(0);
-    const int N = Ms.size(1);
-    const int C = Ms.size(2);
 
-    torch::Tensor alpha = Ms.new_full({T + 1, N, C}, -1E38);
-    alpha[0] = v0;
+using Slice = torch::indexing::Slice;
 
-    for (int t = 0; t < T; t++) {
-        auto scored_steps = torch::add(alpha.index({t, torch::indexing::Slice(), idx}), Ms[t]);
-        auto scored_stay = torch::add(alpha.index({t, torch::indexing::Slice()}), fixed_stay_score)
-                                   .unsqueeze(-1);
-        auto scored_transitions = torch::cat({scored_stay, scored_steps}, -1);
+void backward_scan(const float *scores_in, float *out, const int chunk, const int T, const int N, const int num_states) {
+    const int kNumBases = 4;
+    const int kNumTransitions = kNumBases + 1;
+    const float kFixedStayScore = 2.0f;
 
-        alpha[t + 1] = torch::logsumexp(scored_transitions, -1);
+    const int ts_states = num_states * kNumBases;
+
+    const float* const chunk_in = scores_in + chunk * ts_states; // should be half float (for GPU impl)
+    float* const chunk_out = out + chunk * (T+1) * num_states;
+    float* const alpha_init = chunk_out + num_states * T;
+    for (int state = 0; state < num_states; ++state) { // (for GPU impl) its 1 thread per state, but below we iterate through all the states on 1 thread
+        alpha_init[state] = 0.0f;
     }
 
-    return alpha;
+    for (int ts = 0; ts < T; ++ts) {
+        // threadgroup_barrier(mem_flags::mem_device); // synchronize all threads before next time step (for GPU impl)
+        const float* const ts_in = chunk_in + N * ts_states * (T - ts - 1);
+        float* const ts_alpha_in = alpha_init - num_states * ts;
+        float* const ts_alpha_out = ts_alpha_in - num_states;
+
+        for (int state = 0; state < num_states; ++state) { // we should have 1 thread for each state (for GPU impl)
+            const int stay_state_idx = state;
+            const int step_state_idx_a = (state * kNumBases) % num_states;
+            const int step_trans_idx_a = step_state_idx_a * kNumBases +
+                ((state * kNumBases) / num_states);
+
+            float vals[kNumTransitions];
+            float max_val = vals[0] = ts_alpha_in[stay_state_idx] + kFixedStayScore;
+            for (int base = 0; base < kNumBases; ++base) {
+                vals[base + 1] = ts_alpha_in[step_state_idx_a + base] +
+                    ts_in[step_trans_idx_a + base * kNumBases];
+                max_val = max_val > vals[base + 1] ? max_val : vals[base + 1];
+            }
+            float sum = 0.0f;
+            for (int i = 0; i < kNumTransitions; ++i) {
+                sum += exp(vals[i] - max_val);
+            }
+            ts_alpha_out[state] = max_val + log(sum);
+        }
+    }
 }
 
-torch::Tensor forward_scores(const torch::Tensor& scores, const float fixed_stay_score) {
-    const int T = scores.size(0);  // Signal len
-    const int N = scores.size(1);  // Num batches
-    const int C = scores.size(2);  // 4^state_len * 4 = 4^(state_len + 1)
+void forward_scan(const float *scores_in, const float *bwd, float *out, const int chunk, const int _T, const int N, const int num_states) {
+    const int T = _T+1; 
+    constexpr int kNumBases = 4;
+    constexpr int kNumTransitions = kNumBases + 1;
+    constexpr float kFixedStayScore = 2.0f;
+    
+    const int kMsb = num_states / kNumBases;
+    const int ts_states = num_states * kNumBases;
 
-    const int n_base = 4;
-    const int state_len = std::log(C) / std::log(n_base) - 1;
+    // This batch element's scores.
+    const float* const chunk_scores = scores_in + chunk * ts_states;
 
-    // Transition scores reshaped so that the 4 scores for each predecessor state are arranged along the
-    // innermost dimension.
-    const torch::Tensor Ms = scores.reshape({T, N, -1, n_base});
+    // Alternating forward guide buffers used for successive time steps.
+    constexpr int kMaxStates = 1024;
+    float ts_fwd[2][kMaxStates]; // threadgroup
 
-    // Number of states per timestep.
-    const int num_states = pow(n_base, state_len);
+    // The forward guide input for the first step is 0.
+    for (int state = 0; state < num_states; ++state) {
+        ts_fwd[0][state] = 0.0f;
+    }
+    // threadgroup_barrier(mem_flags::mem_threadgroup); // ------------------------------------------------------------------
 
-    // Guide values at first timestep.
-    const auto v0 = Ms.new_full({{N, num_states}}, 0.0f);
+    for (int ts = 0; ts < T; ++ts) {
+        // We read forward guide values written to TG memory in the previous step as
+        // inputs to this step.  However, there has already been a TG barrier since
+        // they were written.
+        const int ts_idx = (chunk * T + ts) * num_states;
 
-    // For each state, the indices of the 4 states that could precede it via a step transition.
-    const auto idx = torch::arange(num_states)
-                             .repeat_interleave(n_base)
-                             .reshape({n_base, -1})
-                             .t()
-                             .contiguous();
+        // This time step's scores.
+        const float* const ts_scores = chunk_scores + N * ts_states * ts;
 
-    return scan(Ms, fixed_stay_score, idx, v0);
+        // Alternating TG buffer twiddling.
+        const float* const ts_alpha_in = ts_fwd[ts & 1];
+        float* const ts_alpha_out = ts_fwd[(ts & 1) ^ 1];
+
+        // Calculate the next time step's forward guide from this time step's scores
+        // and forward guide.  It's written to threadgroup memory for use in the
+        // next iteration.
+        for (int state = 0; state < num_states; ++state) { // we should have 1 thread for each state (for GPU impl)
+            const int stay_state_idx = state;
+            const int step_state_idx_a = state / kNumBases;
+            const int step_trans_idx_a = state * kNumBases;
+            float vals[kNumTransitions];
+            float fwd_max_val = vals[0] = ts_alpha_in[stay_state_idx] + kFixedStayScore;
+            for (int base = 0; base < kNumBases; ++base) {
+                vals[base + 1] = ts_alpha_in[step_state_idx_a + base * kMsb] + 
+                    ts_scores[step_trans_idx_a + base];
+                fwd_max_val = fwd_max_val > vals[base + 1] ? fwd_max_val : vals[base + 1];
+            }
+            float fwd_sum = 0.0f;
+            for (int i = 0; i < kNumTransitions; ++i) {
+                fwd_sum += exp(vals[i] - fwd_max_val);
+            }
+            ts_alpha_out[state] = fwd_max_val + log(fwd_sum);
+
+            // Load the forward guide value calculated in the last time step for use
+            // in this time step's posterior probability calculation.
+            const float fwd_val = ts_alpha_in[state];
+
+            // Calculate fwd/bwd guide product in log space.
+            const float val = fwd_val + bwd[ts_idx + state];
+            out[ts_idx + state] = val;
+        }
+    }
 }
 
-torch::Tensor backward_scores(const torch::Tensor& scores, const float fixed_stay_score) {
-    const int N = scores.size(1);  // Num batches
-    const int C = scores.size(2);  // 4^state_len * 4 = 4^(state_len + 1)
+void softmax(const float *fwd, float *out, const int chunk, const int _T, const int num_states) {
+    const int T = _T+1; 
+    for (int ts = 0; ts < T; ++ts) {
+        const int ts_idx = (chunk * T + ts) * num_states;
 
-    const int n_base = 4;
+        float max_val = fwd[ts_idx];
+        for (int state = 0; state < num_states; ++state) {
+            
+            max_val = max_val > fwd[ts_idx + state] ? max_val : fwd[ts_idx + state];
+        }
 
-    const int state_len = std::log(C) / std::log(n_base) - 1;
+        float exp_sum = 0;
+        float exp_vals[num_states];
+        for (int state = 0; state < num_states; ++state) {
+            const float val = fwd[ts_idx + state];
+            const float exp_val = exp(val - max_val);
+            exp_vals[state] = exp_val;
+            exp_sum += exp_val;
+        }
 
-    // Number of states per timestep.
-    const int num_states = pow(n_base, state_len);
+        for (int state = 0; state < num_states; ++state) {
+            const float exp_val = exp_vals[state];
 
-    // Guide values at last timestep.
-    const torch::Tensor vT = scores.new_full({N, num_states}, 0.0f);
-
-    const auto idx = torch::arange(num_states)
-                             .repeat_interleave(n_base)
-                             .reshape({n_base, -1})
-                             .t()
-                             .contiguous();
-    auto idx_T = idx.flatten().argsort().reshape(idx.sizes());
-
-    const auto Ms_T = scores.index({torch::indexing::Slice(), torch::indexing::Slice(), idx_T});
-
-    // For each state, the indices of the 4 states that could succeed it via a step transition.
-    idx_T = torch::bitwise_right_shift(idx_T, 2);
-
-    return scan(Ms_T.flip(0), fixed_stay_score, idx_T.to(torch::kInt64), vT).flip(0);
+            // Write out the posterior probability 
+            out[ts_idx + state] = (float)(exp_val / exp_sum);
+        }
+    }
 }
 
 typedef struct {
@@ -96,26 +156,33 @@ typedef struct {
 } decode_thread_arg_t;
 
 void* pthread_single_beam_search(void* voidargs) {
-
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
     const DecoderOptions *options = args->options;
 
-    using Slice = torch::indexing::Slice;
-    auto t_scores = args->scores_cpu->index({Slice(), Slice(args->start, args->end)});
-
-    torch::Tensor fwd = forward_scores(t_scores, options->blank_score);
-    torch::Tensor bwd = backward_scores(t_scores, options->blank_score);
-
-    torch::Tensor posts = torch::softmax(fwd + bwd, -1);
-
-    t_scores = t_scores.transpose(0, 1);
-    bwd = bwd.transpose(0, 1).contiguous();
-    posts = posts.transpose(0, 1).contiguous();
+    auto out_batch_size = 1;
+    const int num_states = 64; // num_bases^state_len = 4^3 = 64
 
     int i = 0;
     for (int c = args->start; c < args->end; c++, i++) {
+        auto scores_tensor = args->scores_cpu->index({Slice(), c});
+        const float *scores_in = (float *)scores_tensor.data_ptr();
+        const int T = scores_tensor.size(0);
+
+        torch::Tensor bwd_tensor = torch::full({out_batch_size, T + 1, num_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        float *bwd_out = (float *)bwd_tensor.data_ptr();
+
+        torch::Tensor fwd_tensor = torch::full({out_batch_size, T + 1, num_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        float *fwd_out = (float *)fwd_tensor.data_ptr();
+
+        torch::Tensor post_tensor = torch::full({out_batch_size, T + 1, num_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        float *post_out = (float *)post_tensor.data_ptr();
+
+        backward_scan(scores_in, bwd_out, 0, T, out_batch_size, num_states);
+        forward_scan(scores_in, bwd_out, fwd_out, 0, T, out_batch_size, num_states);
+        softmax(fwd_out, post_out, 0, T, num_states);
+
         auto decode_result = beam_search_decode(
-                t_scores[i], bwd[i], posts[i], options->beam_width, options->beam_cut,
+                scores_tensor, bwd_tensor, post_tensor, options->beam_width, options->beam_cut,
                 options->blank_score, options->q_shift, options->q_scale,
                 options->temperature, 1.0f);
         (*args->chunk_results)[c] = DecodedChunk{
@@ -132,7 +199,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
-    const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype).transpose(0, 1);
+    const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype).transpose(0, 1).contiguous();
     int num_threads = std::min(num_chunks, 4);
     int chunks_per_thread = num_chunks / num_threads;
     int num_threads_with_one_more_chunk = num_chunks % num_threads;
