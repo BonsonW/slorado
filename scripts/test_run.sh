@@ -1,6 +1,6 @@
 #!/bin/bash
 
-make clean && make -j cuda=1 koi=1 CUDA_ROOT=/install/cuda-11.8/
+make clean && make -j cuda=1 CUDA_ROOT=/install/cuda-11.8/
 
 DEVICE=cuda:2,3
 # BLOW5=/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5
