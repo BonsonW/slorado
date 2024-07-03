@@ -164,9 +164,9 @@ void* pthread_single_beam_search(void* voidargs) {
     auto scores_tensor = args->scores_cpu->index({Slice(), Slice(args->start, args->end)});
     const float *scores_in = (float *)scores_tensor.data_ptr();
 
-    const int T = scores_tensor.size(0);
-    auto out_batch_size = scores_tensor.size(1);
-    const int C = scores_tensor.size(2);
+    const int T = args->scores_cpu->size(0);
+    auto out_batch_size = args->end - args->start;
+    const int C = args->scores_cpu->size(2);
     const int m_states = std::pow(4, args->config->state_len);
 
     fprintf(stderr,"T: %d, out_batch: %d, C: %d\n", T, out_batch_size, C);
@@ -180,13 +180,33 @@ void* pthread_single_beam_search(void* voidargs) {
     torch::Tensor post_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
     float *post_out = (float *)post_tensor.data_ptr();
 
+    backward_scan(scores_in, bwd_out, args->start, T, out_batch_size, m_states);
+    forward_scan(scores_in, bwd_out, fwd_out, args->start, T, out_batch_size, m_states);
+    softmax(fwd_out, post_out, args->start, T, m_states);
+
+    // auto out_batch_size = 1;
+
     for (int c = args->start, i = 0; c < args->end; c++, i++) {
-        backward_scan(scores_in, bwd_out, i, T, out_batch_size, m_states);
-        forward_scan(scores_in, bwd_out, fwd_out, i, T, out_batch_size, m_states);
-        softmax(fwd_out, post_out, i, T, m_states);
+        // auto scores_tensor = args->scores_cpu->index({Slice(), c});
+        // const float *scores_in = (float *)scores_tensor.data_ptr();
+        // const int T = scores_tensor.size(0);
+
+        // torch::Tensor bwd_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        // float *bwd_out = (float *)bwd_tensor.data_ptr();
+
+        // torch::Tensor fwd_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        // float *fwd_out = (float *)fwd_tensor.data_ptr();
+
+        // torch::Tensor post_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        // float *post_out = (float *)post_tensor.data_ptr();
+
+        // backward_scan(scores_in, bwd_out, 0, T, out_batch_size, m_states);
+        // forward_scan(scores_in, bwd_out, fwd_out, 0, T, out_batch_size, m_states);
+        // softmax(fwd_out, post_out, 0, T, m_states);
 
         auto decode_result = beam_search_decode(
-                scores_tensor.index({Slice(), i}), bwd_tensor[i], post_tensor[i], options->beam_width, options->beam_cut,
+                // scores_tensor.slice(), bwd_tensor, post_tensor, options->beam_width, options->beam_cut,
+                scores_tensor.index({Slice(), c}), bwd_tensor[i], post_tensor[i], options->beam_width, options->beam_cut,
                 options->blank_score, options->q_shift, options->q_scale,
                 options->temperature, 1.0f);
         (*args->chunk_results)[c] = DecodedChunk{
