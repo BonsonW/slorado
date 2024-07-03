@@ -177,9 +177,9 @@ void* pthread_single_beam_search(void* voidargs) {
         torch::Tensor post_tensor = torch::full({out_batch_size, T + 1, num_states}, -1.0).to(CPUDecoder::dtype).contiguous();
         float *post_out = (float *)post_tensor.data_ptr();
 
-        backward_scan(scores_in, bwd_out, 0, T, out_batch_size, num_states);
-        forward_scan(scores_in, bwd_out, fwd_out, 0, T, out_batch_size, num_states);
-        softmax(fwd_out, post_out, 0, T, num_states);
+        // backward_scan(scores_in, bwd_out, 0, T, out_batch_size, num_states);
+        // forward_scan(scores_in, bwd_out, fwd_out, 0, T, out_batch_size, num_states);
+        // softmax(fwd_out, post_out, 0, T, num_states);
 
         auto decode_result = beam_search_decode(
                 scores_tensor, bwd_tensor, post_tensor, options->beam_width, options->beam_cut,
