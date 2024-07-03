@@ -1,4 +1,5 @@
 #include "CPUDecoder.h"
+#include "../nn/CRFModel.h"
 
 #include "beam_search.h"
 #include "error.h"
@@ -153,36 +154,39 @@ typedef struct {
     std::vector<DecodedChunk> *chunk_results;
     int32_t start;
     int32_t end;
+    const CRFModelConfig *config;
 } decode_thread_arg_t;
 
 void* pthread_single_beam_search(void* voidargs) {
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
     const DecoderOptions *options = args->options;
 
-    auto out_batch_size = 1;
-    const int num_states = 64; // num_bases^state_len = 4^3 = 64
+    auto scores_tensor = args->scores_cpu->index({Slice(), Slice(args->start, args->end)});
+    const float *scores_in = (float *)scores_tensor.data_ptr();
 
-    int i = 0;
-    for (int c = args->start; c < args->end; c++, i++) {
-        auto scores_tensor = args->scores_cpu->index({Slice(), c});
-        const float *scores_in = (float *)scores_tensor.data_ptr();
-        const int T = scores_tensor.size(0);
+    const int T = scores_tensor.size(0);
+    auto out_batch_size = scores_tensor.size(1);
+    const int C = scores_tensor.size(2);
+    const int m_states = std::pow(4, args->config->state_len);
 
-        torch::Tensor bwd_tensor = torch::full({out_batch_size, T + 1, num_states}, -1.0).to(CPUDecoder::dtype).contiguous();
-        float *bwd_out = (float *)bwd_tensor.data_ptr();
+    fprintf(stderr,"T: %d, out_batch: %d, C: %d\n", T, out_batch_size, C);
 
-        torch::Tensor fwd_tensor = torch::full({out_batch_size, T + 1, num_states}, -1.0).to(CPUDecoder::dtype).contiguous();
-        float *fwd_out = (float *)fwd_tensor.data_ptr();
+    torch::Tensor bwd_tensor = torch::full({out_batch_size, T + 1, m_states}, -1E38).to(CPUDecoder::dtype).contiguous();
+    float *bwd_out = (float *)bwd_tensor.data_ptr();
 
-        torch::Tensor post_tensor = torch::full({out_batch_size, T + 1, num_states}, -1.0).to(CPUDecoder::dtype).contiguous();
-        float *post_out = (float *)post_tensor.data_ptr();
+    torch::Tensor fwd_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+    float *fwd_out = (float *)fwd_tensor.data_ptr();
 
-        // backward_scan(scores_in, bwd_out, 0, T, out_batch_size, num_states);
-        // forward_scan(scores_in, bwd_out, fwd_out, 0, T, out_batch_size, num_states);
-        // softmax(fwd_out, post_out, 0, T, num_states);
+    torch::Tensor post_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+    float *post_out = (float *)post_tensor.data_ptr();
+
+    for (int c = args->start, i = 0; c < args->end; c++, i++) {
+        backward_scan(scores_in, bwd_out, i, T, out_batch_size, m_states);
+        forward_scan(scores_in, bwd_out, fwd_out, i, T, out_batch_size, m_states);
+        softmax(fwd_out, post_out, i, T, m_states);
 
         auto decode_result = beam_search_decode(
-                scores_tensor, bwd_tensor, post_tensor, options->beam_width, options->beam_cut,
+                scores_tensor.index({Slice(), i}), bwd_tensor[i], post_tensor[i], options->beam_width, options->beam_cut,
                 options->blank_score, options->q_shift, options->q_scale,
                 options->temperature, 1.0f);
         (*args->chunk_results)[c] = DecodedChunk{
@@ -198,7 +202,9 @@ void* pthread_single_beam_search(void* voidargs) {
 std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
-                                                  std::string &device) {
+                                                  std::string &device,
+                                                  const CRFModelConfig& config
+                                                  ) {
     const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype).transpose(0, 1).contiguous();
     int num_threads = std::min(num_chunks, 4);
     int chunks_per_thread = num_chunks / num_threads;
@@ -218,6 +224,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
         pt_args[t].scores_cpu = &scores_cpu;
         pt_args[t].chunk_results = &chunk_results;
         pt_args[t].options = &options;
+        pt_args[t].config = &config;
     }
 
     for (t = 0; t < num_threads; t++) {
@@ -236,6 +243,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
 std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
                                                   const int num_chunks,
                                                   const DecoderOptions& options,
-                                                  std::string &device) {
-    return beam_search_cpu(scores, num_chunks, options, device);
+                                                  std::string &device,
+                                                  const CRFModelConfig &config) {
+    return beam_search_cpu(scores, num_chunks, options, device, config);
 }

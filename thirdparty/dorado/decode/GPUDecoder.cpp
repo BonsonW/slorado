@@ -1,4 +1,5 @@
 #include "GPUDecoder.h"
+#include "../nn/CRFModel.h"
 
 #include "Decoder.h"
 
@@ -109,6 +110,7 @@ std::vector<DecodedChunk> GPUDecoder::cpu_part(torch::Tensor moves_sequence_qstr
 std::vector<DecodedChunk> GPUDecoder::beam_search(const torch::Tensor &scores,
                                                   int num_chunks,
                                                   const DecoderOptions &options,
-                                                  std::string &device) {
+                                                  std::string &device,
+                                                  const CRFModelConfig &config) {
     return cpu_part(gpu_part(scores, num_chunks, options, device));
 }

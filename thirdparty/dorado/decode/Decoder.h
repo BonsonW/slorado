@@ -1,4 +1,5 @@
 #pragma once
+#include "../nn/CRFModel.h"
 
 #include <torch/torch.h>
 
@@ -26,5 +27,6 @@ public:
     virtual std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
                                                   int num_chunks,
                                                   const DecoderOptions& options,
-                                                  std::string& device) = 0;
+                                                  std::string& device,
+                                                  const CRFModelConfig &config) = 0;
 };

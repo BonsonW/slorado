@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Decoder.h"
+#include "../nn/CRFModel.h"
 
 #include <torch/torch.h>
 
@@ -9,7 +10,8 @@ public:
     std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
                                           int num_chunks,
                                           const DecoderOptions& options,
-                                          std::string &device) final;
+                                          std::string &device,
+                                          const CRFModelConfig &config) final;
     constexpr static torch::ScalarType dtype = torch::kF16;
 
     // We split beam_search into two parts, the first one running on the GPU and the second

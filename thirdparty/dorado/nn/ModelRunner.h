@@ -40,6 +40,7 @@ private:
     DecoderOptions m_decoder_options;
     torch::nn::ModuleHolder<torch::nn::AnyModule> m_module{nullptr};
     size_t m_model_stride;
+    CRFModelConfig m_model_config;
 };
 
 template <typename T>
@@ -55,6 +56,7 @@ ModelRunner<T>::ModelRunner(const std::string &model_path,
     m_decoder_options.q_scale = model_config.qscale;
     m_decoder = std::make_unique<T>();
     m_device = device;
+    m_model_config = model_config;
 
     LOG_DEBUG("initialized model runner for device %s", device.c_str());
 
@@ -75,9 +77,9 @@ template<typename T> std::vector<DecodedChunk> ModelRunner<T>::call_chunks(int n
     torch::InferenceMode guard;
     auto scores = (m_module->forward(m_input.to(m_options.device_opt().value())));
 #ifdef USE_CUDA_LSTM
-    return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device);
+    return m_decoder->beam_search(scores, num_chunks, m_decoder_options, m_device, m_model_config);
 #else
-    return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device);
+    return beam_search_cpu(scores, num_chunks, m_decoder_options, m_device, m_model_config);
 #endif
 }
 
