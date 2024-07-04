@@ -166,7 +166,8 @@ void* pthread_single_beam_search(void* voidargs) {
     // because of this, you will see alot of redundant code in backward_scan, forward_scan, and softmax related to indexing the batch
     auto out_batch_size = 1;
     const int chunk_start = 0;
-    const int m_states = std::pow(4, args->config->state_len);
+    const int n_base = 4; // this may change, check model config
+    const int m_states = std::pow(n_base, args->config->state_len);
 
     for (int c = args->start, i = 0; c < args->end; c++, i++) {
         auto scores_tensor = args->scores_cpu->index({Slice(), c});
@@ -184,7 +185,7 @@ void* pthread_single_beam_search(void* voidargs) {
 
         backward_scan(scores_in, bwd_out, chunk_start, T, out_batch_size, m_states);
         forward_scan(scores_in, bwd_out, fwd_out, chunk_start, T, out_batch_size, m_states);
-        (fwd_out, post_out, chunk_start, T, m_states);
+        softmax(fwd_out, post_out, chunk_start, T, m_states);
 
         auto decode_result = beam_search_decode(
                 scores_tensor.slice(), bwd_tensor, post_tensor, options->beam_width, options->beam_cut,
