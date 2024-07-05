@@ -169,7 +169,7 @@ void* pthread_single_beam_search(void* voidargs) {
     const int m_states = std::pow(n_base, args->config->state_len);
 
     for (int c = args->start, i = 0; c < args->end; c++, i++) {
-        torch::Tensor scores_tensor = args->scores_cpu->index({Slice(), c});
+        torch::Tensor scores_tensor = args->scores_cpu->index({Slice(), Slice({c, c+1})});
         const float *scores_in = (float *)scores_tensor.data_ptr();
         const int T = scores_tensor.size(0);
 
@@ -208,6 +208,19 @@ void* pthread_single_beam_search(void* voidargs) {
         // Write some text to the file
         data = (float *)post_tensor.data_ptr();
         sz = post_tensor.size(0) * post_tensor.size(1) * post_tensor.size(2);
+        for (int i = 0; i < sz; ++i) {
+            fprintf(fptr, "%f\n", *(data + i));
+        }
+
+        // Close the file
+        fclose(fptr);
+
+        // Open a file in writing mode
+        fptr = fopen("scores_new.txt", "w");
+
+        // Write some text to the file
+        data = (float *)scores_tensor.data_ptr();
+        sz = scores_tensor.size(0) * scores_tensor.size(1) * scores_tensor.size(2);
         for (int i = 0; i < sz; ++i) {
             fprintf(fptr, "%f\n", *(data + i));
         }
