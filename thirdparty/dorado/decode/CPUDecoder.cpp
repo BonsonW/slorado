@@ -186,6 +186,38 @@ void* pthread_single_beam_search(void* voidargs) {
         forward_scan(scores_in, bwd_out, fwd_out, chunk_start, T, out_batch_size, m_states);
         softmax(fwd_out, post_out, chunk_start, T, m_states);
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// debug stuff
+        FILE *fptr;
+
+        // Open a file in writing mode
+        fptr = fopen("bwd_new.txt", "w");
+
+        // Write some text to the file
+        float *data = (float *)bwd_tensor.data_ptr();
+        int sz = bwd_tensor.size(0) * bwd_tensor.size(1) * bwd_tensor.size(2);
+        for (int i = 0; i < sz; ++i) {
+            fprintf(fptr, "%f\n", *(data + i));
+        }
+
+        // Close the file
+        fclose(fptr);
+
+        // Open a file in writing mode
+        fptr = fopen("posts_new.txt", "w");
+
+        // Write some text to the file
+        data = (float *)post_tensor.data_ptr();
+        sz = post_tensor.size(0) * post_tensor.size(1) * post_tensor.size(2);
+        for (int i = 0; i < sz; ++i) {
+            fprintf(fptr, "%f\n", *(data + i));
+        }
+
+        // Close the file
+        fclose(fptr);
+
+        exit(0);
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         auto decode_result = beam_search_decode(
                 scores_tensor.slice(), bwd_tensor, post_tensor, options->beam_width, options->beam_cut,
                 options->blank_score, options->q_shift, options->q_scale,
@@ -207,7 +239,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const CRFModelConfig& config
                                                   ) {
     const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype).transpose(0, 1).contiguous();
-    const int num_threads = std::min(num_chunks, 4);
+    const int num_threads = std::min(num_chunks, 1);
     const int chunks_per_thread = num_chunks / num_threads;
     const int num_threads_with_one_more_chunk = num_chunks % num_threads;
 
