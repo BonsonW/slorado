@@ -126,7 +126,6 @@ void softmax(const float *fwd, float *out, const int chunk, const int _T, const 
 
         float max_val = fwd[ts_idx];
         for (int state = 0; state < num_states; ++state) {
-            
             max_val = max_val > fwd[ts_idx + state] ? max_val : fwd[ts_idx + state];
         }
 
@@ -164,23 +163,23 @@ void* pthread_single_beam_search(void* voidargs) {
     // here we are running the function on a per-chunk basis as the chunks per batch (1 batch per thread) is not consistent
     // if it were, we can create our tensors on a per batch basis, and directly index our scores_cpu
     // because of this, you will see alot of redundant code in backward_scan, forward_scan, and softmax related to indexing the batch
-    auto out_batch_size = 1;
+    const int out_batch_size = 1;
     const int chunk_start = 0;
     const int n_base = 4; // this may change, check model config
     const int m_states = std::pow(n_base, args->config->state_len);
 
     for (int c = args->start, i = 0; c < args->end; c++, i++) {
-        auto scores_tensor = args->scores_cpu->index({Slice(), c});
+        torch::Tensor scores_tensor = args->scores_cpu->index({Slice(), c});
         const float *scores_in = (float *)scores_tensor.data_ptr();
         const int T = scores_tensor.size(0);
 
-        torch::Tensor bwd_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        torch::Tensor bwd_tensor = torch::empty({out_batch_size, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
         float *bwd_out = (float *)bwd_tensor.data_ptr();
 
-        torch::Tensor fwd_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        torch::Tensor fwd_tensor = torch::empty({out_batch_size, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
         float *fwd_out = (float *)fwd_tensor.data_ptr();
 
-        torch::Tensor post_tensor = torch::full({out_batch_size, T + 1, m_states}, -1.0).to(CPUDecoder::dtype).contiguous();
+        torch::Tensor post_tensor = torch::empty({out_batch_size, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
         float *post_out = (float *)post_tensor.data_ptr();
 
         backward_scan(scores_in, bwd_out, chunk_start, T, out_batch_size, m_states);
@@ -208,18 +207,18 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const CRFModelConfig& config
                                                   ) {
     const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype).transpose(0, 1).contiguous();
-    int num_threads = std::min(num_chunks, 4);
-    int chunks_per_thread = num_chunks / num_threads;
-    int num_threads_with_one_more_chunk = num_chunks % num_threads;
+    const int num_threads = std::min(num_chunks, 4);
+    const int chunks_per_thread = num_chunks / num_threads;
+    const int num_threads_with_one_more_chunk = num_chunks % num_threads;
 
     std::vector<DecodedChunk> chunk_results(num_chunks);
 
-    //create threads
+    // create threads
     pthread_t tids[num_threads];
     decode_thread_arg_t pt_args[num_threads];
     int32_t t, ret;
 
-    //set the data structures
+    // set the data structures
     for (t = 0; t < num_threads; t++) {
         pt_args[t].start = t * chunks_per_thread + std::min(t, num_threads_with_one_more_chunk);
         pt_args[t].end = pt_args[t].start + chunks_per_thread + int(t < num_threads_with_one_more_chunk);
