@@ -38,7 +38,8 @@ void backward_scan(const float *scores_in, float *out, const int chunk, const in
                 ((state * kNumBases) / num_states);
 
             float vals[kNumTransitions];
-            float max_val = vals[0] = ts_alpha_in[stay_state_idx] + kFixedStayScore;
+            vals[0] = ts_alpha_in[stay_state_idx] + kFixedStayScore;
+            float max_val = vals[0];
             for (int base = 0; base < kNumBases; ++base) {
                 vals[base + 1] = ts_alpha_in[step_state_idx_a + base] +
                     ts_in[step_trans_idx_a + base * kNumBases];
@@ -150,6 +151,9 @@ void softmax(const float *fwd, float *out, const int chunk, const int _T, const 
 typedef struct {
     const DecoderOptions *options;
     const torch::Tensor *scores_cpu;
+    torch::Tensor *bwd_tensor;
+    torch::Tensor *fwd_tensor;
+    torch::Tensor *post_tensor;
     std::vector<DecodedChunk> *chunk_results;
     int32_t start;
     int32_t end;
@@ -160,79 +164,78 @@ void* pthread_single_beam_search(void* voidargs) {
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
     const DecoderOptions *options = args->options;
 
-    // here we are running the function on a per-chunk basis as the chunks per batch (1 batch per thread) is not consistent
-    // if it were, we can create our tensors on a per batch basis, and directly index our scores_cpu
-    // because of this, you will see alot of redundant code in backward_scan, forward_scan, and softmax related to indexing the batch
-    const int out_batch_size = 1;
-    const int chunk_start = 0;
-    const int n_base = 4; // this may change, check model config
+    const int n_base = 4; // should honor model config
     const int m_states = std::pow(n_base, args->config->state_len);
 
-    for (int c = args->start, i = 0; c < args->end; c++, i++) {
-        torch::Tensor scores_tensor = args->scores_cpu->index({Slice(), Slice({c, c+1})});
-        const float *scores_in = (float *)scores_tensor.data_ptr();
-        const int T = scores_tensor.size(0);
+    const float *scores_in = (float *)args->scores_cpu->data_ptr();
+    float *bwd_out = (float *)args->bwd_tensor->data_ptr();
+    float *fwd_out = (float *)args->fwd_tensor->data_ptr();
+    float *post_out = (float *)args->post_tensor->data_ptr();
 
-        torch::Tensor bwd_tensor = torch::empty({out_batch_size, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
-        float *bwd_out = (float *)bwd_tensor.data_ptr();
+    const int T = args->scores_cpu->size(0);
+    const int N = args->scores_cpu->size(1);
 
-        torch::Tensor fwd_tensor = torch::empty({out_batch_size, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
-        float *fwd_out = (float *)fwd_tensor.data_ptr();
+    // LOG_DEBUG("dimensions: %ld, %ld, %ld", args->scores_cpu->size(0), args->scores_cpu->size(1), args->scores_cpu->size(2));
 
-        torch::Tensor post_tensor = torch::empty({out_batch_size, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
-        float *post_out = (float *)post_tensor.data_ptr();
-
-        backward_scan(scores_in, bwd_out, chunk_start, T, out_batch_size, m_states);
-        forward_scan(scores_in, bwd_out, fwd_out, chunk_start, T, out_batch_size, m_states);
-        softmax(fwd_out, post_out, chunk_start, T, m_states);
+    for (int c = args->start; c < args->end; c++) {
+        backward_scan(scores_in, bwd_out, c, T, N, m_states);
+        forward_scan(scores_in, bwd_out, fwd_out, c, T, N, m_states);
+        softmax(fwd_out, post_out, c, T, m_states);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// debug stuff
-        FILE *fptr;
+        // FILE *fptr;
 
-        // Open a file in writing mode
-        fptr = fopen("bwd_new.txt", "w");
+        // // Open a file in writing mode
+        // fptr = fopen("bwd_new.txt", "w");
 
-        // Write some text to the file
-        float *data = (float *)bwd_tensor.data_ptr();
-        int sz = bwd_tensor.size(0) * bwd_tensor.size(1) * bwd_tensor.size(2);
-        for (int i = 0; i < sz; ++i) {
-            fprintf(fptr, "%f\n", *(data + i));
-        }
+        // // Write some text to the file
+        // float *data = bwd_out;
+        // int sz = 1 * args->bwd_tensor->size(1) * args->bwd_tensor->size(2);
+        // for (int i = 0; i < sz; ++i) {
+        //     fprintf(fptr, "%f\n", *(data + i));
+        // }
 
-        // Close the file
-        fclose(fptr);
+        // // Close the file
+        // fclose(fptr);
 
-        // Open a file in writing mode
-        fptr = fopen("posts_new.txt", "w");
+        // // Open a file in writing mode
+        // fptr = fopen("posts_new.txt", "w");
 
-        // Write some text to the file
-        data = (float *)post_tensor.data_ptr();
-        sz = post_tensor.size(0) * post_tensor.size(1) * post_tensor.size(2);
-        for (int i = 0; i < sz; ++i) {
-            fprintf(fptr, "%f\n", *(data + i));
-        }
+        // // Write some text to the file
+        // data = (float *)post_tensor.data_ptr();
+        // sz = post_tensor.size(0) * 1 * post_tensor.size(2);
+        // for (int i = 0; i < sz; ++i) {
+        //     fprintf(fptr, "%f\n", *(data + i));
+        // }
 
-        // Close the file
-        fclose(fptr);
+        // // Close the file
+        // fclose(fptr);
 
-        // Open a file in writing mode
-        fptr = fopen("scores_new.txt", "w");
+        // // Open a file in writing mode
+        // fptr = fopen("scores_new.txt", "w");
 
-        // Write some text to the file
-        data = (float *)scores_tensor.data_ptr();
-        sz = scores_tensor.size(0) * scores_tensor.size(1) * scores_tensor.size(2);
-        for (int i = 0; i < sz; ++i) {
-            fprintf(fptr, "%f\n", *(data + i));
-        }
+        // // Write some text to the file
+        // data = (float *)scores_tensor.data_ptr();
+        // sz = scores_tensor.size(0) * 1 * scores_tensor.size(2);
+        // for (int i = 0; i < sz; ++i) {
+        //     fprintf(fptr, "%f\n", *(data + i));
+        // }
 
-        // Close the file
-        fclose(fptr);
+        // // Close the file
+        // fclose(fptr);
 
-        exit(0);
+        // exit(0);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        auto bwd = args->bwd_tensor->index({c});
+        auto post = args->post_tensor->index({c});
+        auto scores = args->scores_cpu->index({Slice(), c});
+
+        LOG_TRACE("bwd dimensions: %ld, %ld", scores.size(0), scores.size(1));
+        LOG_TRACE("bwd dimensions: %ld, %ld", bwd.size(0), bwd.size(1));
+        LOG_TRACE("post dimensions: %ld, %ld", post.size(0), post.size(1));
 
         auto decode_result = beam_search_decode(
-                scores_tensor.slice(), bwd_tensor, post_tensor, options->beam_width, options->beam_cut,
+                scores, bwd, post, options->beam_width, options->beam_cut,
                 options->blank_score, options->q_shift, options->q_scale,
                 options->temperature, 1.0f);
         (*args->chunk_results)[c] = DecodedChunk{
@@ -252,13 +255,22 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const CRFModelConfig& config
                                                   ) {
     const auto scores_cpu = scores.to(torch::kCPU).to(CPUDecoder::dtype).transpose(0, 1).contiguous();
-    const int num_threads = std::min(num_chunks, 1);
-    const int chunks_per_thread = num_chunks / num_threads;
-    const int num_threads_with_one_more_chunk = num_chunks % num_threads;
+    const int T = scores_cpu.size(0);
+    const int N = scores_cpu.size(1);
+    const int n_base = 4;
+    const int m_states = std::pow(n_base, config.state_len);
 
+    torch::Tensor bwd_tensor = torch::empty({N, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
+    torch::Tensor fwd_tensor = torch::empty({N, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
+    torch::Tensor post_tensor = torch::empty({N, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
+    
     std::vector<DecodedChunk> chunk_results(num_chunks);
 
     // create threads
+    const int num_threads = std::min(num_chunks, 4);
+    const int chunks_per_thread = num_chunks / num_threads;
+    const int num_threads_with_one_more_chunk = num_chunks % num_threads;
+
     pthread_t tids[num_threads];
     decode_thread_arg_t pt_args[num_threads];
     int32_t t, ret;
@@ -268,6 +280,9 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
         pt_args[t].start = t * chunks_per_thread + std::min(t, num_threads_with_one_more_chunk);
         pt_args[t].end = pt_args[t].start + chunks_per_thread + int(t < num_threads_with_one_more_chunk);
         pt_args[t].scores_cpu = &scores_cpu;
+        pt_args[t].bwd_tensor = &bwd_tensor;
+        pt_args[t].fwd_tensor = &fwd_tensor;
+        pt_args[t].post_tensor = &post_tensor;
         pt_args[t].chunk_results = &chunk_results;
         pt_args[t].options = &options;
         pt_args[t].config = &config;
