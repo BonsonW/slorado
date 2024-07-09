@@ -99,7 +99,11 @@ void forward_scan(const float *scores_in, const float *bwd, float *out, const in
             float vals[kNumTransitions];
             float fwd_max_val = vals[0] = ts_alpha_in[stay_state_idx] + kFixedStayScore;
             for (int base = 0; base < kNumBases; ++base) {
-                float ts_score = ts < _T ? ts_scores[step_trans_idx_a + base] : 0.0f; // todo: bandage for indexing past the score tensor size
+                // todo: this is a bandaid for indexing past the actual T dimension of scores
+                // need to verify with actual MetalTxCaller impl output,
+                // otherwise output remains exactly the same for this impl whether it indexes past or not
+                float ts_score = ts < _T ? ts_scores[step_trans_idx_a + base] : 0.0f;
+
                 vals[base + 1] = ts_alpha_in[step_state_idx_a + base * kMsb] + ts_score;
                 fwd_max_val = fwd_max_val > vals[base + 1] ? fwd_max_val : vals[base + 1];
             }
