@@ -15,7 +15,7 @@ ${MINIMAP2} --version &> /dev/null || { echo -e $RED"minimap2 not found! Either 
 datamash --version &> /dev/null || { echo -e $RED"datamash not found! Please install datamash. e.g., apt-get install datamash"$NORMAL; exit 1;}
 
 REFERENC_GENOME="/genome/hg38noAlt.idx" #path to reference genome
-FASTQ_FILE=reads.fastq #path to basecalled fastq file
+FASTQ_FILE=reads_cpu.fastq #path to basecalled fastq file
 
 echo "identity scores:"
 echo -e "mean\tstdev\tq1\tmedian\tq3"
