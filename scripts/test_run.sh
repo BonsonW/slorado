@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# make clean && make -j cuda=1 koi=1 CUDA_ROOT=/install/cuda-11.8/
+make clean && make -j cuda=1 CUDA_ROOT=/install/cuda-11.8/
 
-DEVICE=cuda:0
+DEVICE=cuda:0,1
 # BLOW5=/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5
-BLOW5=/data/bonwon/slorado/test/one_5khz.blow5
+# BLOW5=/data/bonwon/slorado/test/one_5khz.blow5
 BLOW5=/data/bonwon/slorado/test/4khz_r10/1k_reads.blow5
 MODEL=fast
 BATCHSIZE=1000

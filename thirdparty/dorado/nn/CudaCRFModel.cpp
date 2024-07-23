@@ -1,6 +1,6 @@
 #include "CudaCRFModel.h"
 
-#include "dorado/decode/GPUDecoder.h"
+#include "dorado/decode/decode_gpu.h"
 #include "error.h"
 
 #include <c10/cuda/CUDAGuard.h>
@@ -22,10 +22,9 @@ public:
         m_decoder_options = DecoderOptions();
         m_decoder_options.q_shift = model_config.qbias;
         m_decoder_options.q_scale = model_config.qscale;
-        m_decoder = std::make_unique<GPUDecoder>();
         m_num_input_features = model_config.num_features;
 
-        m_options = torch::TensorOptions().dtype(GPUDecoder::dtype).device(device);
+        m_options = torch::TensorOptions().dtype(DTYPE_GPU).device(device);
         m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, m_options);
 
         m_cuda_thread.reset(new std::thread(&CudaCaller::cuda_thread_fn, this));
@@ -72,7 +71,7 @@ public:
 
         output.copy_(task.out);
 
-        return m_decoder->cpu_part(output);
+        return collect_gpu_decoded_chunks(output);
     }
 
     void cuda_thread_fn() {
@@ -97,7 +96,7 @@ public:
             std::unique_lock<std::mutex> task_lock(task->mut);
             auto scores = m_module->forward(task->input);
             torch::cuda::synchronize();
-            task->out = m_decoder->gpu_part(scores, task->num_chunks, m_decoder_options, m_device);
+            task->out = decode_gpu_single(scores, task->num_chunks, m_decoder_options, m_device);
             stream.synchronize();
             task->done = true;
             task->cv.notify_one();
@@ -107,7 +106,6 @@ public:
 
     std::string m_device;
     torch::TensorOptions m_options;
-    std::unique_ptr<GPUDecoder> m_decoder;
     DecoderOptions m_decoder_options;
     torch::nn::ModuleHolder<torch::nn::AnyModule> m_module{nullptr};
     size_t m_model_stride;

@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 
+#define DTYPE_CPU torch::kF32
+#define DTYPE_GPU torch::kF16
+
 struct DecodedChunk {
     std::string sequence;
     std::string qstring;
@@ -22,11 +25,3 @@ struct DecoderOptions {
     bool move_pad = false;
 };
 
-class Decoder {
-public:
-    virtual std::vector<DecodedChunk> beam_search(const torch::Tensor& scores,
-                                                  int num_chunks,
-                                                  const DecoderOptions& options,
-                                                  std::string& device,
-                                                  const CRFModelConfig &config) = 0;
-};

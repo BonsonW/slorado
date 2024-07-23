@@ -49,9 +49,9 @@ set(LIB_SOURCE_FILES
         ${CMAKE_SOURCE_DIR}/src/nn/CRFModel.cpp
         ${CMAKE_SOURCE_DIR}/src/nn/ModelRunner.h
         ${CMAKE_SOURCE_DIR}/src/decode/beam_search.cpp
-        ${CMAKE_SOURCE_DIR}/src/decode/CPUDecoder.cpp
-        ${CMAKE_SOURCE_DIR}/src/decode/GPUDecoder.cpp
-        ${CMAKE_SOURCE_DIR}/src/decode/Decoder.h
+        ${CMAKE_SOURCE_DIR}/src/decode/decode_cpu.cpp
+        ${CMAKE_SOURCE_DIR}/src/decode/decode_gpu.cpp
+        ${CMAKE_SOURCE_DIR}/src/decode/decode.h
         ${CMAKE_SOURCE_DIR}/src/decode/fast_hash.cpp
         )
 
@@ -62,8 +62,8 @@ if(USE_GPU)
  MESSAGE(STATUS "Adding GPU source files to the compiling queue")
  add_definitions(-DUSE_GPU)
  list(APPEND LIB_SOURCE_FILES
-         ${CMAKE_SOURCE_DIR}/src/decode/GPUDecoder.cpp
-         ${CMAKE_SOURCE_DIR}/src/decode/GPUDecoder.h)
+         ${CMAKE_SOURCE_DIR}/src/decode/decode_gpu.cpp
+         ${CMAKE_SOURCE_DIR}/src/decode/decode_gpu.h)
 endif()
 
 if(SLOW5_USE_ZSTD_CUSTOM)

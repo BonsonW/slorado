@@ -38,7 +38,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/signal_prep.o \
 	  $(BUILD_DIR)/writer.o \
 	  $(BUILD_DIR)/beam_search.o \
-	  $(BUILD_DIR)/CPUDecoder.o \
+	  $(BUILD_DIR)/decode_cpu.o \
 	  $(BUILD_DIR)/fast_hash.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
@@ -60,7 +60,7 @@ endif
 # make accel=1 enables the acceelerator (CUDA,OpenCL,FPGA etc if implemented)
 ifdef cuda
     CPPFLAGS += -DUSE_GPU=1
-	OBJ += $(BUILD_DIR)/GPUDecoder.o
+	OBJ += $(BUILD_DIR)/decode_gpu.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 ifdef koi
 	CUDA_ROOT ?= /usr/local/cuda
@@ -76,7 +76,7 @@ endif
 else
 ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1
-	OBJ += $(BUILD_DIR)/GPUDecoder.o
+	OBJ += $(BUILD_DIR)/decode_gpu.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
 	LDFLAGS += -lrt -ldl
 endif
@@ -122,10 +122,10 @@ $(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
 $(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CPUDecoder.o: thirdparty/dorado/decode/CPUDecoder.cpp
+$(BUILD_DIR)/decode_cpu.o: thirdparty/dorado/decode/decode_cpu.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/GPUDecoder.o: thirdparty/dorado/decode/GPUDecoder.cpp
+$(BUILD_DIR)/decode_gpu.o: thirdparty/dorado/decode/decode_gpu.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/fast_hash.o: thirdparty/dorado/decode/fast_hash.cpp

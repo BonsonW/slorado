@@ -1,13 +1,10 @@
-#include "CPUDecoder.h"
+#include "decode_cpu.h"
 #include "../nn/CRFModel.h"
-
 #include "beam_search.h"
 #include "error.h"
 
 #include <math.h>
-
 #include <vector>
-
 
 using Slice = torch::indexing::Slice;
 
@@ -206,24 +203,25 @@ void* pthread_single_beam_search(void* voidargs) {
     pthread_exit(0);
 }
 
-std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
-                                                  const int num_chunks,
-                                                  const DecoderOptions& options,
-                                                  std::string &device,
-                                                  const CRFModelConfig& config
-                                                  ) {
-    const auto scores_TNC = scores.to(torch::kCPU).to(CPUDecoder::dtype).transpose(0, 1).contiguous();
+std::vector<DecodedChunk> decode_cpu(
+    const torch::Tensor& scores,
+    const int num_chunks,
+    const DecoderOptions& options,
+    std::string &device,
+    const CRFModelConfig& config
+) {
+    const auto scores_TNC = scores.to(torch::kCPU).to(DTYPE_CPU).transpose(0, 1).contiguous();
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
     const int C = scores_TNC.size(2);
     const int n_base = 4;
     const int m_states = std::pow(n_base, config.state_len);
 
-    LOG_TRACE("scores tensor dim: %ld, %ld, %ld", T, N, C);
+    LOG_TRACE("scores tensor dim: %d, %d, %d", T, N, C);
 
-    torch::Tensor bwd_NTC = torch::empty({N, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
-    torch::Tensor fwd_NTC = torch::empty({N, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
-    torch::Tensor post_NTC = torch::empty({N, T + 1, m_states}).to(CPUDecoder::dtype).contiguous();
+    torch::Tensor bwd_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
+    torch::Tensor fwd_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
+    torch::Tensor post_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
     
     std::vector<DecodedChunk> chunk_results(num_chunks);
 
@@ -260,12 +258,4 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
     }
 
     return chunk_results;
-}
-
-std::vector<DecodedChunk> CPUDecoder::beam_search(const torch::Tensor& scores,
-                                                  const int num_chunks,
-                                                  const DecoderOptions& options,
-                                                  std::string &device,
-                                                  const CRFModelConfig &config) {
-    return beam_search_cpu(scores, num_chunks, options, device, config);
 }

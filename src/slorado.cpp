@@ -41,8 +41,8 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
-#include "dorado/decode/GPUDecoder.h"
-#include "dorado/decode/CPUDecoder.h"
+#include "dorado/decode/decode_gpu.h"
+#include "dorado/decode/decode_cpu.h"
 
 #ifdef USE_GPU
 #ifdef USE_CUDA_LSTM
@@ -83,7 +83,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner>(model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU));
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
         }
@@ -100,7 +100,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 #ifdef USE_CUDA_LSTM
                 core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
 #else
-                core->runners->push_back(std::make_shared<ModelRunner<GPUDecoder>>(model, device, opt.chunk_size, opt.gpu_batch_size));
+                core->runners->push_back(std::make_shared<ModelRunner>(model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_GPU));
 #endif
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
@@ -110,7 +110,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 #else
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner<CPUDecoder>>(model, opt.device, opt.chunk_size, opt.gpu_batch_size));
+            core->runners->push_back(std::make_shared<ModelRunner>(model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU));
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
         }
