@@ -36,6 +36,9 @@ SOFTWARE.
 #include "basecall.h"
 #include "error.h"
 
+#include "dorado/decode/decode_cpu.h"
+#include "dorado/decode/decode_gpu.h"
+
 typedef struct {
     core_t* core;
     db_t* db;
@@ -44,30 +47,32 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-void basecall_chunks(
-    std::vector<torch::Tensor> tensors,
-    std::vector<Chunk *> chunks,
-    int chunk_size,
-    ModelRunnerBase &model_runner,
-    timestamps_t *ts
-);
+void accept_chunk(int num_chunks, at::Tensor slice, runner_t *runner) {
+    runner->m_input.index_put_({num_chunks, 0}, slice);
+}
+
+std::vector<DecodedChunk> call_chunks(int num_chunks, runner_t *runner) {
+    torch::InferenceMode guard;
+    auto scores = runner->m_module->forward(runner->m_input.to(runner->m_options.device_opt().value()));
+    return decode_gpu(scores, num_chunks, runner);
+}
 
 void basecall_chunks(
     std::vector<torch::Tensor> tensors,
     std::vector<Chunk *> chunks,
     int chunk_size,
-    ModelRunnerBase &model_runner,
+    runner_t *runner,
     timestamps_t *ts
 ) {
     for (size_t i = 0; i < tensors.size(); ++i) {
         ts->time_accept -= realtime();
-        model_runner.accept_chunk(i, tensors[i]);
+        accept_chunk(i, tensors[i], runner);
         ts->time_accept += realtime();
     }
 
     LOG_DEBUG("%s", "decoding chunks");
     ts->time_decode -= realtime();
-    std::vector<DecodedChunk> decoded_chunks = model_runner.call_chunks(chunks.size());
+    std::vector<DecodedChunk> decoded_chunks = call_chunks(chunks.size(), runner);
     ts->time_decode += realtime();
 
     for (size_t i = 0; i < chunks.size(); ++i) {
@@ -89,7 +94,7 @@ void* pthread_single_basecall(void* voidargs) {
     opt_t opt = core->opt;
     timestamps_t *ts = (*core->runner_ts)[runner_idx];
 
-    auto& model_runner = *((*core->runners)[runner_idx]);
+    runner_t *model_runner = (*core->runners)[runner_idx];
 
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor> tensors;
@@ -181,32 +186,4 @@ void basecall_db(core_t* core, db_t* db) {
     }
 
     ts->time_sync += time_sync;
-
 }
-
-
-// void basecall_cpu_db(core_t* core, db_t* db) {
-
-//     int32_t n_reads = (*db->chunks).size();
-//     timestamps_t *ts = &(core->ts);
-//     auto& model_runner = *((*core->runners)[0]);
-
-//     for (size_t read_idx = 0; read_idx < n_reads; ++read_idx) {
-
-//         auto this_chunk = (*db->chunks)[read_idx];
-//         auto this_tensor = (*db->tensors)[read_idx];
-
-//         for (size_t chunk_idx = 0; chunk_idx < this_chunk.size(); ++chunk_idx) {
-
-//             basecall_chunks(
-//                     this_tensor,
-//                     this_chunk,
-//                     core->opt.chunk_size,
-//                     model_runner,
-//                     ts
-//             );
-
-//         }
-//     }
-
-// }

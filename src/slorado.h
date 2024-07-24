@@ -38,8 +38,9 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <vector>
 #include <memory>
-#include "dorado/nn/ModelRunner.h"
+#include <torch/torch.h>
 #include "dorado/Chunk.h"
+#include "dorado/decode/decode.h"
 
 #define SLORADO_VERSION "0.1.0"
 
@@ -118,6 +119,27 @@ typedef struct {
 
 } timestamps_t;
 
+typedef struct {
+    // crf runner
+    std::string m_device;
+    torch::Tensor m_input;
+    torch::TensorOptions m_options;
+    DecoderOptions m_decoder_options;
+    torch::nn::ModuleHolder<torch::nn::AnyModule> m_module{nullptr};
+    size_t m_model_stride;
+    size_t chunk_size;
+    CRFModelConfig m_model_config;
+    
+    // gpu decode
+#ifdef USE_CUDA_LSTM
+    torch::Tensor koi_chunks;
+    torch::Tensor koi_chunk_results;
+    torch::Tensor koi_aux;
+    torch::Tensor koi_path;
+    torch::Tensor koi_moves_sequence_qstring;
+#endif
+} runner_t;
+
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
     //slow5
@@ -127,8 +149,8 @@ typedef struct {
     opt_t opt;
 
     // create model runner
-    // only one is used for now
-    std::vector<Runner> *runners;
+    // only one per GPU is used for now
+    std::vector<runner_t *> *runners;
 
     //realtime0
     double realtime0;
@@ -210,5 +232,8 @@ void free_db(db_t* db);
 void free_core(core_t* core,opt_t opt);
 
 void init_timestamps(timestamps_t* time_stamps);
+
+template <typename A>
+void init_runner(runner_t* runner, const std::string &model_path, const std::string &device, int chunk_size, int batch_size, A dtype);
 
 #endif

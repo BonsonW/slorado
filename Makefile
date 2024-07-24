@@ -67,7 +67,7 @@ ifdef koi
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS +=  -I $(CUDA_INC)
-	OBJ += $(BUILD_DIR)/CudaCRFModel.o $(BUILD_DIR)/cuda_utils.o
+	OBJ += $(BUILD_DIR)/cuda_utils.o
 	CPPFLAGS += -I thirdparty/koi_lib/include
 	CPPFLAGS += -DUSE_CUDA_LSTM=1
 	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl
@@ -132,9 +132,6 @@ $(BUILD_DIR)/fast_hash.o: thirdparty/dorado/decode/fast_hash.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/nn/CRFModel.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/CudaCRFModel.o: thirdparty/dorado/nn/CudaCRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/stitch.o: thirdparty/dorado/utils/stitch.cpp

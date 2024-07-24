@@ -593,10 +593,10 @@ struct CRFModelImpl : Module {
     Clamp clamp1{nullptr}, clamp2{nullptr}, clamp3{nullptr}, clamp4{nullptr};
 };
 
-#if USE_CUDA_LSTM
-using CudaCRFModelImpl = CRFModelImpl<CudaLSTMStack>;
-TORCH_MODULE(CudaCRFModel);
-#endif
+// #if USE_CUDA_LSTM
+// using CudaCRFModelImpl = CRFModelImpl<CudaLSTMStack>;
+// TORCH_MODULE(CudaCRFModel);
+// #endif
 
 using CpuCRFModelImpl = CRFModelImpl<LSTMStack>;
 TORCH_MODULE(CpuCRFModel);
@@ -745,14 +745,14 @@ ModuleHolder<AnyModule> load_crf_model(const std::string &path,
                                        const int batch_size,
                                        const int chunk_size,
                                        const torch::TensorOptions &options) {
-#if USE_CUDA_LSTM
-    if (options.device() != torch::kCPU) {
-        const bool expand_blanks = false;
-        auto model = CudaCRFModel(model_config, expand_blanks, batch_size, chunk_size);
-        return populate_model(model, path, options, model_config.decomposition,
-                              model_config.bias);
-    } else
-#endif
+// #if USE_CUDA_LSTM
+//     if (options.device() != torch::kCPU) {
+//         const bool expand_blanks = false;
+//         auto model = CudaCRFModel(model_config, expand_blanks, batch_size, chunk_size);
+//         return populate_model(model, path, options, model_config.decomposition,
+//                               model_config.bias);
+//     } else
+// #endif
     {
         const bool expand_blanks = true;
         auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);

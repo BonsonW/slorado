@@ -11,36 +11,19 @@ extern "C" {
 }
 #endif
 
-torch::Tensor decode_gpu_single(torch::Tensor scores, int num_chunks, DecoderOptions options, std::string device) {
+torch::Tensor decode_gpu_single(torch::Tensor scores, int num_chunks, const runner_t *runner) {
+    const auto options = runner->m_decoder_options;
+    const auto device = runner->m_device;
 #ifdef USE_CUDA_LSTM
     long int N = scores.sizes()[0];
-    long int T = scores.sizes()[1];
     long int C = scores.sizes()[2];
 
-    auto tensor_options_int32 = torch::TensorOptions()
-                                        .dtype(torch::kInt32)
-                                        .device(scores.device())
-                                        .requires_grad(false);
-
-    auto tensor_options_int8 =
-            torch::TensorOptions().dtype(torch::kInt8).device(scores.device()).requires_grad(false);
-
     // init
-    auto chunks = torch::empty({N, 4}, tensor_options_int32);
-    chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
-    chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
-    chunks.index({torch::indexing::Slice(), 1}) = int(T);
-    chunks.index({torch::indexing::Slice(), 3}) = 0;
-
-    auto chunk_results = torch::empty({N, 8}, tensor_options_int32);
-
-    chunk_results = chunk_results.contiguous();
-
-    auto aux = torch::empty(N * (T + 1) * (C + 4 * options.beam_width), tensor_options_int8);
-    auto path = torch::zeros(N * (T + 1), tensor_options_int32);
-
-    auto moves_sequence_qstring = torch::zeros({3, N * T}, tensor_options_int8);
-    // end init, todo: save this stuff in a struct at the start
+    auto chunks = runner->koi_chunks;
+    auto chunk_results = runner->koi_chunk_results;
+    auto aux = runner->koi_aux;
+    auto path = runner->koi_path;
+    auto moves_sequence_qstring = runner->koi_moves_sequence_qstring;
 
     moves_sequence_qstring.index({torch::indexing::Slice()}) = 0.0;
     auto moves = moves_sequence_qstring[0];
@@ -103,12 +86,6 @@ std::vector<DecodedChunk> collect_gpu_decoded_chunks(torch::Tensor moves_sequenc
 #endif
 }
 
-std::vector<DecodedChunk> decode_gpu(
-    const torch::Tensor &scores,
-    int num_chunks,
-    const DecoderOptions &options,
-    std::string &device,
-    const CRFModelConfig &config
-) {
-    return collect_gpu_decoded_chunks(decode_gpu_single(scores, num_chunks, options, device));
+std::vector<DecodedChunk> decode_gpu( const torch::Tensor &scores, int num_chunks, const runner_t *runner) {
+    return collect_gpu_decoded_chunks(decode_gpu_single(scores, num_chunks, runner).to(torch::kCPU));
 }

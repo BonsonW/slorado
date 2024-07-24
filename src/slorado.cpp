@@ -44,12 +44,6 @@ SOFTWARE.
 #include "dorado/decode/decode_gpu.h"
 #include "dorado/decode/decode_cpu.h"
 
-#ifdef USE_GPU
-#ifdef USE_CUDA_LSTM
-#include "dorado/nn/CudaCRFModel.h"
-#endif
-#endif
-
 #include "dorado/signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
@@ -75,7 +69,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     init_timestamps(&core->ts);
 
-    core->runners = new std::vector<Runner>();
+    core->runners = new std::vector<runner_t *>();
     core->runner_ts = new std::vector<timestamps_t *>();
 
     core->ts.time_init_runners -= realtime();
@@ -83,9 +77,11 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 #ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner>(model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU));
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
+
+            core->runners->push_back((runner_t *)malloc(sizeof(runner_t)));
+            init_runner((*core->runners).back(), model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
         }
     } else {
         std::vector<std::string> devices;
@@ -93,26 +89,23 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         devices = parse_cuda_device_string(device_args);
 
         for (auto device: devices) {
-#ifdef USE_CUDA_LSTM
-            auto caller = create_cuda_caller(model, opt.chunk_size, opt.gpu_batch_size, device);
-#endif
             for (int i = 0; i < opt.num_runners; ++i) {
-#ifdef USE_CUDA_LSTM
-                core->runners->push_back(std::make_shared<CudaModelRunner>(caller, opt.chunk_size, opt.gpu_batch_size));
-#else
-                core->runners->push_back(std::make_shared<ModelRunner>(model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_GPU));
-#endif
                 core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
+
+                core->runners->push_back(new runner_t());
+                init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_GPU);
             }
         }
     }
 #else
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runners->push_back(std::make_shared<ModelRunner>(model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU));
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
+
+            core->runners->push_back((runner_t *)malloc(sizeof(runner_t)));
+            init_runner((*core->runners).back(), model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
         }
     } else {
         fprintf(stderr, "Error. Please compile again for GPU\n");
@@ -122,7 +115,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     LOG_DEBUG("%s", "successfully initialized runners");
 
-    auto adjusted_chunk_size = core->runners->front()->chunk_size();
+    auto adjusted_chunk_size = core->runners->front()->chunk_size;
     if (opt.chunk_size != adjusted_chunk_size) {
         LOG_DEBUG("Adjusting chunk size to %zu", adjusted_chunk_size);
         opt.chunk_size = adjusted_chunk_size;
@@ -164,6 +157,10 @@ void free_core(core_t* core,opt_t opt) {
 
     for (size_t i = 0; i < core->runner_ts->size(); ++i) {
         free((*core->runner_ts)[i]);
+    }
+
+    for (size_t i = 0; i < core->runners->size(); ++i) {
+        delete (*core->runners)[i];
     }
 
     slow5_close(core->sp);
@@ -431,4 +428,74 @@ void init_timestamps(timestamps_t* time_stamps) {
     time_stamps->time_stitch = 0;
     time_stamps->time_write = 0;
     time_stamps->time_total = 0;
+}
+
+/* initialise runners */
+template <typename A>
+void init_runner(
+    runner_t* runner,
+    const std::string &model_path,
+    const std::string &device,
+    int chunk_size,
+    int batch_size,
+    A dtype
+) {
+    LOG_TRACE("initializing model runner for device %s", device.c_str());
+
+    const auto model_config = load_crf_model_config(model_path);
+    LOG_TRACE("%s", "model config loaded");
+
+    runner->m_model_stride = static_cast<size_t>(model_config.stride);
+
+    runner->m_decoder_options = DecoderOptions();
+    runner->m_decoder_options.q_shift = model_config.qbias;
+    runner->m_decoder_options.q_scale = model_config.qscale;
+
+    runner->m_device = device;
+    runner->m_model_config = model_config;
+
+    runner->m_options = torch::TensorOptions().dtype(dtype).device(device);
+    runner->m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, runner->m_options);
+    LOG_TRACE("%s", "model loaded");
+
+    chunk_size -= chunk_size % runner->m_model_stride;
+    runner->m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
+    runner->chunk_size = runner->m_input.size(2);
+
+#ifdef USE_CUDA_LSTM
+    const int T = runner->chunk_size;
+    const int N = batch_size;
+    const int C = std::pow(4, model_config.state_len) * 4;
+
+    auto tensor_options_int32 = torch::TensorOptions()
+                                        .dtype(torch::kInt32)
+                                        .device(device)
+                                        .requires_grad(false);
+
+    auto tensor_options_int8 =
+            torch::TensorOptions().dtype(torch::kInt8).device(device).requires_grad(false);
+    
+    auto chunks = torch::empty({N, 4}, tensor_options_int32);
+    chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
+    chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
+    chunks.index({torch::indexing::Slice(), 1}) = int(T);
+    chunks.index({torch::indexing::Slice(), 3}) = 0;
+
+    auto chunk_results = torch::empty({N, 8}, tensor_options_int32);
+
+    chunk_results = chunk_results.contiguous();
+
+    auto aux = torch::empty(N * (T + 1) * (C + 4 * runner->m_decoder_options.beam_width), tensor_options_int8);
+    auto path = torch::zeros(N * (T + 1), tensor_options_int32);
+
+    auto moves_sequence_qstring = torch::zeros({3, N * T}, tensor_options_int8);
+
+    runner->koi_chunks = chunks;
+    runner->koi_chunk_results = chunk_results;
+    runner->koi_aux = aux;
+    runner->koi_path = path;
+    runner->koi_moves_sequence_qstring = moves_sequence_qstring;
+#endif
+
+    LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }

@@ -33,6 +33,7 @@ SOFTWARE.
 #include "slorado.h"
 #include "dorado/signal_prep.h"
 #include "misc.h"
+#include "error.h"
 
 #include <assert.h>
 #include <cstddef>

@@ -1,6 +1,5 @@
 #pragma once
 #include "../nn/CRFModel.h"
-
 #include <torch/torch.h>
 
 #include <string>
@@ -24,4 +23,3 @@ struct DecoderOptions {
     float temperature = 1.0;
     bool move_pad = false;
 };
-
