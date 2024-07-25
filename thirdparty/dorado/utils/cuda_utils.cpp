@@ -3,10 +3,6 @@
 #include "../nn/CRFModel.h"
 #include "torch/torch.h"
 
-extern "C" {
-#include "koi.h"
-}
-
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cublas_v2.h>

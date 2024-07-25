@@ -74,7 +74,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->ts.time_init_runners -= realtime();
 
-#ifdef USE_GPU
     if (strcmp(opt.device, "cpu") == 0) {
         for (int i = 0; i < opt.num_runners; ++i) {
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
@@ -84,6 +83,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
             init_runner((*core->runners).back(), model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
         }
     } else {
+#ifdef USE_GPU
         std::vector<std::string> devices;
         std::string device_args = std::string(opt.device);
         devices = parse_cuda_device_string(device_args);
@@ -97,21 +97,11 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
                 init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_GPU);
             }
         }
-    }
 #else
-    if (strcmp(opt.device, "cpu") == 0) {
-        for (int i = 0; i < opt.num_runners; ++i) {
-            core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
-            init_timestamps((*core->runner_ts).back());
-
-            core->runners->push_back((runner_t *)malloc(sizeof(runner_t)));
-            init_runner((*core->runners).back(), model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
-        }
-    } else {
         fprintf(stderr, "Error. Please compile again for GPU\n");
         exit(EXIT_FAILURE);
-    }
 #endif
+    }
 
     LOG_DEBUG("%s", "successfully initialized runners");
 
@@ -461,41 +451,6 @@ void init_runner(
     chunk_size -= chunk_size % runner->m_model_stride;
     runner->m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     runner->chunk_size = runner->m_input.size(2);
-
-#ifdef USE_CUDA_LSTM
-    const int T = runner->chunk_size;
-    const int N = batch_size;
-    const int C = std::pow(4, model_config.state_len) * 4;
-
-    auto tensor_options_int32 = torch::TensorOptions()
-                                        .dtype(torch::kInt32)
-                                        .device(device)
-                                        .requires_grad(false);
-
-    auto tensor_options_int8 =
-            torch::TensorOptions().dtype(torch::kInt8).device(device).requires_grad(false);
-    
-    auto chunks = torch::empty({N, 4}, tensor_options_int32);
-    chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
-    chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
-    chunks.index({torch::indexing::Slice(), 1}) = int(T);
-    chunks.index({torch::indexing::Slice(), 3}) = 0;
-
-    auto chunk_results = torch::empty({N, 8}, tensor_options_int32);
-
-    chunk_results = chunk_results.contiguous();
-
-    auto aux = torch::empty(N * (T + 1) * (C + 4 * runner->m_decoder_options.beam_width), tensor_options_int8);
-    auto path = torch::zeros(N * (T + 1), tensor_options_int32);
-
-    auto moves_sequence_qstring = torch::zeros({3, N * T}, tensor_options_int8);
-
-    runner->koi_chunks = chunks;
-    runner->koi_chunk_results = chunk_results;
-    runner->koi_aux = aux;
-    runner->koi_path = path;
-    runner->koi_moves_sequence_qstring = moves_sequence_qstring;
-#endif
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }

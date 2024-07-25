@@ -120,7 +120,6 @@ typedef struct {
 } timestamps_t;
 
 typedef struct {
-    // crf runner
     std::string m_device;
     torch::Tensor m_input;
     torch::TensorOptions m_options;
@@ -129,15 +128,6 @@ typedef struct {
     size_t m_model_stride;
     size_t chunk_size;
     CRFModelConfig m_model_config;
-    
-    // gpu decode
-#ifdef USE_CUDA_LSTM
-    torch::Tensor koi_chunks;
-    torch::Tensor koi_chunk_results;
-    torch::Tensor koi_aux;
-    torch::Tensor koi_path;
-    torch::Tensor koi_moves_sequence_qstring;
-#endif
 } runner_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */

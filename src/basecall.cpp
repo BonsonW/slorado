@@ -54,7 +54,7 @@ void accept_chunk(int num_chunks, at::Tensor slice, runner_t *runner) {
 std::vector<DecodedChunk> call_chunks(int num_chunks, runner_t *runner) {
     torch::InferenceMode guard;
     auto scores = runner->m_module->forward(runner->m_input.to(runner->m_options.device_opt().value()));
-    return decode_gpu(scores, num_chunks, runner);
+    return decode_cpu(scores, num_chunks, runner);
 }
 
 void basecall_chunks(
