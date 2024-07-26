@@ -23,7 +23,7 @@ void backward_scan(const float *scores_in, float *out, const int chunk, const in
     }
 
     for (int ts = 0; ts < T; ++ts) {
-        // threadgroup_barrier(mem_flags::mem_device); // synchronize all threads before next time step (for GPU impl)
+        // threadgroup_barrier(mem_flags::medevice); // synchronize all threads before next time step (for GPU impl)
         const float* const ts_in = chunk_in + N * ts_states * (T - ts - 1);
         float* const ts_alpha_in = alpha_init - num_states * ts;
         float* const ts_alpha_out = ts_alpha_in - num_states;
@@ -204,9 +204,9 @@ void* pthread_single_beam_search(void* voidargs) {
 }
 
 std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_chunks, const runner_t *runner) {
-    const auto options = runner->m_decoder_options;
-    const auto device = runner->m_device;
-    const auto config = runner->m_model_config;
+    const auto options = runner->decoder_opts;
+    const auto device = runner->device;
+    const auto config = runner->model_config;
 
     const auto scores_TNC = scores.to(torch::kCPU).to(DTYPE_CPU).transpose(0, 1).contiguous();
     const int T = scores_TNC.size(0);

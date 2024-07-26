@@ -120,14 +120,14 @@ typedef struct {
 } timestamps_t;
 
 typedef struct {
-    std::string m_device;
-    torch::Tensor m_input;
-    torch::TensorOptions m_options;
-    DecoderOptions m_decoder_options;
-    torch::nn::ModuleHolder<torch::nn::AnyModule> m_module{nullptr};
-    size_t m_model_stride;
+    std::string device;
+    torch::Tensor input_tensor;
+    torch::TensorOptions tensor_opts;
+    DecoderOptions decoder_opts;
+    torch::nn::ModuleHolder<torch::nn::AnyModule> module{nullptr};
+    size_t model_stride;
     size_t chunk_size;
-    CRFModelConfig m_model_config;
+    CRFModelConfig model_config;
 } runner_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */

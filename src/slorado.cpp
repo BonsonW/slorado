@@ -435,22 +435,22 @@ void init_runner(
     const auto model_config = load_crf_model_config(model_path);
     LOG_TRACE("%s", "model config loaded");
 
-    runner->m_model_stride = static_cast<size_t>(model_config.stride);
+    runner->model_stride = static_cast<size_t>(model_config.stride);
 
-    runner->m_decoder_options = DecoderOptions();
-    runner->m_decoder_options.q_shift = model_config.qbias;
-    runner->m_decoder_options.q_scale = model_config.qscale;
+    runner->decoder_opts = DecoderOptions();
+    runner->decoder_opts.q_shift = model_config.qbias;
+    runner->decoder_opts.q_scale = model_config.qscale;
 
-    runner->m_device = device;
-    runner->m_model_config = model_config;
+    runner->device = device;
+    runner->model_config = model_config;
 
-    runner->m_options = torch::TensorOptions().dtype(dtype).device(device);
-    runner->m_module = load_crf_model(model_path, model_config, batch_size, chunk_size, runner->m_options);
+    runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
+    runner->module = load_crf_model(model_path, model_config, batch_size, chunk_size, runner->tensor_opts);
     LOG_TRACE("%s", "model loaded");
 
-    chunk_size -= chunk_size % runner->m_model_stride;
-    runner->m_input = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
-    runner->chunk_size = runner->m_input.size(2);
+    chunk_size -= chunk_size % runner->model_stride;
+    runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
+    runner->chunk_size = runner->input_tensor.size(2);
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }

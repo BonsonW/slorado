@@ -48,12 +48,12 @@ typedef struct {
 } model_thread_arg_t;
 
 void accept_chunk(int num_chunks, at::Tensor slice, runner_t *runner) {
-    runner->m_input.index_put_({num_chunks, 0}, slice);
+    runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
 
 std::vector<DecodedChunk> call_chunks(int num_chunks, runner_t *runner) {
     torch::InferenceMode guard;
-    auto scores = runner->m_module->forward(runner->m_input.to(runner->m_options.device_opt().value()));
+    auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
     return decode_cpu(scores, num_chunks, runner);
 }
 
