@@ -75,12 +75,13 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->ts.time_init_runners -= realtime();
 
     if (strcmp(opt.device, "cpu") == 0) {
+        std::string device = opt.device;
         for (int i = 0; i < opt.num_runners; ++i) {
             core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
 
-            core->runners->push_back((runner_t *)malloc(sizeof(runner_t)));
-            init_runner((*core->runners).back(), model, opt.device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
+            core->runners->push_back(new runner_t());
+            init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
         }
     } else {
 #ifdef USE_GPU
@@ -421,14 +422,13 @@ void init_timestamps(timestamps_t* time_stamps) {
 }
 
 /* initialise runners */
-template <typename A>
 void init_runner(
     runner_t* runner,
     const std::string &model_path,
     const std::string &device,
     int chunk_size,
     int batch_size,
-    A dtype
+    torch::ScalarType dtype
 ) {
     LOG_TRACE("initializing model runner for device %s", device.c_str());
 

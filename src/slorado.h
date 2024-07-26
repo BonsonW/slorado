@@ -223,7 +223,6 @@ void free_core(core_t* core,opt_t opt);
 
 void init_timestamps(timestamps_t* time_stamps);
 
-template <typename A>
-void init_runner(runner_t* runner, const std::string &model_path, const std::string &device, int chunk_size, int batch_size, A dtype);
+void init_runner(runner_t* runner, const std::string &model_path, const std::string &device, int chunk_size, int batch_size, torch::ScalarType dtype);
 
 #endif
