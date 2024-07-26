@@ -47,32 +47,35 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-void accept_chunk(int num_chunks, at::Tensor slice, runner_t *runner) {
+void accept_chunk(int num_chunks, at::Tensor slice, const core_t *core, const int runner_idx) {
+    runner_t *runner = (*core->runners)[runner_idx];
     runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
 
-std::vector<DecodedChunk> call_chunks(int num_chunks, runner_t *runner) {
+std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t *core, const int runner_idx) {
     torch::InferenceMode guard;
+    runner_t *runner = (*core->runners)[runner_idx];
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
-    return decode_cpu(scores, num_chunks, runner);
+    return decode_cpu(scores, num_chunks, core, runner_idx);
 }
 
 void basecall_chunks(
     std::vector<torch::Tensor> tensors,
     std::vector<Chunk *> chunks,
     int chunk_size,
-    runner_t *runner,
-    timestamps_t *ts
+    const core_t *core,
+    const int runner_idx
 ) {
+    timestamps_t *ts = (*core->runner_ts)[runner_idx];
     for (size_t i = 0; i < tensors.size(); ++i) {
         ts->time_accept -= realtime();
-        accept_chunk(i, tensors[i], runner);
+        accept_chunk(i, tensors[i], core, runner_idx);
         ts->time_accept += realtime();
     }
 
     LOG_DEBUG("%s", "decoding chunks");
     ts->time_decode -= realtime();
-    std::vector<DecodedChunk> decoded_chunks = call_chunks(chunks.size(), runner);
+    std::vector<DecodedChunk> decoded_chunks = call_chunks(chunks.size(), core, runner_idx);
     ts->time_decode += realtime();
 
     for (size_t i = 0; i < chunks.size(); ++i) {
@@ -83,7 +86,6 @@ void basecall_chunks(
 }
 
 void* pthread_single_basecall(void* voidargs) {
-
     model_thread_arg_t* args = (model_thread_arg_t*)voidargs;
     db_t* db = args->db;
     core_t* core = args->core;
@@ -92,9 +94,6 @@ void* pthread_single_basecall(void* voidargs) {
     size_t end = args->end;
 
     opt_t opt = core->opt;
-    timestamps_t *ts = (*core->runner_ts)[runner_idx];
-
-    runner_t *model_runner = (*core->runners)[runner_idx];
 
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor> tensors;
@@ -113,8 +112,8 @@ void* pthread_single_basecall(void* voidargs) {
                     tensors,
                     chunks,
                     opt.chunk_size,
-                    model_runner,
-                    ts
+                    core,
+                    runner_idx
                 );
 
                 chunks.clear();
@@ -128,17 +127,15 @@ void* pthread_single_basecall(void* voidargs) {
             tensors,
             chunks,
             opt.chunk_size,
-            model_runner,
-            ts
+            core,
+            runner_idx
         );
     }
 
     pthread_exit(0);
-
 }
 
 void basecall_db(core_t* core, db_t* db) {
-
     timestamps_t *ts = &(core->ts);
 
     int32_t n_reads = (*db->chunks).size();

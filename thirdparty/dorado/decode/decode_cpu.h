@@ -6,4 +6,4 @@
 
 #include <torch/torch.h>
 
-std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_chunks, const runner_t *runner);
+std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_chunks, const core_t *core, const int runner_idx);

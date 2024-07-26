@@ -203,7 +203,9 @@ void* pthread_single_beam_search(void* voidargs) {
     pthread_exit(0);
 }
 
-std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_chunks, const runner_t *runner) {
+std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_chunks, const core_t *core, const int runner_idx) {
+    const runner_t *runner = (*core->runners)[runner_idx];
+    
     const auto options = runner->decoder_opts;
     const auto device = runner->device;
     const auto config = runner->model_config;
