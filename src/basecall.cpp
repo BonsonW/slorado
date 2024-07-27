@@ -47,14 +47,14 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-void accept_chunk(int num_chunks, at::Tensor slice, const core_t *core, const int runner_idx) {
-    runner_t *runner = (*core->runners)[runner_idx];
+void accept_chunk(int num_chunks, at::Tensor slice, const core_t* core, const int runner_idx) {
+    runner_t* runner = (*core->runners)[runner_idx];
     runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
 
-std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t *core, const int runner_idx) {
+std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t* core, const int runner_idx) {
     torch::InferenceMode guard;
-    runner_t *runner = (*core->runners)[runner_idx];
+    runner_t* runner = (*core->runners)[runner_idx];
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
     return decode_cpu(scores, num_chunks, core, runner_idx);
 }
@@ -63,10 +63,10 @@ void basecall_chunks(
     std::vector<torch::Tensor> tensors,
     std::vector<Chunk *> chunks,
     int chunk_size,
-    const core_t *core,
+    const core_t* core,
     const int runner_idx
 ) {
-    timestamps_t *ts = (*core->runner_ts)[runner_idx];
+    timestamps_t* ts = (*core->runner_ts)[runner_idx];
     for (size_t i = 0; i < tensors.size(); ++i) {
         ts->time_accept -= realtime();
         accept_chunk(i, tensors[i], core, runner_idx);
@@ -99,7 +99,6 @@ void* pthread_single_basecall(void* voidargs) {
     std::vector<torch::Tensor> tensors;
 
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
-
         auto this_chunk = (*db->chunks)[read_idx];
         auto this_tensor = (*db->tensors)[read_idx];
 
@@ -108,46 +107,34 @@ void* pthread_single_basecall(void* voidargs) {
             tensors.push_back(this_tensor[chunk_idx]);
 
             if (chunks.size() == (size_t)opt.gpu_batch_size) {
-                basecall_chunks(
-                    tensors,
-                    chunks,
-                    opt.chunk_size,
-                    core,
-                    runner_idx
-                );
-
+                basecall_chunks(tensors, chunks, opt.chunk_size, core, runner_idx);
                 chunks.clear();
                 tensors.clear();
             }
         }
     }
 
+    // leftover chunks
     if (chunks.size() > 0) {
-        basecall_chunks(
-            tensors,
-            chunks,
-            opt.chunk_size,
-            core,
-            runner_idx
-        );
+        basecall_chunks(tensors, chunks, opt.chunk_size, core, runner_idx);
     }
 
     pthread_exit(0);
 }
 
 void basecall_db(core_t* core, db_t* db) {
-    timestamps_t *ts = &(core->ts);
+    timestamps_t* ts = &(core->ts);
 
     int32_t n_reads = (*db->chunks).size();
-    int32_t num_threads = (*core->runners).size(); //isnt this possible to be taken from opt?
+    int32_t num_threads = (*core->runners).size();
     int32_t step = (n_reads + num_threads - 1) / num_threads;
 
-    //create threads
+    // create threads
     pthread_t tids[num_threads];
     model_thread_arg_t pt_args[num_threads];
     int32_t t, ret;
     int32_t i = 0;
-    //set the data structures
+    // set the data structures
     for (t = 0; t < num_threads; t++) {
         pt_args[t].core = core;
         pt_args[t].db = db;
@@ -161,8 +148,8 @@ void basecall_db(core_t* core, db_t* db) {
         }
     }
 
-    //create threads
-    for(t = 0; t < num_threads; t++){
+    // create threads
+    for (t = 0; t < num_threads; t++) {
         ret = pthread_create(&tids[t], NULL, pthread_single_basecall,
                                 (void*)(&pt_args[t]));
         NEG_CHK(ret);
@@ -170,7 +157,7 @@ void basecall_db(core_t* core, db_t* db) {
 
     double time_sync = 0;
 
-    //pthread joining
+    // pthread joining
     for (t = 0; t < num_threads; t++) {
         int ret = pthread_join(tids[t], NULL);
         NEG_CHK(ret);

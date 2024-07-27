@@ -61,23 +61,23 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)malloc(sizeof(core_t));
     MALLOC_CHK(core);
 
-    core->sp = slow5_open(slow5file,"r");
+    core->sp = slow5_open(slow5file, "r");
     if (core->sp == NULL) {
-        VERBOSE("Error opening SLOW5 file %s\n",slow5file);
+        VERBOSE("Error opening SLOW5 file %s\n", slow5file);
         exit(EXIT_FAILURE);
     }
 
     init_timestamps(&core->ts);
 
-    core->runners = new std::vector<runner_t *>();
-    core->runner_ts = new std::vector<timestamps_t *>();
+    core->runners = new std::vector<runner_t*>();
+    core->runner_ts = new std::vector<timestamps_t*>();
 
     core->ts.time_init_runners -= realtime();
 
     if (strcmp(opt.device, "cpu") == 0) {
         std::string device = opt.device;
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+            core->runner_ts->push_back((timestamps_t*)malloc(sizeof(timestamps_t)));
             init_timestamps((*core->runner_ts).back());
 
             core->runners->push_back(new runner_t());
@@ -91,7 +91,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
         for (auto device: devices) {
             for (int i = 0; i < opt.num_runners; ++i) {
-                core->runner_ts->push_back((timestamps_t *)malloc(sizeof(timestamps_t)));
+                core->runner_ts->push_back((timestamps_t*)malloc(sizeof(timestamps_t)));
                 init_timestamps((*core->runner_ts).back());
 
                 core->runners->push_back(new runner_t());
@@ -114,7 +114,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->ts.time_init_runners += realtime();
 
-    //realtime0
+    // realtime0
     core->realtime0=realtime0;
 
     core->load_db_time=0;
@@ -125,7 +125,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->output_time=0;
 
     core->sum_bytes=0;
-    core->total_reads=0; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+    core->total_reads=0; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 
     core->opt = opt;
 
@@ -139,7 +139,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 }
 
 /* free the core data structure */
-void free_core(core_t* core,opt_t opt) {
+void free_core(core_t* core, opt_t opt) {
 #ifdef HAVE_ACC
     if (core->opt.flag & SLORADO_ACC) {
         VERBOSE("%s","Freeing accelator");
@@ -168,9 +168,9 @@ db_t* init_db(core_t* core) {
     db->capacity_rec = core->opt.batch_size;
     db->n_rec = 0;
 
-    db->mem_records = (char**)(calloc(db->capacity_rec,sizeof(char*)));
+    db->mem_records = (char **)(calloc(db->capacity_rec, sizeof(char *)));
     MALLOC_CHK(db->mem_records);
-    db->mem_bytes = (size_t*)(calloc(db->capacity_rec,sizeof(size_t)));
+    db->mem_bytes = (size_t *)(calloc(db->capacity_rec, sizeof(size_t)));
     MALLOC_CHK(db->mem_bytes);
 
     db->slow5_rec = (slow5_rec_t**)calloc(db->capacity_rec,sizeof(slow5_rec_t*));
@@ -184,8 +184,8 @@ db_t* init_db(core_t* core) {
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
     db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
 
-    db->total_reads=0;
-    db->sum_bytes=0;
+    db->total_reads = 0;
+    db->sum_bytes = 0;
 
     return db;
 }
@@ -198,12 +198,12 @@ ret_status_t load_db(core_t* core, db_t* db) {
     db->sum_bytes = 0;
     db->total_reads = 0;
 
-    ret_status_t status={0,0};
+    ret_status_t status = {0, 0};
     int32_t i = 0;
     while (db->n_rec < db->capacity_rec && db->sum_bytes<core->opt.batch_size_bytes) {
         i=db->n_rec;
 
-        if (slow5_get_next_bytes(&db->mem_records[i],&db->mem_bytes[i],core->sp) < 0){
+        if (slow5_get_next_bytes(&db->mem_records[i], &db->mem_bytes[i], core->sp) < 0) {
             if (slow5_errno != SLOW5_ERR_EOF) {
                 ERROR("Error reading from SLOW5 file %d", slow5_errno);
                 exit(EXIT_FAILURE);
@@ -231,8 +231,8 @@ void parse_single(core_t* core,db_t* db, int32_t i){
     assert(db->mem_records[i] != NULL);
 
     int ret=slow5_decode(&db->mem_records[i], &db->mem_bytes[i], &db->slow5_rec[i], core->sp);
-    if(ret<0){
-        ERROR("Error parsing the record %d",i);
+    if (ret < 0) {
+        ERROR("Error parsing the record %d", i);
         exit(EXIT_FAILURE);
     }
 }
@@ -243,18 +243,18 @@ void mean_single(core_t* core,db_t* db, int32_t i){
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 
-    if(len_raw_signal>0){
+    if (len_raw_signal > 0) {
         double sum = 0;
-        for(uint64_t i=0;i<len_raw_signal;i++){
-            double pA = TO_PICOAMPS(rec->raw_signal[i],rec->digitisation,rec->offset,rec->range);
+        for (uint64_t i = 0; i < len_raw_signal; i++){
+            double pA = TO_PICOAMPS(rec->raw_signal[i], rec->digitisation, rec->offset, rec->range);
             sum += pA;
         }
-        double mean = sum/len_raw_signal;
-        db->means[i]=mean;
+        double mean = sum / len_raw_signal;
+        db->means[i] = mean;
     }
 }
 
-void preprocess_signal(core_t* core,db_t* db, int32_t i){
+void preprocess_signal(core_t* core, db_t* db, int32_t i){
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
@@ -277,7 +277,7 @@ void preprocess_signal(core_t* core,db_t* db, int32_t i){
 }
 
 
-void postprocess_signal(core_t* core,db_t* db, int32_t i){
+void postprocess_signal(core_t* core, db_t* db, int32_t i){
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 
@@ -300,29 +300,28 @@ void process_db(core_t* core,db_t* db){
     double proc_start = realtime();
 
     double a = realtime();
-    work_db(core,db,parse_single);
+    work_db(core, db, parse_single);
     double b = realtime();
-    core->parse_time += (b-a);
-    LOG_DEBUG("%s","Parsed reads");
+    core->parse_time += (b - a);
+    LOG_DEBUG("%s", "Parsed reads");
 
     a = realtime();
-    work_db(core,db,preprocess_signal);
+    work_db(core, db, preprocess_signal);
     b = realtime();
     core->preproc_time += (b-a);
-    LOG_DEBUG("%s","Preprocessed reads");
+    LOG_DEBUG("%s", "Preprocessed reads");
 
     a = realtime();
-    basecall_db(core,db);
-    //basecall_cpu_db(core,db);
+    basecall_db(core, db);
     b = realtime();
     core->basecall_time += (b-a);
-    LOG_DEBUG("%s","Basecalled reads");
+    LOG_DEBUG("%s", "Basecalled reads");
 
     a = realtime();
-    work_db(core,db,postprocess_signal);
+    work_db(core, db, postprocess_signal);
     b = realtime();
     core->postproc_time += (b-a);
-    LOG_DEBUG("%s","Postprocessed reads");
+    LOG_DEBUG("%s", "Postprocessed reads");
 
     double proc_end = realtime();
     core->process_db_time += (proc_end-proc_start);
@@ -342,7 +341,6 @@ void output_db(core_t* core, db_t* db) {
     core->sum_bytes += db->sum_bytes;
     core->total_reads += db->total_reads;
 
-    //core->read_index = core->read_index + db->n_rec;
     double output_end = realtime();
     core->output_time += (output_end-output_start);
 }

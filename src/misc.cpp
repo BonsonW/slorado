@@ -60,8 +60,7 @@ double cputime(void) {
            1e-6 * (r.ru_utime.tv_usec + r.ru_stime.tv_usec);
 }
 
-long peakrss(void)
-{
+long peakrss(void) {
 	struct rusage r;
 	getrusage(RUSAGE_SELF, &r);
 #ifdef __linux__
@@ -71,8 +70,7 @@ long peakrss(void)
 #endif
 }
 
-int64_t mm_parse_num(const char* str)
-{
+int64_t mm_parse_num(const char* str) {
     double x;
     char* p;
     x = strtod(str, &p);
@@ -85,9 +83,8 @@ int64_t mm_parse_num(const char* str)
     return (int64_t)(x + .499);
 }
 
-//parse yes or no arguments
-void yes_or_no(uint64_t* flag_a, uint64_t flag, const char* opt_name, const char* arg, int yes_to_set)
-{
+// parse yes or no arguments
+void yes_or_no(uint64_t* flag_a, uint64_t flag, const char* opt_name, const char* arg, int yes_to_set) {
     if (yes_to_set) {
         if (strcmp(arg, "yes") == 0 || strcmp(arg, "y") == 0) {
             *flag_a |= flag;
@@ -108,10 +105,9 @@ void yes_or_no(uint64_t* flag_a, uint64_t flag, const char* opt_name, const char
 }
 
 
-// Prints to the provided buffer a nice number of bytes (KB, MB, GB, etc)
-//adapted from https://www.mbeckler.org/blog/?p=114
-void print_size(const char* name, uint64_t bytes)
-{
+// prints to the provided buffer a nice number of bytes (KB, MB, GB, etc)
+// adapted from https://www.mbeckler.org/blog/?p=114
+void print_size(const char* name, uint64_t bytes) {
     const char* suffixes[7];
     suffixes[0] = "B";
     suffixes[1] = "KB";

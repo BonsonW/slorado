@@ -28,8 +28,7 @@ SOFTWARE.
 
 ******************************************************************************/
 
-#include <string>
-#include <iostream>
+#include <stdio.h>
 
 void write_to_file(FILE *out, char *sequence, char *qstring, char *read_id, bool emit_fastq) {
     if (emit_fastq) {

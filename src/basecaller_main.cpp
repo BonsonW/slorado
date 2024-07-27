@@ -168,19 +168,19 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 'V') {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
-        } else if (c == 'h'){
+        } else if (c == 'h') {
             fp_help = stdout;
-        } else if(c == 0 && longindex == 7) { //debug break
+        } else if(c == 0 && longindex == 7) { // debug break
             opt.debug_break = atoi(optarg);
-        } else if(c == 0 && longindex == 8) { //sectional benchmark todo : warning for gpu mode
+        } else if(c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
-        } else if(c == 0 && longindex == 9) { //accel
-        #ifdef HAVE_ACC
+        } else if(c == 0 && longindex == 9) { // accel
+#ifdef HAVE_ACC
             yes_or_no(&opt.flag, SLORADO_ACC, long_options[longindex].name, optarg, 1);
-        #else
+#else
             WARNING("%s", "--accel has no effect when compiled for the CPU");
-        #endif
-        } else if(c == 0 && longindex == 14) { //sectional benchmark todo : warning for gpu mode
+#endif
+        } else if (c == 0 && longindex == 14) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_EFQ, long_options[longindex].name, optarg, 1);
         }
     }
@@ -188,7 +188,7 @@ int basecaller_main(int argc, char* argv[]) {
     // Incorrect number of arguments given
     if (argc - optind != 2 || fp_help == stdout) {
         print_help_msg(fp_help, opt);
-        if(fp_help == stdout){
+        if (fp_help == stdout) {
             exit(EXIT_SUCCESS);
         }
         exit(EXIT_FAILURE);
@@ -198,7 +198,7 @@ int basecaller_main(int argc, char* argv[]) {
 
     if (model == NULL) {
         print_help_msg(fp_help, opt);
-        if(fp_help == stdout){
+        if (fp_help == stdout) {
             exit(EXIT_SUCCESS);
         }
         exit(EXIT_FAILURE);
@@ -230,43 +230,43 @@ int basecaller_main(int argc, char* argv[]) {
 
 /////////////////////////////////////////////////////////////////////////////
 
-    //initialise the core data structure
+    // initialise the core data structure
     core_t* core = init_core(data, opt, model, realtime0);
 
-    int32_t counter=0;
+    int32_t counter = 0;
 
-    //initialise a databatch
+    // initialise a databatch
     db_t* db = init_db(core);
 
-    ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
+    ret_status_t status = {core->opt.batch_size, core->opt.batch_size_bytes};
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
-        //load a databatch
+        // load a databatch
         status = load_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
 
-        //process a databatch
+        // process a databatch
         process_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) processed\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
 
-        //output print
+        // output print
         output_db(core, db);
 
-        //free temporary
+        // free temporary
         free_db_tmp(db);
 
-        if(opt.debug_break==counter){
+        if (opt.debug_break == counter) {
             break;
         }
         counter++;
     }
 
-    //free the databatch
+    // free the databatch
     free_db(db);
 
     fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
@@ -293,8 +293,8 @@ int basecaller_main(int argc, char* argv[]) {
 
     fprintf(stderr,"\n");
 
-    //free the core data structure
-    free_core(core,opt);
+    // free the core data structure
+    free_core(core, opt);
 
     if (opt.out != stdout) {
         fclose(opt.out);

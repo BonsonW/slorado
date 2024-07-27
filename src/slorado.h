@@ -93,7 +93,7 @@ typedef struct {
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
 
-    //stats
+    // stats
     int64_t sum_bytes;
     int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } db_t;
@@ -116,7 +116,6 @@ typedef struct {
     double_t time_sync;
     double_t time_write;
     double_t time_total;
-
 } timestamps_t;
 
 typedef struct {
@@ -132,7 +131,7 @@ typedef struct {
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
-    //slow5
+    // slow5
     slow5_file_t *sp;
 
     // options
@@ -155,9 +154,9 @@ typedef struct {
     timestamps_t ts;
     std::vector<timestamps_t *> *runner_ts;
 
-    //stats //set by output_db
+    // stats, set by output_db
     int64_t sum_bytes;
-    int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+    int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } core_t;
 
 /* argument wrapper for the multithreaded framework used for data processing */
@@ -166,14 +165,14 @@ typedef struct {
     db_t* db;
     int32_t starti;
     int32_t endi;
-    void (*func)(core_t*,db_t*,int);
+    void (*func)(core_t*, db_t*, int);
     int32_t thread_index;
 #ifdef WORK_STEAL
     void *all_pthread_args;
 #endif
 #ifdef HAVE_CUDA
-    int32_t *ultra_long_reads; //reads that are assigned to the CPU due to the unsuitability to process on the GPU
-    double ret1;    //return value
+    int32_t *ultra_long_reads; // reads that are assigned to the CPU due to the unsuitability to process on the GPU
+    double ret1; // return value
 #endif
 } pthread_arg_t;
 
@@ -199,9 +198,9 @@ db_t* init_db(core_t* core);
 /* load a data batch from disk */
 ret_status_t load_db(core_t* dg, db_t* db);
 
-void work_per_single_read(core_t* core,db_t* db, int32_t i);
+void work_per_single_read(core_t* core, db_t* db, int32_t i);
 /* process all reads in the given batch db */
-void work_db(core_t* core, db_t* db, void (*func)(core_t*,db_t*,int));
+void work_db(core_t* core, db_t* db, void (*func)(core_t*, db_t*, int));
 
 /* process a data batch */
 void process_db(core_t* core, db_t* db);
@@ -221,8 +220,10 @@ void free_db(db_t* db);
 /* free the core data structure */
 void free_core(core_t* core,opt_t opt);
 
+/* initialise timestamps */
 void init_timestamps(timestamps_t* time_stamps);
 
+/* intialise model runner */
 void init_runner(runner_t* runner, const std::string &model_path, const std::string &device, int chunk_size, int batch_size, torch::ScalarType dtype);
 
 #endif

@@ -32,10 +32,10 @@ SOFTWARE.
 
 enum log_level_opt _log_level = LOG_VERB;
 
-enum log_level_opt get_log_level(){
+enum log_level_opt get_log_level() {
     return _log_level;
 }
 
-void set_log_level(enum log_level_opt level){
+void set_log_level(enum log_level_opt level) {
     _log_level = level;
 }
