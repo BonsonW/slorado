@@ -53,7 +53,7 @@ build/
 /minimap2
 test/tmp.fastq
 test/tmp.paf
-*.fastq
+reads.fastq
 
 #Allowed files
 !CMakeLists.txt
