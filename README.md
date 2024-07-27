@@ -33,28 +33,7 @@ scripts/download-models.sh
 
 ### 3. Make
 
-### Building for x86_64 architceture 
-
-<details open><summary> <b>Option 1:</b>  CUDA GPU version that uses ONT's closed-source koi library binaries (CUDA >=11.8 needed). This is the fastest: </summary>
-
-```
-scripts/install-torch2.sh cuda
-make cuda=1 koi=1 -j
-```
-
-If you do not have CUDA 11.8 or higher installed system wide, you can install CUDA 11.8 using following commands:
-```
-wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda_11.8.0_520.61.05_linux.run
-chmod +x cuda_11.8.0_520.61.05_linux.run
-./cuda_11.8.0_520.61.05_linux.run --toolkit --toolkitpath=/local/path/cuda/
-```
-Then compile slorado by specifying the custom CUDA location to CUDA_ROOT variable as:
-```
-make cuda=1 koi=1 -j CUDA_ROOT=/local/path/cuda/
-```
-</details>
-
-<details><summary> <b>Option 2:</b> CUDA GPU version without close-source koi library. This version uses teh CPU decoder, thus considerably slow: </summary>
+<details><summary> <b>Option 2:</b> CUDA GPU version. This version still uses the CPU decoder, thus considerably slow: </summary>
     
 ```
 scripts/install-torch2.sh cuda

@@ -65,8 +65,8 @@ jobs:
       run: make -j2
     - name: test
       run: make test
-  ubuntu_20_koi:
-    name: Ubuntu 20 CUDA KOI
+  ubuntu_20_cuda:
+    name: Ubuntu 20 CUDA
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v2
@@ -85,9 +85,7 @@ jobs:
         sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
         sudo apt-get update
         sudo apt-get -y install cuda
-    - name: koi
-      run: scripts/install-koi.sh
     - name: torch
       run: scripts/install-torch2.sh
-    - name: build koi=1 cuda=1
-      run: make -j2 koi=1 cuda=1
+    - name: build cuda=1
+      run: make -j2 cuda=1

@@ -87,7 +87,7 @@ echo "Memory Check - CPU - FAST model - 1 reads"
 ex  ./slorado basecaller models/$FAST test/one_5khz.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
 
 # accuracy check
-make clean && make -j cuda=1 koi=1 CUDA_ROOT=/data/install/cuda-11.8/
+make clean && make -j cuda=1 CUDA_ROOT=/data/install/cuda-11.8/
 
 echo "GPU - FAST model - 20k reads"
 ex  ./slorado basecaller models/$FAST $SUBSAMPLE -xcuda:all -B500M -c10000 -C1900 > test/tmp.fastq || die "Running the tool failed"
