@@ -272,13 +272,13 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "[%s] total entries: %ld", __func__, (long)core->total_reads);
     fprintf(stderr, "\n[%s] total bytes: %.1f M", __func__, core->sum_bytes/(float)(1000*1000));
 
-    fprintf(stderr, "\n[%s] Model initialization time: %.3f sec", __func__,core->time_init_runners);
+    fprintf(stderr, "\n[%s] Model initialization time: %.3f sec", __func__, core->time_init_runners);
     fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__, core->time_load_db);
     fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__, core->time_process_db);
     // if((core->opt.flag&SLORADO_PRF) || core->opt.flag & SLORADO_ACC) {
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec", __func__, core->time_parse);
             fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec", __func__, core->time_preproc);
-            fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec", __func__, core->time_basecall);
+            fprintf(stderr, "\n[%s]     - Basecall time: %.3f sec", __func__, core->time_basecall);
             fprintf(stderr, "\n[%s]          - Synchronisation time: %.3f sec", __func__, core->time_sync);
 
     auto runner_ts = *core->runner_ts;
@@ -286,6 +286,8 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f", __func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Accept time: %.3f sec", __func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec", __func__, runner_ts[i]->time_decode);
+            fprintf(stderr, "\n[%s]                 - Inference time: %.3f sec", __func__, runner_ts[i]->time_infer);
+            fprintf(stderr, "\n[%s]                 - Beamsearch time: %.3f sec", __func__, runner_ts[i]->time_search);
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec", __func__, core->time_postproc);
     // }

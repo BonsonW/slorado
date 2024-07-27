@@ -399,22 +399,6 @@ void init_opt(opt_t* opt) {
 /* initialise timestamps */
 void init_timestamps(timestamps_t* time_stamps) {
     memset(time_stamps, 0, sizeof(timestamps_t));
-
-    time_stamps->time_read = 0;
-    time_stamps->time_tens = 0;
-    time_stamps->time_trim = 0;
-    time_stamps->time_scale = 0;
-    time_stamps->time_chunk = 0;
-    time_stamps->time_copy = 0;
-    time_stamps->time_pad = 0;
-    time_stamps->time_assign = 0;
-    time_stamps->time_accept = 0;
-    time_stamps->time_basecall = 0;
-    time_stamps->time_decode = 0;
-    time_stamps->time_sync = 0;
-    time_stamps->time_stitch = 0;
-    time_stamps->time_write = 0;
-    time_stamps->time_total = 0;
 }
 
 /* initialise runners */

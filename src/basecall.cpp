@@ -55,8 +55,17 @@ void accept_chunk(const int num_chunks, at::Tensor slice, const core_t* core, co
 std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t* core, const int runner_idx) {
     torch::InferenceMode guard;
     runner_t* runner = (*core->runners)[runner_idx];
+    timestamps_t* ts = (*core->runner_ts)[runner_idx];
+
+    ts->time_infer -= realtime();
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
-    return decode_cpu(scores, num_chunks, core, runner_idx);
+    ts->time_infer += realtime();
+
+    ts->time_search -= realtime();
+    auto chunks = decode_cpu(scores, num_chunks, core, runner_idx);
+    ts->time_search += realtime();
+
+    return chunks;
 }
 
 void basecall_chunks(
