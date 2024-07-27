@@ -107,9 +107,9 @@ int basecaller_main(int argc, char* argv[]) {
     FILE *fp_help = stderr;
 
     opt_t opt;
-    init_opt(&opt); //initialise options to defaults
+    init_opt(&opt); // initialise options to defaults
 
-    //parse the user args
+    // parse the user args
     while ((c = getopt_long(argc, argv, optstring, long_options, &longindex)) >= 0) {
         if (c == 'B') {
             opt.batch_size_bytes = mm_parse_num(optarg);
@@ -170,11 +170,11 @@ int basecaller_main(int argc, char* argv[]) {
             exit(EXIT_SUCCESS);
         } else if (c == 'h') {
             fp_help = stdout;
-        } else if(c == 0 && longindex == 7) { // debug break
+        } else if (c == 0 && longindex == 7) { // debug break
             opt.debug_break = atoi(optarg);
-        } else if(c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
+        } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
-        } else if(c == 0 && longindex == 9) { // accel
+        } else if (c == 0 && longindex == 9) { // accel
 #ifdef HAVE_ACC
             yes_or_no(&opt.flag, SLORADO_ACC, long_options[longindex].name, optarg, 1);
 #else
@@ -275,7 +275,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n[%s] Model initialization time: %.3f sec", __func__,core->ts.time_init_runners);
     fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
     fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
-    //if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
+    // if((core->opt.flag&SLORADO_PRF) || core->opt.flag & SLORADO_ACC) {
             fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
             fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
             fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
@@ -288,7 +288,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
     }
             fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
-    //}
+    // }
     fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
 
     fprintf(stderr,"\n");
