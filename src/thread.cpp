@@ -65,7 +65,7 @@ void* pthread_single(void* voidargs) {
     }
 #else
     pthread_arg_t* all_args = (pthread_arg_t*)(args->all_pthread_args);
-    //adapted from kthread.c in minimap2
+    // adapted from kthread.c in minimap2
     for (;;) {
 		i = __sync_fetch_and_add(&args->starti, 1);
 		if (i >= args->endi) {

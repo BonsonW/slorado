@@ -47,7 +47,7 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-void accept_chunk(int num_chunks, at::Tensor slice, const core_t* core, const int runner_idx) {
+void accept_chunk(const int num_chunks, at::Tensor slice, const core_t* core, const int runner_idx) {
     runner_t* runner = (*core->runners)[runner_idx];
     runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
@@ -62,7 +62,7 @@ std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t* core, 
 void basecall_chunks(
     std::vector<torch::Tensor> tensors,
     std::vector<Chunk *> chunks,
-    int chunk_size,
+    const int chunk_size,
     const core_t* core,
     const int runner_idx
 ) {
@@ -89,9 +89,9 @@ void* pthread_single_basecall(void* voidargs) {
     model_thread_arg_t* args = (model_thread_arg_t*)voidargs;
     db_t* db = args->db;
     core_t* core = args->core;
-    size_t runner_idx = args->runner;
-    size_t start = args->start;
-    size_t end = args->end;
+    const size_t runner_idx = args->runner;
+    const size_t start = args->start;
+    const size_t end = args->end;
 
     opt_t opt = core->opt;
 
