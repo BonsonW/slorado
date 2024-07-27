@@ -48,32 +48,31 @@ SOFTWARE.
  * flags related to the user specified options (opt_t) *
  *******************************************************/
 
-#define SLORADO_PRF 0x001 //cpu-profile mode
-#define SLORADO_ACC 0x002 //accelerator enable
-#define SLORADO_EFQ 0x004 //emit fastq enable
+#define SLORADO_PRF 0x001 // cpu-profile mode
+#define SLORADO_ACC 0x002 // accelerator enable
+#define SLORADO_EFQ 0x004 // emit fastq enable
 
-#define WORK_STEAL 1 //simple work stealing enabled or not (no work stealing mean no load balancing)
-#define STEAL_THRESH 1 //stealing threshold
+#define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
+#define STEAL_THRESH 1 // stealing threshold
 
 /* user specified options */
 typedef struct {
-    uint64_t flag;              //flags
-    int32_t batch_size;         //max reads loaded at once: K
-    int32_t gpu_batch_size;     //max chunks loaded at once: C
-    int64_t batch_size_bytes;   //max bytes loaded at once: B
+    uint64_t flag;              // flags
+    int32_t batch_size;         // max reads loaded at once: K
+    int32_t gpu_batch_size;     // max chunks loaded at once: C
+    int64_t batch_size_bytes;   // max bytes loaded at once: B
 
-    int32_t num_thread;         //number of threads used: t
+    int32_t num_thread;         // number of threads used: t
     int32_t debug_break;
 
-    const char *out_path;       //path to output file: o
+    const char *out_path;       // path to output file: o
     FILE *out;
 
-    const char *device;         //specified device: x
-    size_t chunk_size;         //size of chunks: c
-    int32_t overlap;            //overlap: p
-    int32_t num_runners;       //number of runners: r
+    const char *device;         // specified device: x
+    size_t chunk_size;          // size of chunks: c
+    int32_t overlap;            // overlap: p
+    int32_t num_runners;        // number of runners: r
 } opt_t;
-
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -95,7 +94,7 @@ typedef struct {
 
     // stats
     int64_t sum_bytes;
-    int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+    int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } db_t;
 
 /* time stamps */
@@ -141,7 +140,7 @@ typedef struct {
     // only one per GPU is used for now
     std::vector<runner_t *> *runners;
 
-    //realtime0
+    // realtime0
     double realtime0;
 
     double load_db_time;
