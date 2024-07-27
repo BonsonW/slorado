@@ -99,7 +99,6 @@ typedef struct {
 
 /* time stamps */
 typedef struct {
-    double_t time_init_runners;
     double_t time_read;
     double_t time_tens;
     double_t time_trim;
@@ -143,14 +142,18 @@ typedef struct {
     // realtime0
     double realtime0;
 
-    double load_db_time;
-    double process_db_time;
-    double parse_time;
-    double preproc_time;
-    double basecall_time;
-    double postproc_time;
-    double output_time;
-    timestamps_t ts;
+    // timings
+    double time_init_runners;
+    double time_sync;
+    double time_load_db;
+    double time_process_db;
+    double time_parse;
+    double time_preproc;
+    double time_basecall;
+    double time_postproc;
+    double time_output;
+
+    // timings for runners
     std::vector<timestamps_t *> *runner_ts;
 
     // stats, set by output_db

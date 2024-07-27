@@ -61,18 +61,27 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)malloc(sizeof(core_t));
     MALLOC_CHK(core);
 
+    core->realtime0 = realtime0;
+
+    core->time_init_runners = 0;
+    core->time_sync = 0;
+    core->time_load_db = 0;
+    core->time_process_db = 0;
+    core->time_preproc = 0;
+    core->time_basecall = 0;
+    core->time_postproc = 0;
+    core->time_output = 0;
+
     core->sp = slow5_open(slow5file, "r");
     if (core->sp == NULL) {
         VERBOSE("Error opening SLOW5 file %s\n", slow5file);
         exit(EXIT_FAILURE);
     }
 
-    init_timestamps(&core->ts);
-
     core->runners = new std::vector<runner_t*>();
     core->runner_ts = new std::vector<timestamps_t*>();
 
-    core->ts.time_init_runners -= realtime();
+    core->time_init_runners -= realtime();
 
     if (strcmp(opt.device, "cpu") == 0) {
         std::string device = opt.device;
@@ -112,17 +121,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         opt.chunk_size = adjusted_chunk_size;
     }
 
-    core->ts.time_init_runners += realtime();
-
-    // realtime0
-    core->realtime0=realtime0;
-
-    core->load_db_time=0;
-    core->process_db_time=0;
-    core->preproc_time=0;
-    core->basecall_time=0;
-    core->postproc_time=0;
-    core->output_time=0;
+    core->time_init_runners += realtime();
 
     core->sum_bytes=0;
     core->total_reads=0; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
@@ -221,7 +220,7 @@ ret_status_t load_db(core_t* core, db_t* db) {
     status.num_bytes=db->sum_bytes;
 
     double load_end = realtime();
-    core->load_db_time += (load_end-load_start);
+    core->time_load_db += (load_end-load_start);
 
     return status;
 }
@@ -302,29 +301,29 @@ void process_db(core_t* core,db_t* db){
     double a = realtime();
     work_db(core, db, parse_single);
     double b = realtime();
-    core->parse_time += (b - a);
+    core->time_parse += (b - a);
     LOG_DEBUG("%s", "Parsed reads");
 
     a = realtime();
     work_db(core, db, preprocess_signal);
     b = realtime();
-    core->preproc_time += (b-a);
+    core->time_preproc += (b-a);
     LOG_DEBUG("%s", "Preprocessed reads");
 
     a = realtime();
     basecall_db(core, db);
     b = realtime();
-    core->basecall_time += (b-a);
+    core->time_basecall += (b-a);
     LOG_DEBUG("%s", "Basecalled reads");
 
     a = realtime();
     work_db(core, db, postprocess_signal);
     b = realtime();
-    core->postproc_time += (b-a);
+    core->time_postproc += (b-a);
     LOG_DEBUG("%s", "Postprocessed reads");
 
     double proc_end = realtime();
-    core->process_db_time += (proc_end-proc_start);
+    core->time_process_db += (proc_end-proc_start);
 }
 
 /* write the output for a processed data batch */
@@ -342,7 +341,7 @@ void output_db(core_t* core, db_t* db) {
     core->total_reads += db->total_reads;
 
     double output_end = realtime();
-    core->output_time += (output_end-output_start);
+    core->time_output += (output_end-output_start);
 }
 
 /* partially free a data batch - only the read dependent allocations are freed */
@@ -401,7 +400,6 @@ void init_opt(opt_t* opt) {
 void init_timestamps(timestamps_t* time_stamps) {
     memset(time_stamps, 0, sizeof(timestamps_t));
 
-    time_stamps->time_init_runners = 0;
     time_stamps->time_read = 0;
     time_stamps->time_tens = 0;
     time_stamps->time_trim = 0;

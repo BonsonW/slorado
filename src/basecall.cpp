@@ -123,8 +123,6 @@ void* pthread_single_basecall(void* voidargs) {
 }
 
 void basecall_db(core_t* core, db_t* db) {
-    timestamps_t* ts = &(core->ts);
-
     int32_t n_reads = (*db->chunks).size();
     int32_t num_threads = (*core->runners).size();
     int32_t step = (n_reads + num_threads - 1) / num_threads;
@@ -169,5 +167,5 @@ void basecall_db(core_t* core, db_t* db) {
         }
     }
 
-    ts->time_sync += time_sync;
+    core->time_sync += time_sync;
 }

@@ -1964,7 +1964,7 @@ int toml_rtots(toml_raw_t src_, toml_timestamp_t *ret) {
     return -1;
 
   const char *p = src_;
-  int must_parse_time = 0;
+  int must_time_parse = 0;
 
   memset(ret, 0, sizeof(*ret));
 
@@ -1987,7 +1987,7 @@ int toml_rtots(toml_raw_t src_, toml_timestamp_t *ret) {
       // parse the T or space separator
       if (*p != 'T' && *p != 't' && *p != ' ')
         return -1;
-      must_parse_time = 1;
+      must_time_parse = 1;
       p++;
     }
   }
@@ -2041,7 +2041,7 @@ int toml_rtots(toml_raw_t src_, toml_timestamp_t *ret) {
   if (*p != 0)
     return -1;
 
-  if (must_parse_time && !ret->hour)
+  if (must_time_parse && !ret->hour)
     return -1;
 
   return 0;

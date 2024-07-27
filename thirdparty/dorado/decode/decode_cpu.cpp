@@ -226,9 +226,12 @@ std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_
     std::vector<DecodedChunk> chunk_results(num_chunks);
 
     // create threads
-    const int num_threads = std::min(num_chunks, 4);
+    const int target_threads = core->opt.num_thread / (core->runners->size() / core->opt.num_runners);
+    const int num_threads = std::min(num_chunks, target_threads);
     const int chunks_per_thread = num_chunks / num_threads;
     const int num_threads_with_one_more_chunk = num_chunks % num_threads;
+
+    LOG_DEBUG("dispatching %d threads for cpu decoding", num_threads);
 
     pthread_t tids[num_threads];
     decode_thread_arg_t pt_args[num_threads];
