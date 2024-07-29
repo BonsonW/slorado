@@ -266,12 +266,12 @@ void preprocess_signal(core_t* core, db_t* db, int32_t i){
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
 
         (*db->chunks)[i] = chunks;
-        LOG_DEBUG("%s","assigned chunks");
+        LOG_TRACE("%s","assigned chunks");
 
         std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
 
         (*db->tensors)[i] = tensors;
-        LOG_DEBUG("%s","assigned tensors");
+        LOG_TRACE("%s","assigned tensors");
     }
 }
 

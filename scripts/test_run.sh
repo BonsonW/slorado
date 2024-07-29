@@ -2,8 +2,8 @@
 
 make clean && make -j cuda=1 CUDA_ROOT=/install/cuda-11.8/
 
-DEVICE=cuda:0,2
-MODEL=fast
+DEVICE=cuda:0
+MODEL=hac
 BATCHSIZE=1000
 CHUNKSIZE=10000
 THREADS=40
