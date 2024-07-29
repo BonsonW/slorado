@@ -302,25 +302,25 @@ void process_db(core_t* core,db_t* db){
     work_db(core, db, parse_single);
     double b = realtime();
     core->time_parse += (b - a);
-    LOG_DEBUG("%s", "Parsed reads");
+    LOG_DEBUG("%s", "parsed reads");
 
     a = realtime();
     work_db(core, db, preprocess_signal);
     b = realtime();
     core->time_preproc += (b-a);
-    LOG_DEBUG("%s", "Preprocessed reads");
+    LOG_DEBUG("%s", "preprocessed reads");
 
     a = realtime();
     basecall_db(core, db);
     b = realtime();
     core->time_basecall += (b-a);
-    LOG_DEBUG("%s", "Basecalled reads");
+    LOG_DEBUG("%s", "basecalled reads");
 
     a = realtime();
     work_db(core, db, postprocess_signal);
     b = realtime();
     core->time_postproc += (b-a);
-    LOG_DEBUG("%s", "Postprocessed reads");
+    LOG_DEBUG("%s", "postprocessed reads");
 
     double proc_end = realtime();
     core->time_process_db += (proc_end-proc_start);

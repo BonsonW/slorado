@@ -110,8 +110,10 @@ typedef struct {
     double_t time_accept;
     double_t time_basecall;
     double_t time_decode;
+    double_t time_cpy_score;
+    double_t time_tscore;
+    double_t time_beamsearch;
     double_t time_infer;
-    double_t time_search;
     double_t time_stitch;
     double_t time_sync;
     double_t time_write;

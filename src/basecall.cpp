@@ -61,9 +61,7 @@ std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t* core, 
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
     ts->time_infer += realtime();
 
-    ts->time_search -= realtime();
     auto chunks = decode_cpu(scores, num_chunks, core, runner_idx);
-    ts->time_search += realtime();
 
     return chunks;
 }

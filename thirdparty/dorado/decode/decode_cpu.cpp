@@ -2,6 +2,7 @@
 #include "../nn/CRFModel.h"
 #include "beam_search.h"
 #include "error.h"
+#include "misc.h"
 
 #include <math.h>
 #include <vector>
@@ -161,7 +162,7 @@ typedef struct {
     const CRFModelConfig *config;
 } decode_thread_arg_t;
 
-void* pthread_single_beam_search(void* voidargs) {
+void* pthread_single_score(void* voidargs) {
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
     const DecoderOptions *options = args->options;
 
@@ -180,7 +181,16 @@ void* pthread_single_beam_search(void* voidargs) {
         backward_scan(scores_in, bwd_out, c, T, N, m_states);
         forward_scan(scores_in, bwd_out, fwd_out, c, T, N, m_states);
         softmax(fwd_out, post_out, c, T, m_states);
+    }
 
+    pthread_exit(0);
+}
+
+void* pthread_single_beam_search(void* voidargs) {
+    decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
+    const DecoderOptions* options = args->options;
+
+    for (int c = args->start; c < args->end; c++) {
         auto bwd = args->bwd_NTC->index({c});
         auto post = args->post_NTC->index({c});
         auto scores = args->scores_TNC->index({Slice(), c});
@@ -204,13 +214,17 @@ void* pthread_single_beam_search(void* voidargs) {
 }
 
 std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_chunks, const core_t *core, const int runner_idx) {
-    const runner_t *runner = (*core->runners)[runner_idx];
+    const runner_t* runner = (*core->runners)[runner_idx];
+    timestamps_t* ts = (*core->runner_ts)[runner_idx];
     
     const auto options = runner->decoder_opts;
     const auto device = runner->device;
     const auto config = runner->model_config;
 
+    ts->time_cpy_score -= realtime();
     const auto scores_TNC = scores.to(torch::kCPU).to(DTYPE_CPU).transpose(0, 1).contiguous();
+    ts->time_cpy_score += realtime();
+
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
     const int C = scores_TNC.size(2);
@@ -250,6 +264,21 @@ std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_
         pt_args[t].config = &config;
     }
 
+    // score tensors
+    ts->time_tscore -= realtime();
+    for (t = 0; t < num_threads; t++) {
+        ret = pthread_create(&tids[t], NULL, pthread_single_score, (void*)(&pt_args[t]));
+        NEG_CHK(ret);
+    }
+
+    for (t = 0; t < num_threads; t++) {
+        ret = pthread_join(tids[t], NULL);
+        NEG_CHK(ret);
+    }
+    ts->time_tscore += realtime();
+
+    // beam search
+    ts->time_beamsearch -= realtime();
     for (t = 0; t < num_threads; t++) {
         ret = pthread_create(&tids[t], NULL, pthread_single_beam_search, (void*)(&pt_args[t]));
         NEG_CHK(ret);
@@ -259,6 +288,7 @@ std::vector<DecodedChunk> decode_cpu(const torch::Tensor& scores, const int num_
         ret = pthread_join(tids[t], NULL);
         NEG_CHK(ret);
     }
+    ts->time_beamsearch += realtime();
 
     return chunk_results;
 }
