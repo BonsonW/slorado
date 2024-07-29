@@ -283,7 +283,7 @@ int basecaller_main(int argc, char* argv[]) {
 
     auto runner_ts = *core->runner_ts;
     for (size_t i = 0; i < runner_ts.size(); ++i) {
-            fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f", __func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
+            fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_ts[i]->time_accept);
             fprintf(stderr, "\n[%s]             - decode: %.3f sec", __func__, runner_ts[i]->time_decode);
             fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_ts[i]->time_infer);

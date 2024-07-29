@@ -57,10 +57,12 @@ std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t* core, 
     runner_t* runner = (*core->runners)[runner_idx];
     timestamps_t* ts = (*core->runner_ts)[runner_idx];
 
+    LOG_DEBUG("%s", "basecalling chunks");
     ts->time_infer -= realtime();
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
     ts->time_infer += realtime();
 
+    LOG_DEBUG("%s", "decoding scores");
     auto chunks = decode_cpu(scores, num_chunks, core, runner_idx);
 
     return chunks;
@@ -80,7 +82,6 @@ void basecall_chunks(
         ts->time_accept += realtime();
     }
 
-    LOG_DEBUG("%s", "decoding chunks");
     ts->time_decode -= realtime();
     std::vector<DecodedChunk> decoded_chunks = call_chunks(chunks.size(), core, runner_idx);
     ts->time_decode += realtime();
