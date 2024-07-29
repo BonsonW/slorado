@@ -225,11 +225,11 @@ ret_status_t load_db(core_t* core, db_t* db) {
     return status;
 }
 
-void parse_single(core_t* core,db_t* db, int32_t i){
+void parse_single(core_t* core,db_t* db, int32_t i) {
     assert(db->mem_bytes[i] > 0);
     assert(db->mem_records[i] != NULL);
 
-    int ret=slow5_decode(&db->mem_records[i], &db->mem_bytes[i], &db->slow5_rec[i], core->sp);
+    int ret = slow5_decode(&db->mem_records[i], &db->mem_bytes[i], &db->slow5_rec[i], core->sp);
     if (ret < 0) {
         ERROR("Error parsing the record %d", i);
         exit(EXIT_FAILURE);
@@ -238,7 +238,7 @@ void parse_single(core_t* core,db_t* db, int32_t i){
 
 #define TO_PICOAMPS(RAW_VAL,DIGITISATION,OFFSET,RANGE) (((RAW_VAL)+(OFFSET))*((RANGE)/(DIGITISATION)))
 
-void mean_single(core_t* core,db_t* db, int32_t i){
+void mean_single(core_t* core,db_t* db, int32_t i) {
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 
@@ -253,7 +253,7 @@ void mean_single(core_t* core,db_t* db, int32_t i){
     }
 }
 
-void preprocess_signal(core_t* core, db_t* db, int32_t i){
+void preprocess_signal(core_t* core, db_t* db, int32_t i) {
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
@@ -276,7 +276,7 @@ void preprocess_signal(core_t* core, db_t* db, int32_t i){
 }
 
 
-void postprocess_signal(core_t* core, db_t* db, int32_t i){
+void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 
@@ -295,7 +295,7 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i){
     }
 }
 
-void process_db(core_t* core,db_t* db){
+void process_db(core_t* core, db_t* db) {
     double proc_start = realtime();
 
     double a = realtime();

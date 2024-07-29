@@ -164,6 +164,9 @@ int basecaller_main(int argc, char* argv[]) {
             if (opt.num_runners < 1) {
                 ERROR("Number of runners should larger than 0. You entered %d", opt.num_runners);
                 exit(EXIT_FAILURE);
+            } else if (opt.num_runners > 1) {
+                ERROR("Number of runners greater than 1 is not supported yet. You entered %d", opt.num_runners);
+                exit(EXIT_FAILURE);
             }
         } else if (c == 'V') {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
@@ -276,22 +279,22 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n[%s] data loading: %.3f sec", __func__, core->time_load_db);
     fprintf(stderr, "\n[%s] data processing: %.3f sec", __func__, core->time_process_db);
     // if((core->opt.flag&SLORADO_PRF) || core->opt.flag & SLORADO_ACC) {
-            fprintf(stderr, "\n[%s]     - parse: %.3f sec", __func__, core->time_parse);
-            fprintf(stderr, "\n[%s]     - preprocess: %.3f sec", __func__, core->time_preproc);
-            fprintf(stderr, "\n[%s]     - basecall: %.3f sec", __func__, core->time_basecall);
-            fprintf(stderr, "\n[%s]          - synchronisation: %.3f sec", __func__, core->time_sync);
+        fprintf(stderr, "\n[%s]     - parse: %.3f sec", __func__, core->time_parse);
+        fprintf(stderr, "\n[%s]     - preprocess: %.3f sec", __func__, core->time_preproc);
+        fprintf(stderr, "\n[%s]     - basecall: %.3f sec", __func__, core->time_basecall);
+        fprintf(stderr, "\n[%s]          - synchronisation: %.3f sec", __func__, core->time_sync);
 
     auto runner_ts = *core->runner_ts;
     for (size_t i = 0; i < runner_ts.size(); ++i) {
-            fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
-            fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_ts[i]->time_accept);
-            fprintf(stderr, "\n[%s]             - decode: %.3f sec", __func__, runner_ts[i]->time_decode);
-            fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_ts[i]->time_infer);
-            fprintf(stderr, "\n[%s]                 - copy tensor: %.3f sec", __func__, runner_ts[i]->time_cpy_score);
-            fprintf(stderr, "\n[%s]                 - score tensor: %.3f sec", __func__, runner_ts[i]->time_tscore);
-            fprintf(stderr, "\n[%s]                 - beamsearch: %.3f sec", __func__, runner_ts[i]->time_beamsearch);
+        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
+        fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_ts[i]->time_accept);
+        fprintf(stderr, "\n[%s]             - decode: %.3f sec", __func__, runner_ts[i]->time_decode);
+        fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_ts[i]->time_infer);
+        fprintf(stderr, "\n[%s]                 - init scores: %.3f sec", __func__, runner_ts[i]->time_init_score);
+        fprintf(stderr, "\n[%s]                 - scan scores: %.3f sec", __func__, runner_ts[i]->time_scan_score);
+        fprintf(stderr, "\n[%s]                 - beamsearch: %.3f sec", __func__, runner_ts[i]->time_beamsearch);
     }
-            fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
+        fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
     // }
     fprintf(stderr, "\n[%s] data output: %.3f sec", __func__, core->time_output);
 

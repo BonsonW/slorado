@@ -52,7 +52,7 @@ void accept_chunk(const int num_chunks, at::Tensor slice, const core_t* core, co
     runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
 
-std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t* core, const int runner_idx) {
+void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const core_t* core, const int runner_idx) {
     torch::InferenceMode guard;
     runner_t* runner = (*core->runners)[runner_idx];
     timestamps_t* ts = (*core->runner_ts)[runner_idx];
@@ -63,9 +63,7 @@ std::vector<DecodedChunk> call_chunks(const int num_chunks, const core_t* core, 
     ts->time_infer += realtime();
 
     LOG_DEBUG("%s", "decoding scores");
-    auto chunks = decode_cpu(scores, num_chunks, core, runner_idx);
-
-    return chunks;
+    decode_cpu(scores, chunks, num_chunks, core, runner_idx);
 }
 
 void basecall_chunks(
@@ -82,8 +80,9 @@ void basecall_chunks(
         ts->time_accept += realtime();
     }
 
+    std::vector<DecodedChunk> decoded_chunks(chunks.size());
     ts->time_decode -= realtime();
-    std::vector<DecodedChunk> decoded_chunks = call_chunks(chunks.size(), core, runner_idx);
+    call_chunks(decoded_chunks, chunks.size(), core, runner_idx);
     ts->time_decode += realtime();
 
     for (size_t i = 0; i < chunks.size(); ++i) {
