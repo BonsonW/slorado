@@ -99,25 +99,26 @@ typedef struct {
 
 /* time stamps */
 typedef struct {
-    double_t time_read;
-    double_t time_tens;
-    double_t time_trim;
-    double_t time_scale;
-    double_t time_chunk;
-    double_t time_copy;
-    double_t time_pad;
-    double_t time_assign;
-    double_t time_accept;
-    double_t time_basecall;
-    double_t time_decode;
-    double_t time_init_score;
-    double_t time_scan_score;
-    double_t time_beamsearch;
-    double_t time_infer;
-    double_t time_stitch;
-    double_t time_sync;
-    double_t time_write;
-    double_t time_total;
+    double time_read;
+    double time_tens;
+    double time_trim;
+    double time_scale;
+    double time_chunk;
+    double time_copy;
+    double time_pad;
+    double time_assign;
+    double time_accept;
+    double time_basecall;
+    double time_decode;
+    double time_init_score;
+    double time_scan_score;
+    double time_beamsearch;
+    double time_decode_cleanup;
+    double time_infer;
+    double time_stitch;
+    double time_sync;
+    double time_write;
+    double time_total;
 } timestamps_t;
 
 typedef struct {

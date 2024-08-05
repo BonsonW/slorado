@@ -293,6 +293,7 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "\n[%s]                 - init scores: %.3f sec", __func__, runner_ts[i]->time_init_score);
         fprintf(stderr, "\n[%s]                 - scan scores: %.3f sec", __func__, runner_ts[i]->time_scan_score);
         fprintf(stderr, "\n[%s]                 - beamsearch: %.3f sec", __func__, runner_ts[i]->time_beamsearch);
+        fprintf(stderr, "\n[%s]                 - cleanup: %.3f sec", __func__, runner_ts[i]->time_decode_cleanup);
     }
         fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
     // }

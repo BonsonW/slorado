@@ -217,13 +217,14 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     timestamps_t* ts = (*core->runner_ts)[runner_idx];
     
     // init scores
-    ts->time_init_score -= realtime();
     const auto options = runner->decoder_opts;
     const auto device = runner->device;
     const auto config = runner->model_config;
 
+    ts->time_init_score -= realtime();
     const auto scores_TNC = scores.to(torch::kCPU).to(DTYPE_CPU).transpose(0, 1).contiguous();
-
+    ts->time_init_score += realtime();
+    
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
     const int C = scores_TNC.size(2);
@@ -235,7 +236,6 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     torch::Tensor bwd_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
     torch::Tensor fwd_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
     torch::Tensor post_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
-    ts->time_init_score += realtime();
     
     // create threads
     const int target_threads = core->opt.num_thread / core->runners->size();
@@ -287,4 +287,5 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
         NEG_CHK(ret);
     }
     ts->time_beamsearch += realtime();
+    ts->time_decode_cleanup -= realtime();
 }

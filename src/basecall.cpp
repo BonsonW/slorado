@@ -64,6 +64,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 
     LOG_DEBUG("%s", "decoding scores");
     decode_cpu(scores, chunks, num_chunks, core, runner_idx);
+    ts->time_decode_cleanup += realtime();
 }
 
 void basecall_chunks(
