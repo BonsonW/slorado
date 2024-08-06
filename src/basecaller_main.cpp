@@ -290,7 +290,11 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_ts[i]->time_accept);
         fprintf(stderr, "\n[%s]             - decode: %.3f sec", __func__, runner_ts[i]->time_decode);
         fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_ts[i]->time_infer);
-        fprintf(stderr, "\n[%s]                 - init scores: %.3f sec", __func__, runner_ts[i]->time_init_score);
+        fprintf(stderr, "\n[%s]                 - prep scores: %.3f sec", __func__, runner_ts[i]->time_prep_score);
+        fprintf(stderr, "\n[%s]                     - copy to cpu: %.3f sec", __func__, runner_ts[i]->time_copy_score);
+        fprintf(stderr, "\n[%s]                     - convert type: %.3f sec", __func__, runner_ts[i]->time_dtype_score);
+        fprintf(stderr, "\n[%s]                     - transpose: %.3f sec", __func__, runner_ts[i]->time_tpose_score);
+        fprintf(stderr, "\n[%s]                     - contiguous: %.3f sec", __func__, runner_ts[i]->time_contig_score);
         fprintf(stderr, "\n[%s]                 - scan scores: %.3f sec", __func__, runner_ts[i]->time_scan_score);
         fprintf(stderr, "\n[%s]                 - beamsearch: %.3f sec", __func__, runner_ts[i]->time_beamsearch);
         fprintf(stderr, "\n[%s]                 - cleanup: %.3f sec", __func__, runner_ts[i]->time_decode_cleanup);

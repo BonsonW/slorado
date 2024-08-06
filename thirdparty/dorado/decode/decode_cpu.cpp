@@ -221,9 +221,25 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     const auto device = runner->device;
     const auto config = runner->model_config;
 
-    ts->time_init_score -= realtime();
-    const auto scores_TNC = scores.to(torch::kCPU).to(DTYPE_CPU).transpose(0, 1).contiguous();
-    ts->time_init_score += realtime();
+    ts->time_prep_score -= realtime();
+
+    ts->time_copy_score -= realtime();
+    auto scores_TNC = scores.to(torch::kCPU);
+    ts->time_copy_score += realtime();
+
+    ts->time_dtype_score -= realtime();
+    scores_TNC = scores_TNC.to(DTYPE_CPU);
+    ts->time_dtype_score += realtime();
+    
+    ts->time_tpose_score -= realtime();
+    scores_TNC = scores_TNC.transpose(0, 1);
+    ts->time_tpose_score += realtime();
+
+    ts->time_contig_score -= realtime();
+    scores_TNC = scores_TNC.contiguous();
+    ts->time_contig_score += realtime();
+
+    ts->time_prep_score += realtime();
     
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
