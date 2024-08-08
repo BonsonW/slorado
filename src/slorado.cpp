@@ -79,15 +79,15 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     }
 
     core->runners = new std::vector<runner_t*>();
-    core->runner_ts = new std::vector<timestamps_t*>();
+    core->runner_stats = new std::vector<runner_stat_t*>();
 
     core->time_init_runners -= realtime();
 
     if (strcmp(opt.device, "cpu") == 0) {
         std::string device = opt.device;
         for (int i = 0; i < opt.num_runners; ++i) {
-            core->runner_ts->push_back((timestamps_t*)malloc(sizeof(timestamps_t)));
-            init_timestamps((*core->runner_ts).back());
+            core->runner_stats->push_back((runner_stat_t*)malloc(sizeof(runner_stat_t)));
+            init_runner_stat((*core->runner_stats).back());
 
             core->runners->push_back(new runner_t());
             init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
@@ -100,9 +100,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
         for (auto device: devices) {
             for (int i = 0; i < opt.num_runners; ++i) {
-                core->runner_ts->push_back((timestamps_t*)malloc(sizeof(timestamps_t)));
-                init_timestamps((*core->runner_ts).back());
-
+                core->runner_stats->push_back((runner_stat_t*)malloc(sizeof(runner_stat_t)));
+                init_runner_stat((*core->runner_stats).back());
                 core->runners->push_back(new runner_t());
                 init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_GPU);
             }
@@ -145,8 +144,8 @@ void free_core(core_t* core, opt_t opt) {
     }
 #endif
 
-    for (size_t i = 0; i < core->runner_ts->size(); ++i) {
-        free((*core->runner_ts)[i]);
+    for (size_t i = 0; i < core->runner_stats->size(); ++i) {
+        free((*core->runner_stats)[i]);
     }
 
     for (size_t i = 0; i < core->runners->size(); ++i) {
@@ -155,7 +154,7 @@ void free_core(core_t* core, opt_t opt) {
 
     slow5_close(core->sp);
     delete core->runners;
-    delete core->runner_ts;
+    delete core->runner_stats;
     free(core);
 }
 
@@ -396,9 +395,9 @@ void init_opt(opt_t* opt) {
 #endif
 }
 
-/* initialise timestamps */
-void init_timestamps(timestamps_t* time_stamps) {
-    memset(time_stamps, 0, sizeof(timestamps_t));
+/* initialise runner_stat */
+void init_runner_stat(runner_stat_t* time_stamps) {
+    memset(time_stamps, 0, sizeof(runner_stat_t));
 }
 
 /* initialise runners */
@@ -431,6 +430,9 @@ void init_runner(
     chunk_size -= chunk_size % runner->model_stride;
     runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     runner->chunk_size = runner->input_tensor.size(2);
+
+    int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
+    runner->device_idx = device_idx;
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }

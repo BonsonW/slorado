@@ -123,7 +123,9 @@ typedef struct {
     double time_sync;
     double time_write;
     double time_total;
-} timestamps_t;
+
+    uint total_dp;
+} runner_stat_t;
 
 typedef struct {
     std::string device;
@@ -134,6 +136,7 @@ typedef struct {
     size_t model_stride;
     size_t chunk_size;
     CRFModelConfig model_config;
+    int64_t device_idx;
 } runner_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
@@ -162,8 +165,8 @@ typedef struct {
     double time_postproc;
     double time_output;
 
-    // timings for runners
-    std::vector<timestamps_t *> *runner_ts;
+    // stats for each runner
+    std::vector<runner_stat_t *> *runner_stats;
 
     // stats, set by output_db
     int64_t sum_bytes;
@@ -231,8 +234,8 @@ void free_db(db_t* db);
 /* free the core data structure */
 void free_core(core_t* core,opt_t opt);
 
-/* initialise timestamps */
-void init_timestamps(timestamps_t* time_stamps);
+/* initialise runner_stat */
+void init_runner_stat(runner_stat_t* time_stamps);
 
 /* intialise model runner */
 void init_runner(runner_t* runner, const std::string &model_path, const std::string &device, int chunk_size, int batch_size, torch::ScalarType dtype);

@@ -214,7 +214,7 @@ void* pthread_single_beam_search(void* voidargs) {
 
 void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_results, const int num_chunks, const core_t* core, const int runner_idx) {
     const runner_t* runner = (*core->runners)[runner_idx];
-    timestamps_t* ts = (*core->runner_ts)[runner_idx];
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
     
     // init scores
     const auto options = runner->decoder_opts;
@@ -246,6 +246,8 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     const int C = scores_TNC.size(2);
     const int n_base = 4;
     const int m_states = std::pow(n_base, config.state_len);
+
+    ts->total_dp += T * N * C;
 
     LOG_TRACE("scores tensor dim: %d, %d, %d", T, N, C);
 
