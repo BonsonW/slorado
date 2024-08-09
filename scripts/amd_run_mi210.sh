@@ -20,4 +20,4 @@ BATCHSIZE=1000
 CHUNKSIZE=10000
 THREADS=16
 
-/usr/bin/time  --verbose ./slorado basecaller -t $THREADS -c $CHUNKSIZE -C $BATCHSIZE -B500M -x $DEVICE --verbose 5 models/dna_r10.4.1_e8.2_400bps_${MODEL}@v4.2.0 $BLOW5 > reads.fastq
+/usr/bin/time  --verbose ./slorado basecaller -t $THREADS -c $CHUNKSIZE -C $BATCHSIZE -B500M -x $DEVICE --verbose 5 models/dna_r10.4.1_e8.2_400bps_${MODEL}@v4.2.0 $BLOW5 > reads.fastq > hg2_prom_lsk114_5khz_subsubsample_finetiming.log 2>&1
