@@ -13,8 +13,8 @@ fi
 
 make clean && make -j rocm=1
 
-DEVICE=$1
-BLOW5=$2
+DEVICE=cuda:0
+BLOW5=../data/PGXXXX230339_reads_20k.blow5
 MODEL=fast
 BATCHSIZE=1000
 CHUNKSIZE=10000
