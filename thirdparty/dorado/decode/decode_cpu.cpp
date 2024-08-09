@@ -220,24 +220,36 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     const auto options = runner->decoder_opts;
     const auto device = runner->device;
     const auto config = runner->model_config;
+    auto scores_TNC = scores;
 
     ts->time_prep_score -= realtime();
 
-    ts->time_copy_score -= realtime();
-    auto scores_TNC = scores.to(torch::kCPU);
-    ts->time_copy_score += realtime();
+    // this is a little bit faster
+    // no benchmarking the extra stuff tho
+    // bool non_blocking = false;
+    // bool copy = false;
+    // ts->time_copy_score -= realtime();
+    // scores_TNC = scores_TNC.to(torch::kCPU, DTYPE_CPU, non_blocking, copy, torch::MemoryFormat::Contiguous);
+    // ts->time_copy_score += realtime();
 
     ts->time_dtype_score -= realtime();
     scores_TNC = scores_TNC.to(DTYPE_CPU);
+    torch::cuda::synchronize(runner->device_idx);
     ts->time_dtype_score += realtime();
     
     ts->time_tpose_score -= realtime();
     scores_TNC = scores_TNC.transpose(0, 1);
+    torch::cuda::synchronize(runner->device_idx);
     ts->time_tpose_score += realtime();
 
     ts->time_contig_score -= realtime();
     scores_TNC = scores_TNC.contiguous();
+    torch::cuda::synchronize(runner->device_idx);
     ts->time_contig_score += realtime();
+
+    ts->time_copy_score -= realtime();
+    scores_TNC = scores_TNC.to(torch::kCPU);
+    ts->time_copy_score += realtime();
 
     ts->time_prep_score += realtime();
     
