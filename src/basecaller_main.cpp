@@ -298,7 +298,7 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "\n[%s]                 - scan scores: %.3f sec", __func__, runner_stats[i]->time_scan_score);
         fprintf(stderr, "\n[%s]                 - beamsearch: %.3f sec", __func__, runner_stats[i]->time_beamsearch);
         fprintf(stderr, "\n[%s]                 - cleanup: %.3f sec", __func__, runner_stats[i]->time_decode_cleanup);
-        fprintf(stderr, "\n[%s]             - total data points copied: %u", __func__, runner_stats[i]->total_dp);
+        fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
     }
         fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
     // }

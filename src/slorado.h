@@ -124,7 +124,7 @@ typedef struct {
     double time_write;
     double time_total;
 
-    uint total_dp;
+    uint64_t total_dp;
 } runner_stat_t;
 
 typedef struct {
