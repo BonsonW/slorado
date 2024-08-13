@@ -110,11 +110,7 @@ typedef struct {
     double time_accept;
     double time_basecall;
     double time_decode;
-    double time_prep_score;
     double time_copy_score;
-    double time_dtype_score;
-    double time_tpose_score;
-    double time_contig_score;
     double time_scan_score;
     double time_beamsearch;
     double time_decode_cleanup;
