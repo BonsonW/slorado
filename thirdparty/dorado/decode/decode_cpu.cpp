@@ -222,10 +222,8 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     const auto config = runner->model_config;
     auto scores_TNC = scores;
 
-    bool non_blocking = false;
-    bool copy = false;
     ts->time_copy_score -= realtime();
-    scores_TNC = scores_TNC.to(torch::kCPU, DTYPE_CPU, non_blocking, copy, torch::MemoryFormat::Contiguous).transpose(0, 1);
+    scores_TNC = scores_TNC.to(torch::kCPU).to(DTYPE_CPU).transpose(0, 1).contiguous();
     ts->time_copy_score += realtime();
     
     const int T = scores_TNC.size(0);
