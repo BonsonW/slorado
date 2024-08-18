@@ -9,42 +9,42 @@
 
 using Slice = torch::indexing::Slice;
 
-void backward_scan(const float *scores_in, float *out, const int chunk, const int T, const int N, const int num_states) {
-    const int kNumBases = 4;
-    const int kNumTransitions = kNumBases + 1;
+void backward_scan(const float *scores_in, float *out, const uint64_t chunk, const uint64_t T, const uint64_t N, const uint64_t num_states) {
+    const uint64_t kNumBases = 4;
+    const uint64_t kNumTransitions = kNumBases + 1;
     const float kFixedStayScore = 2.0f;
 
-    const int ts_states = num_states * kNumBases;
+    const uint64_t ts_states = num_states * kNumBases;
 
     const float* const chunk_in = scores_in + chunk * ts_states; // should be half float (for GPU impl)
     float* const chunk_out = out + chunk * (T+1) * num_states;
     float* const alpha_init = chunk_out + num_states * T;
-    for (int state = 0; state < num_states; ++state) { // (for GPU impl) its 1 thread per state, but below we iterate through all the states on 1 thread
+    for (uint64_t state = 0; state < num_states; ++state) { // (for GPU impl) its 1 thread per state, but below we iterate through all the states on 1 thread
         alpha_init[state] = 0.0f;
     }
 
-    for (int ts = 0; ts < T; ++ts) {
+    for (uint64_t ts = 0; ts < T; ++ts) {
         // threadgroup_barrier(mem_flags::medevice); // synchronize all threads before next time step (for GPU impl)
         const float* const ts_in = chunk_in + N * ts_states * (T - ts - 1);
         float* const ts_alpha_in = alpha_init - num_states * ts;
         float* const ts_alpha_out = ts_alpha_in - num_states;
 
-        for (int state = 0; state < num_states; ++state) { // we should have 1 thread for each state (for GPU impl)
-            const int stay_state_idx = state;
-            const int step_state_idx_a = (state * kNumBases) % num_states;
-            const int step_trans_idx_a = step_state_idx_a * kNumBases +
+        for (uint64_t state = 0; state < num_states; ++state) { // we should have 1 thread for each state (for GPU impl)
+            const uint64_t stay_state_idx = state;
+            const uint64_t step_state_idx_a = (state * kNumBases) % num_states;
+            const uint64_t step_trans_idx_a = step_state_idx_a * kNumBases +
                 ((state * kNumBases) / num_states);
 
             float vals[kNumTransitions];
             vals[0] = ts_alpha_in[stay_state_idx] + kFixedStayScore;
             float max_val = vals[0];
-            for (int base = 0; base < kNumBases; ++base) {
+            for (uint64_t base = 0; base < kNumBases; ++base) {
                 vals[base + 1] = ts_alpha_in[step_state_idx_a + base] +
                     ts_in[step_trans_idx_a + base * kNumBases];
                 max_val = max_val > vals[base + 1] ? max_val : vals[base + 1];
             }
             float sum = 0.0f;
-            for (int i = 0; i < kNumTransitions; ++i) {
+            for (uint64_t i = 0; i < kNumTransitions; ++i) {
                 sum += exp(vals[i] - max_val);
             }
             ts_alpha_out[state] = max_val + log(sum);
@@ -52,33 +52,33 @@ void backward_scan(const float *scores_in, float *out, const int chunk, const in
     }
 }
 
-void forward_scan(const float *scores_in, const float *bwd, float *out, const int chunk, const int _T, const int N, const int num_states) {
-    const int T = _T+1; 
-    constexpr int kNumBases = 4;
-    constexpr int kNumTransitions = kNumBases + 1;
+void forward_scan(const float *scores_in, const float *bwd, float *out, const uint64_t chunk, const uint64_t _T, const uint64_t N, const uint64_t num_states) {
+    const uint64_t T = _T+1; 
+    constexpr uint64_t kNumBases = 4;
+    constexpr uint64_t kNumTransitions = kNumBases + 1;
     constexpr float kFixedStayScore = 2.0f;
     
-    const int kMsb = num_states / kNumBases;
-    const int ts_states = num_states * kNumBases;
+    const uint64_t kMsb = num_states / kNumBases;
+    const uint64_t ts_states = num_states * kNumBases;
 
     // This batch element's scores.
     const float* const chunk_scores = scores_in + chunk * ts_states;
 
     // Alternating forward guide buffers used for successive time steps.
-    constexpr int kMaxStates = 1024;
+    constexpr uint64_t kMaxStates = 1024;
     float ts_fwd[2][kMaxStates]; // threadgroup
 
     // The forward guide input for the first step is 0.
-    for (int state = 0; state < num_states; ++state) {
+    for (uint64_t state = 0; state < num_states; ++state) {
         ts_fwd[0][state] = 0.0f;
     }
     // threadgroup_barrier(mem_flags::mem_threadgroup); // ------------------------------------------------------------------
 
-    for (int ts = 0; ts < T; ++ts) {
+    for (uint64_t ts = 0; ts < T; ++ts) {
         // We read forward guide values written to TG memory in the previous step as
         // inputs to this step.  However, there has already been a TG barrier since
         // they were written.
-        const int ts_idx = (chunk * T + ts) * num_states;
+        const uint64_t ts_idx = (chunk * T + ts) * num_states;
 
         // This time step's scores.
         const float* const ts_scores = chunk_scores + N * ts_states * ts;
@@ -90,13 +90,13 @@ void forward_scan(const float *scores_in, const float *bwd, float *out, const in
         // Calculate the next time step's forward guide from this time step's scores
         // and forward guide.  It's written to threadgroup memory for use in the
         // next iteration.
-        for (int state = 0; state < num_states; ++state) { // we should have 1 thread for each state (for GPU impl)
-            const int stay_state_idx = state;
-            const int step_state_idx_a = state / kNumBases;
-            const int step_trans_idx_a = state * kNumBases;
+        for (uint64_t state = 0; state < num_states; ++state) { // we should have 1 thread for each state (for GPU impl)
+            const uint64_t stay_state_idx = state;
+            const uint64_t step_state_idx_a = state / kNumBases;
+            const uint64_t step_trans_idx_a = state * kNumBases;
             float vals[kNumTransitions];
             float fwd_max_val = vals[0] = ts_alpha_in[stay_state_idx] + kFixedStayScore;
-            for (int base = 0; base < kNumBases; ++base) {
+            for (uint64_t base = 0; base < kNumBases; ++base) {
                 // todo: this is a bandaid for indexing past the actual T dimension of scores
                 // need to verify with actual MetalTxCaller impl output,
                 // otherwise output remains exactly the same for this impl whether it indexes past or not
@@ -106,7 +106,7 @@ void forward_scan(const float *scores_in, const float *bwd, float *out, const in
                 fwd_max_val = fwd_max_val > vals[base + 1] ? fwd_max_val : vals[base + 1];
             }
             float fwd_sum = 0.0f;
-            for (int i = 0; i < kNumTransitions; ++i) {
+            for (uint64_t i = 0; i < kNumTransitions; ++i) {
                 fwd_sum += exp(vals[i] - fwd_max_val);
             }
             ts_alpha_out[state] = fwd_max_val + log(fwd_sum);
@@ -122,26 +122,26 @@ void forward_scan(const float *scores_in, const float *bwd, float *out, const in
     }
 }
 
-void softmax(const float *fwd, float *out, const int chunk, const int _T, const int num_states) {
-    const int T = _T+1; 
-    for (int ts = 0; ts < T; ++ts) {
-        const int ts_idx = (chunk * T + ts) * num_states;
+void softmax(const float *fwd, float *out, const uint64_t chunk, const uint64_t _T, const uint64_t num_states) {
+    const uint64_t T = _T+1; 
+    for (uint64_t ts = 0; ts < T; ++ts) {
+        const uint64_t ts_idx = (chunk * T + ts) * num_states;
 
         float max_val = fwd[ts_idx];
-        for (int state = 0; state < num_states; ++state) {
+        for (uint64_t state = 0; state < num_states; ++state) {
             max_val = max_val > fwd[ts_idx + state] ? max_val : fwd[ts_idx + state];
         }
 
         float exp_sum = 0;
         float exp_vals[num_states];
-        for (int state = 0; state < num_states; ++state) {
+        for (uint64_t state = 0; state < num_states; ++state) {
             const float val = fwd[ts_idx + state];
             const float exp_val = exp(val - max_val);
             exp_vals[state] = exp_val;
             exp_sum += exp_val;
         }
 
-        for (int state = 0; state < num_states; ++state) {
+        for (uint64_t state = 0; state < num_states; ++state) {
             const float exp_val = exp_vals[state];
 
             // Write out the posterior probability 
@@ -225,7 +225,7 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     bool non_blocking = false;
     bool copy = false;
     ts->time_copy_score -= realtime();
-    scores_TNC = scores_TNC.to(torch::kCPU, DTYPE_CPU, non_blocking, copy, torch::MemoryFormat::Contiguous);
+    scores_TNC = scores_TNC.to(torch::kCPU, DTYPE_CPU, non_blocking, copy, torch::MemoryFormat::Contiguous).transpose(0, 1);
     ts->time_copy_score += realtime();
     
     const int T = scores_TNC.size(0);
