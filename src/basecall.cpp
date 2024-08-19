@@ -60,7 +60,9 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     LOG_DEBUG("%s", "basecalling chunks");
     ts->time_infer -= realtime();
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
+#ifdef USE_GPU
     torch::cuda::synchronize(runner->device_idx);
+#endif
     ts->time_infer += realtime();
 
     LOG_DEBUG("%s", "decoding scores");
