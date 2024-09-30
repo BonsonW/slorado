@@ -52,22 +52,27 @@ inline int get_num_states(size_t num_trans_states) {
 }
 
 static inline std::tuple<std::string, std::string> generate_sequence(
-    const std::vector<uint8_t>& moves,
-    const std::vector<int32_t>& states,
+    const uint8_t* moves,
+    const int32_t* states,
     const std::vector<float>& qual_data,
-    float shift,
-    float scale
+    const float shift,
+    const float scale,
+    const size_t num_ts
 ) {
     size_t seqPos = 0;
-    size_t num_blocks = moves.size();
-    size_t seqLen = accumulate(moves.begin(), moves.end(), 0);
+    size_t seqLen = 0;
+    for (int i = 0; i < num_ts; ++i) {
+        seqLen += moves[i];
+    }
+    // fprintf(stderr, "num_ts: %zu, seqLen: %zu", num_ts, seqLen);
 
     std::string sequence(seqLen, 'N');
     std::string qstring(seqLen, '!');
-    std::array<char, 4> alphabet = {'A', 'C', 'G', 'T'};
-    std::vector<float> baseProbs(seqLen), totalProbs(seqLen);
+    const char alphabet[4] = {'A', 'C', 'G', 'T'};
+    std::vector<float> baseProbs(seqLen);
+    std::vector<float> totalProbs(seqLen);
 
-    for (size_t blk = 0; blk < num_blocks; ++blk) {
+    for (size_t blk = 0; blk < num_ts; ++blk) {
         int state = states[blk];
         int move = int(moves[blk]);
         int base = state & 3;
@@ -75,11 +80,11 @@ static inline std::tuple<std::string, std::string> generate_sequence(
         int probPos = int(seqPos) + offset;
 
         // get the probability for the called base.
-        baseProbs[probPos] += qual_data[blk * alphabet.size() + base];
+        baseProbs[probPos] += qual_data[blk * NUM_BASES + base];
 
         // accumulate the total probability for all possible bases at this position, for normalization.
-        for (size_t k = 0; k < alphabet.size(); ++k) {
-            totalProbs[probPos] += qual_data[blk * alphabet.size() + k];
+        for (size_t k = 0; k < NUM_BASES; ++k) {
+            totalProbs[probPos] += qual_data[blk * NUM_BASES + k];
         }
 
         if (blk == 0) {
@@ -377,15 +382,15 @@ static inline float find_cutoff(
 
 void compute_qual_base_data(
     std::vector<float>& qual_data,
-    std::vector<int32_t>& states,
+    int32_t* states,
     const float* const posts,
-    const size_t num_blocks,
+    const size_t num_ts,
     const size_t num_states,
     const size_t num_state_bits
 ) {
     int shifted_states[2 * NUM_BASES];
     
-    for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
+    for (size_t block_idx = 0; block_idx < num_ts; ++block_idx) {
         int state = states[block_idx];
         states[block_idx] = states[block_idx] % NUM_BASES;
         int base_to_emit = states[block_idx];
@@ -460,12 +465,12 @@ float beam_search(
     const float* const back_guide,
     const float* const posts,
     int num_state_bits,
-    size_t num_blocks,
+    size_t num_ts,
     size_t max_beam_width,
     float beam_cut,
     float fixed_stay_score,
-    std::vector<int32_t>& states,
-    std::vector<uint8_t>& moves,
+    int32_t* states,
+    uint8_t* moves,
     std::vector<float>& qual_data,
     float temperature,
     float score_scale
@@ -475,7 +480,7 @@ float beam_search(
     }
 
     // create the beam, we need to keep beam_width elements for each block, plus the initial state
-    std::vector<BeamElement> beam_vector(max_beam_width * (num_blocks + 1));
+    std::vector<BeamElement> beam_vector(max_beam_width * (num_ts + 1));
 
     const size_t num_states = 1 << num_state_bits;
     const state_t states_mask = static_cast<state_t>(num_states - 1);
@@ -493,7 +498,7 @@ float beam_search(
     init_beams<T>(back_guide, beam_vector, prev_beam_front, prev_scores, current_beam_width, max_beam_width, num_states);
 
     // extend beams
-    for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
+    for (size_t block_idx = 0; block_idx < num_ts; ++block_idx) {
         // a k=1 Bloom filter, indicating the presence of steps with particular sequence hashes
         // avoids comparing stay hashes against all possible progenitor states where none of them has the requisite sequence hash
         std::bitset<HASH_PRESENT_BITS> step_hash_present;  // default constructor zeros content
@@ -532,7 +537,7 @@ float beam_search(
         }
 
         // at the last timestep, we need to ensure the best path corresponds to element 0
-        if (block_idx == num_blocks - 1) {
+        if (block_idx == num_ts - 1) {
             float best_score = std::numeric_limits<float>::lowest();
             size_t best_score_index = 0;
             for (size_t i = 0; i < elem_count; i++) {
@@ -563,13 +568,9 @@ float beam_search(
     // extract final score
     const float final_score = prev_scores[0];
 
-    // write out sequence bases and move table
-    moves.resize(num_blocks);
-    states.resize(num_blocks);
-
     // note that we don't emit the seed state at the front of the beam, hence the -1 offset when copying the path
     uint8_t element_index = 0;
-    for (size_t beam_idx = num_blocks; beam_idx != 0; --beam_idx) {
+    for (size_t beam_idx = num_ts; beam_idx != 0; --beam_idx) {
         size_t beam_addr = beam_idx * max_beam_width + element_index;
         states[beam_idx - 1] = int32_t(beam_vector[beam_addr].state);
         moves[beam_idx - 1] = beam_vector[beam_addr].stay ? 0 : 1;
@@ -578,7 +579,7 @@ float beam_search(
     moves[0] = 1;  // always step in the first event
 
     // compute qual data
-    compute_qual_base_data(qual_data, states, posts, num_blocks, num_states, num_state_bits);
+    compute_qual_base_data(qual_data, states, posts, num_ts, num_states, num_state_bits);
 
     return final_score;
 }
@@ -595,7 +596,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     float temperature,
     float byte_score_scale
 ) {
-    const int num_blocks = int(scores_t.size(0));
+    const int num_ts = int(scores_t.size(0));
     const int num_states = get_num_states(scores_t.size(1));
     const int num_state_bits = static_cast<int>(std::log2(num_states));
     if (1 << num_state_bits != num_states) {
@@ -615,9 +616,13 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     // scores_t may come from a tensor with chunks interleaved, but make sure the last dimension is contiguous
     auto scores_block_contig = (scores_t.stride(1) == 1) ? scores_t : scores_t.contiguous();
 
-    std::vector<int32_t> states(num_blocks);
-    std::vector<uint8_t> moves(num_blocks);
-    std::vector<float> qual_data(num_blocks * NUM_BASES);
+    uint8_t* moves = (uint8_t*)malloc(num_ts * sizeof(uint8_t));
+    MALLOC_CHK(moves);
+
+    int32_t* states = (int32_t*)malloc(num_ts * sizeof(int32_t));
+    MALLOC_CHK(states);
+
+    std::vector<float> qual_data(num_ts * NUM_BASES);
 
     const size_t scores_block_stride = scores_block_contig.stride(0);
     if (scores_t.dtype() == torch::kFloat32) {
@@ -626,14 +631,14 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         const auto posts = posts_contig->data_ptr<float>();
 
         beam_search<float>(scores, scores_block_stride, back_guides, posts, num_state_bits,
-                           num_blocks, max_beam_width, beam_cut, fixed_stay_score, states, moves,
+                           num_ts, max_beam_width, beam_cut, fixed_stay_score, states, moves,
                            qual_data, temperature, 1.0f);
     } else if (scores_t.dtype() == torch::kInt8) {
         const auto scores = scores_block_contig.data_ptr<int8_t>();
         const auto back_guides = back_guides_contig->data_ptr<float>();
         const auto posts = posts_contig->data_ptr<float>();
         beam_search<int8_t>(scores, scores_block_stride, back_guides, posts, num_state_bits,
-                            num_blocks, max_beam_width, beam_cut, fixed_stay_score, states, moves,
+                            num_ts, max_beam_width, beam_cut, fixed_stay_score, states, moves,
                             qual_data, temperature, byte_score_scale);
     } else {
         throw std::runtime_error(std::string("beam_search_decode: unsupported tensor type ") +
@@ -641,7 +646,13 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     }
 
     std::string sequence, qstring;
-    std::tie(sequence, qstring) = generate_sequence(moves, states, qual_data, q_shift, q_scale);
+    std::tie(sequence, qstring) = generate_sequence(moves, states, qual_data, q_shift, q_scale, num_ts);
 
-    return std::make_tuple(sequence, qstring, moves);
+    std::vector<uint8_t> moves_vec(num_ts);
+    std::copy(moves, moves + num_ts, moves_vec.begin());
+
+    free(states);
+    free(moves);
+
+    return std::make_tuple(sequence, qstring, moves_vec);
 }
