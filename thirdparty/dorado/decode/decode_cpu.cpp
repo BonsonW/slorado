@@ -199,7 +199,7 @@ void* pthread_single_beam_search(void* voidargs) {
         LOG_TRACE("post dimensions: %ld, %ld", post.size(0), post.size(1));
 
         auto decode_result = beam_search_decode(
-                scores, bwd, post, options->beam_width, options->beam_cut,
+                scores, bwd, post, 32, options->beam_cut,
                 options->blank_score, options->q_shift, options->q_scale,
                 options->temperature, 1.0f);
         (*args->chunk_results)[c] = DecodedChunk{

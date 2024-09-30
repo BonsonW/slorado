@@ -123,20 +123,23 @@ uint32_t crc32c(uint32_t crc, uint32_t new_bits) {
 }
 
 template <typename T, typename U>
-float beam_search(const T* const scores,
-                  size_t scores_block_stride,
-                  const float* const back_guide,
-                  const U* const posts,
-                  int num_state_bits,
-                  size_t num_blocks,
-                  size_t max_beam_width,
-                  float beam_cut,
-                  float fixed_stay_score,
-                  int32_t* states,
-                  uint8_t* moves,
-                  float* qual_data,
-                  float score_scale,
-                  float posts_scale) {
+float beam_search(
+    const T* const scores,
+    size_t scores_block_stride,
+    const float* const back_guide,
+    const U* const posts,
+    const int num_state_bits,
+    const size_t num_blocks,
+    const size_t max_beam_width,
+    const float beam_cut,
+    const float fixed_stay_score,
+    int32_t* states,
+    uint8_t* moves,
+    float* qual_data,
+    float score_scale,
+    float posts_scale,
+    BeamElement* beam_vector
+) {
     const size_t num_states = 1ull << num_state_bits;
     const auto states_mask = static_cast<state_t>(num_states - 1);
 
@@ -146,21 +149,17 @@ float beam_search(const T* const scores,
 
     // Some values we need
     constexpr uint32_t CRC_SEED = 0x12345678u;
-    const float log_beam_cut =
-            (beam_cut > 0.0f) ? logf(beam_cut) : std::numeric_limits<float>::max();
-
-    // Create the beam.  We need to keep beam_width elements for each block, plus the initial state
-    std::vector<BeamElement> beam_vector(max_beam_width * (num_blocks + 1));
+    const float log_beam_cut = (beam_cut > 0.0f) ? logf(beam_cut) : std::numeric_limits<float>::max();
 
     // Create the previous and current beam fronts
     // Each existing element can be extended by one of NUM_BASES, or be a stay.
-    size_t max_beam_candidates = (NUM_BASES + 1) * max_beam_width;
+    const size_t max_beam_candidates = (NUM_BASES + 1) * max_beam_width;
 
-    std::vector<BeamFrontElement> current_beam_front(max_beam_candidates);
-    std::vector<BeamFrontElement> prev_beam_front(max_beam_candidates);
+    BeamFrontElement current_beam_front[max_beam_candidates];
+    BeamFrontElement prev_beam_front[max_beam_candidates];
 
-    std::vector<float> current_scores(max_beam_candidates);
-    std::vector<float> prev_scores(max_beam_candidates);
+    float current_scores[max_beam_candidates];
+    float prev_scores[max_beam_candidates];
 
     // Find the score an initial element needs in order to make it into the beam
     T beam_init_threshold = std::numeric_limits<T>::lowest();
@@ -313,7 +312,7 @@ float beam_search(const T* const scores,
         auto get_elem_count = [new_elem_count, &beam_cutoff_score, &current_scores]() {
             // Count the elements which meet the beam cutoff.
             size_t elem_count = 0;
-            const float* score_ptr = current_scores.data();
+            const float* score_ptr = current_scores;
             for (int i = int(new_elem_count); i; --i) {
                 if (*score_ptr >= beam_cutoff_score) {
                     ++elem_count;
@@ -419,116 +418,117 @@ float beam_search(const T* const scores,
     }
     moves[0] = 1;  // Always step in the first event
 
-    int shifted_states[2 * NUM_BASES];
+    // new compute
+    // int shifted_states[2 * NUM_BASES];
 
     // Compute per-base qual data
-    for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
-        int state = states[block_idx];
-        states[block_idx] = states[block_idx] % NUM_BASES;
-        int base_to_emit = states[block_idx];
-
-        // Compute a probability for this block, based on the path kmer. See the following explanation:
-        // https://git.oxfordnanolabs.local/machine-learning/notebooks/-/blob/master/bonito-basecaller-qscores.ipynb
-        const U* const timestep_posts = posts + ((block_idx + 1) << num_state_bits);
-        const auto fetch_post = [timestep_posts, posts_scale](size_t idx) {
-            return static_cast<float>(timestep_posts[idx]) * posts_scale;
-        };
-
-        float block_prob = fetch_post(state);
-
-        // Get indices of left- and right-shifted kmers
-        int l_shift_idx = state >> NUM_BASE_BITS;
-        int r_shift_idx = (state << NUM_BASE_BITS) % num_states;
-        int msb = int(num_states) >> NUM_BASE_BITS;
-        int l_shift_state, r_shift_state;
-        for (int shift_base = 0; shift_base < NUM_BASES; ++shift_base) {
-            l_shift_state = l_shift_idx + msb * shift_base;
-            shifted_states[2 * shift_base] = l_shift_state;
-
-            r_shift_state = r_shift_idx + shift_base;
-            shifted_states[2 * shift_base + 1] = r_shift_state;
-        }
-
-        // Add probabilities for unique states
-        int candidate_state;
-        for (size_t state_idx = 0; state_idx < 2 * NUM_BASES; ++state_idx) {
-            candidate_state = shifted_states[state_idx];
-            // don't double-count this shifted state if it matches the current state
-            bool count_state = (candidate_state != state);
-            // or any other shifted state that we've seen so far
-            if (count_state) {
-                for (size_t inner_state = 0; inner_state < state_idx; ++inner_state) {
-                    if (shifted_states[inner_state] == candidate_state) {
-                        count_state = false;
-                        break;
-                    }
-                }
-            }
-            if (count_state) {
-                block_prob += fetch_post(candidate_state);
-            }
-        }
-        
-        if (block_prob < 0.0f) block_prob = 0.0f;
-        else if (block_prob > 1.0f) block_prob = 1.0f;
-
-        block_prob = std::pow(block_prob, 0.4f);  // Power fudge factor
-
-        // Calculate a placeholder qscore for the "wrong" bases
-        const float wrong_base_prob = (1.0f - block_prob) / 3.0f;
-
-        for (size_t base = 0; base < NUM_BASES; base++) {
-            qual_data[block_idx * NUM_BASES + base] =
-                    (int(base) == base_to_emit ? block_prob : wrong_base_prob);
-        }
-    }
-
-    // old compute
-    // int hp_states[4] = {0, 0, 0,
-    //                     0};  // What state index are the four homopolymers (A is always state 0)
-    // hp_states[3] = int(num_states) - 1;  // homopolymer T is always the last state. (11b per base)
-    // hp_states[1] = hp_states[3] / 3;     // calculate hp C from hp T (01b per base)
-    // hp_states[2] = hp_states[1] * 2;     // calculate hp G from hp C (10b per base)
-
-    // // Compute per-base qual data
-    // for (size_t block_idx = 0; block_idx < num_blocks; block_idx++) {
+    // for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
     //     int state = states[block_idx];
     //     states[block_idx] = states[block_idx] % NUM_BASES;
     //     int base_to_emit = states[block_idx];
 
     //     // Compute a probability for this block, based on the path kmer. See the following explanation:
     //     // https://git.oxfordnanolabs.local/machine-learning/notebooks/-/blob/master/bonito-basecaller-qscores.ipynb
-    //     const float* timestep_posts = posts + ((block_idx + 1) * num_states);
+    //     const U* const timestep_posts = posts + ((block_idx + 1) << num_state_bits);
+    //     const auto fetch_post = [timestep_posts, posts_scale](size_t idx) {
+    //         return static_cast<float>(timestep_posts[idx]) * posts_scale;
+    //     };
 
-    //     // For states which are homopolymers, we don't want to count the states more than once
-    //     bool is_hp = state == hp_states[0] || state == hp_states[1] || state == hp_states[2] ||
-    //                  state == hp_states[3];
-    //     float block_prob = float(timestep_posts[state]) * (is_hp ? -1.0f : 1.0f);
+    //     float block_prob = fetch_post(state);
 
-    //     // Add in left-shifted kmers
-    //     int l_shift_idx = state / NUM_BASES;
-    //     int msb = int(num_states) / NUM_BASES;
-    //     for (int shift_base = 0; shift_base < NUM_BASES; shift_base++) {
-    //         block_prob += float(timestep_posts[l_shift_idx + msb * shift_base]);
+    //     // Get indices of left- and right-shifted kmers
+    //     int l_shift_idx = state >> NUM_BASE_BITS;
+    //     int r_shift_idx = (state << NUM_BASE_BITS) % num_states;
+    //     int msb = int(num_states) >> NUM_BASE_BITS;
+    //     int l_shift_state, r_shift_state;
+    //     for (int shift_base = 0; shift_base < NUM_BASES; ++shift_base) {
+    //         l_shift_state = l_shift_idx + msb * shift_base;
+    //         shifted_states[2 * shift_base] = l_shift_state;
+
+    //         r_shift_state = r_shift_idx + shift_base;
+    //         shifted_states[2 * shift_base + 1] = r_shift_state;
     //     }
 
-    //     // Add in the right-shifted kmers
-    //     int r_shift_idx = (state * NUM_BASES) % num_states;
-    //     for (int shift_base = 0; shift_base < NUM_BASES; shift_base++) {
-    //         block_prob += float(timestep_posts[r_shift_idx + shift_base]);
+    //     // Add probabilities for unique states
+    //     int candidate_state;
+    //     for (size_t state_idx = 0; state_idx < 2 * NUM_BASES; ++state_idx) {
+    //         candidate_state = shifted_states[state_idx];
+    //         // don't double-count this shifted state if it matches the current state
+    //         bool count_state = (candidate_state != state);
+    //         // or any other shifted state that we've seen so far
+    //         if (count_state) {
+    //             for (size_t inner_state = 0; inner_state < state_idx; ++inner_state) {
+    //                 if (shifted_states[inner_state] == candidate_state) {
+    //                     count_state = false;
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //         if (count_state) {
+    //             block_prob += fetch_post(candidate_state);
+    //         }
     //     }
+        
     //     if (block_prob < 0.0f) block_prob = 0.0f;
-    //     else if (block_prob > 1.0f) block_prob = 1.0f;\
-    //     block_prob = powf(block_prob, 0.4f);  // Power fudge factor
+    //     else if (block_prob > 1.0f) block_prob = 1.0f;
+
+    //     block_prob = std::pow(block_prob, 0.4f);  // Power fudge factor
 
     //     // Calculate a placeholder qscore for the "wrong" bases
-    //     float wrong_base_prob = (1.0f - block_prob) / 3.0f;
+    //     const float wrong_base_prob = (1.0f - block_prob) / 3.0f;
 
     //     for (size_t base = 0; base < NUM_BASES; base++) {
     //         qual_data[block_idx * NUM_BASES + base] =
     //                 (int(base) == base_to_emit ? block_prob : wrong_base_prob);
     //     }
     // }
+
+    // old compute
+    int hp_states[4] = {0, 0, 0,
+                        0};  // What state index are the four homopolymers (A is always state 0)
+    hp_states[3] = int(num_states) - 1;  // homopolymer T is always the last state. (11b per base)
+    hp_states[1] = hp_states[3] / 3;     // calculate hp C from hp T (01b per base)
+    hp_states[2] = hp_states[1] * 2;     // calculate hp G from hp C (10b per base)
+
+    // Compute per-base qual data
+    for (size_t block_idx = 0; block_idx < num_blocks; block_idx++) {
+        int state = states[block_idx];
+        states[block_idx] = states[block_idx] % NUM_BASES;
+        int base_to_emit = states[block_idx];
+
+        // Compute a probability for this block, based on the path kmer. See the following explanation:
+        // https://git.oxfordnanolabs.local/machine-learning/notebooks/-/blob/master/bonito-basecaller-qscores.ipynb
+        const float* timestep_posts = posts + ((block_idx + 1) * num_states);
+
+        // For states which are homopolymers, we don't want to count the states more than once
+        bool is_hp = state == hp_states[0] || state == hp_states[1] || state == hp_states[2] ||
+                     state == hp_states[3];
+        float block_prob = float(timestep_posts[state]) * (is_hp ? -1.0f : 1.0f);
+
+        // Add in left-shifted kmers
+        int l_shift_idx = state / NUM_BASES;
+        int msb = int(num_states) / NUM_BASES;
+        for (int shift_base = 0; shift_base < NUM_BASES; shift_base++) {
+            block_prob += float(timestep_posts[l_shift_idx + msb * shift_base]);
+        }
+
+        // Add in the right-shifted kmers
+        int r_shift_idx = (state * NUM_BASES) % num_states;
+        for (int shift_base = 0; shift_base < NUM_BASES; shift_base++) {
+            block_prob += float(timestep_posts[r_shift_idx + shift_base]);
+        }
+        if (block_prob < 0.0f) block_prob = 0.0f;
+        else if (block_prob > 1.0f) block_prob = 1.0f;
+        block_prob = powf(block_prob, 0.4f);  // Power fudge factor
+
+        // Calculate a placeholder qscore for the "wrong" bases
+        float wrong_base_prob = (1.0f - block_prob) / 3.0f;
+
+        for (size_t base = 0; base < NUM_BASES; base++) {
+            qual_data[block_idx * NUM_BASES + base] =
+                    (int(base) == base_to_emit ? block_prob : wrong_base_prob);
+        }
+    }
 
     return final_score;
 }
@@ -537,7 +537,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         const torch::Tensor& scores_t,
         const torch::Tensor& back_guides_t,
         const torch::Tensor& posts_t,
-        size_t beam_width,
+        const size_t max_beam_width,
         float beam_cut,
         float fixed_stay_score,
         float q_shift,
@@ -550,6 +550,8 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     if (1 << num_state_bits != num_states) {
         throw std::runtime_error("num_states must be an integral power of 2");
     }
+    BeamElement* beam_vector = (BeamElement*)malloc(max_beam_width * (num_blocks + 1) * sizeof(BeamElement));
+    MALLOC_CHK(beam_vector);
 
     int32_t* states = (int32_t*)malloc(num_blocks * sizeof(int32_t));
     MALLOC_CHK(states);
@@ -579,14 +581,14 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         const auto posts = posts_contig->data_ptr<float>();
 
         beam_search<float, float>(scores, scores_block_stride, back_guides, posts, num_state_bits, num_blocks,
-                           beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f);
+                           max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector);
     } else if (scores_t.dtype() == torch::kInt8) {
         // const auto scores = scores_block_contig.data_ptr<int8_t>();
         // const auto back_guides = back_guides_contig->data_ptr<float>();
         // const auto posts = posts_contig->data_ptr<float>();
         // const float posts_scale = static_cast<float>(1.0 / 32767.0);
         // beam_search<int8_t, int16_t>(scores, scores_block_stride, back_guides, posts, num_states, num_blocks,
-        //                     beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, byte_score_scale,
+        //                     max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, byte_score_scale,
         //                              posts_scale);
     } else {
         throw std::runtime_error(std::string("beam_search_decode: unsupported tensor type ") +
@@ -619,6 +621,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     std::vector<uint8_t> moves_vec(num_blocks);
     std::copy(moves, moves + num_blocks, moves_vec.begin());
 
+    free(beam_vector);
     free(qual_data);
     free(states);
     free(moves);
