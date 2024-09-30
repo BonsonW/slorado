@@ -138,7 +138,8 @@ float beam_search(
     float* qual_data,
     float score_scale,
     float posts_scale,
-    BeamElement* beam_vector
+    BeamElement* beam_vector,
+    T* sorted_back_guides
 ) {
     const size_t num_states = 1ull << num_state_bits;
     const auto states_mask = static_cast<state_t>(num_states - 1);
@@ -165,12 +166,11 @@ float beam_search(
     T beam_init_threshold = std::numeric_limits<T>::lowest();
     if (max_beam_width < num_states) {
         // Copy the first set of back guides and sort to extract max_beam_width highest elements
-        std::vector<T> sorted_back_guides(num_states);
-        std::memcpy(sorted_back_guides.data(), back_guide, num_states * sizeof(T));
+        std::memcpy(sorted_back_guides, back_guide, num_states * sizeof(T));
 
         // Note we don't need a full sort here to get the max_beam_width highest values
-        std::nth_element(sorted_back_guides.begin(),
-                         sorted_back_guides.begin() + max_beam_width - 1, sorted_back_guides.end(),
+        std::nth_element(sorted_back_guides,
+                         sorted_back_guides + max_beam_width - 1, sorted_back_guides + num_states,
                          std::greater<T>());
         beam_init_threshold = sorted_back_guides[max_beam_width - 1];
     }
@@ -553,6 +553,9 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     BeamElement* beam_vector = (BeamElement*)malloc(max_beam_width * (num_blocks + 1) * sizeof(BeamElement));
     MALLOC_CHK(beam_vector);
 
+    float* sorted_back_guides = (float*)malloc(num_states * sizeof(float));
+    MALLOC_CHK(sorted_back_guides);
+
     int32_t* states = (int32_t*)malloc(num_blocks * sizeof(int32_t));
     MALLOC_CHK(states);
     
@@ -581,7 +584,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         const auto posts = posts_contig->data_ptr<float>();
 
         beam_search<float, float>(scores, scores_block_stride, back_guides, posts, num_state_bits, num_blocks,
-                           max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector);
+                           max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector, sorted_back_guides);
     } else if (scores_t.dtype() == torch::kInt8) {
         // const auto scores = scores_block_contig.data_ptr<int8_t>();
         // const auto back_guides = back_guides_contig->data_ptr<float>();
@@ -622,6 +625,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     std::copy(moves, moves + num_blocks, moves_vec.begin());
 
     free(beam_vector);
+    free(sorted_back_guides);
     free(qual_data);
     free(states);
     free(moves);
