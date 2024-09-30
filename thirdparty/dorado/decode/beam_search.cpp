@@ -51,62 +51,61 @@ inline int get_num_states(size_t num_trans_states) {
     return int(num_trans_states / NUM_BASES);
 }
 
-static inline std::tuple<std::string, std::string> generate_sequence(
+static inline void generate_sequence(
     const uint8_t* moves,
     const int32_t* states,
     const std::vector<float>& qual_data,
     const float shift,
     const float scale,
-    const size_t num_ts
+    const size_t num_ts,
+    const size_t seq_len,
+    float* base_probs,
+    float* total_probs,
+    char* sequence,
+    char* qstring
 ) {
-    size_t seqPos = 0;
-    size_t seqLen = 0;
-    for (int i = 0; i < num_ts; ++i) {
-        seqLen += moves[i];
-    }
-    // fprintf(stderr, "num_ts: %zu, seqLen: %zu", num_ts, seqLen);
+    size_t seq_pos = 0;
 
-    std::string sequence(seqLen, 'N');
-    std::string qstring(seqLen, '!');
     const char alphabet[4] = {'A', 'C', 'G', 'T'};
-    std::vector<float> baseProbs(seqLen);
-    std::vector<float> totalProbs(seqLen);
+
+    for (size_t i = 0; i < seq_len; ++i) {
+        base_probs[i] = 0;
+        total_probs[i] = 0;
+    }
 
     for (size_t blk = 0; blk < num_ts; ++blk) {
         int state = states[blk];
         int move = int(moves[blk]);
         int base = state & 3;
         int offset = (blk == 0) ? 0 : move - 1;
-        int probPos = int(seqPos) + offset;
+        int probPos = int(seq_pos) + offset;
 
         // get the probability for the called base.
-        baseProbs[probPos] += qual_data[blk * NUM_BASES + base];
+        base_probs[probPos] += qual_data[blk * NUM_BASES + base];
 
         // accumulate the total probability for all possible bases at this position, for normalization.
         for (size_t k = 0; k < NUM_BASES; ++k) {
-            totalProbs[probPos] += qual_data[blk * NUM_BASES + k];
+            total_probs[probPos] += qual_data[blk * NUM_BASES + k];
         }
 
         if (blk == 0) {
-            sequence[seqPos++] = char(base);
+            sequence[seq_pos++] = char(base);
         } else {
             for (int j = 0; j < move; ++j) {
-                sequence[seqPos++] = char(base);
+                sequence[seq_pos++] = char(base);
             }
         }
     }
 
-    for (size_t i = 0; i < seqLen; ++i) {
+    for (size_t i = 0; i < seq_len; ++i) {
         sequence[i] = alphabet[int(sequence[i])];
-        baseProbs[i] = 1.0f - (baseProbs[i] / totalProbs[i]);
-        baseProbs[i] = -10.0f * log10f(baseProbs[i]);
-        float qscore = baseProbs[i] * scale + shift;
-        qscore = std::min(50.0f, qscore);
-        qscore = std::max(1.0f, qscore);
+        base_probs[i] = 1.0f - (base_probs[i] / total_probs[i]);
+        base_probs[i] = -10.0f * log10f(base_probs[i]);
+        float qscore = base_probs[i] * scale + shift;
+        if (qscore > 50.0f) qscore = 50.0f;
+        if (qscore < 1.0f) qscore = 1.0f;
         qstring[i] = char(33.5f + qscore);
     }
-
-    return make_tuple(sequence, qstring);
 }
 
 template <typename T>
@@ -645,14 +644,39 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
                                  std::string(scores_t.dtype().name()));
     }
 
-    std::string sequence, qstring;
-    std::tie(sequence, qstring) = generate_sequence(moves, states, qual_data, q_shift, q_scale, num_ts);
+    size_t seq_len = 0;
+    for (int i = 0; i < num_ts; ++i) {
+        seq_len += moves[i];
+    }
 
+    float* base_probs = (float*)malloc(num_ts * sizeof(float));
+    MALLOC_CHK(base_probs);
+
+    float* total_probs = (float*)malloc(num_ts * sizeof(float));
+    MALLOC_CHK(total_probs);
+
+    char* sequence = (char*)malloc(num_ts * sizeof(char));
+    MALLOC_CHK(sequence);
+
+    char* qstring = (char*)malloc(num_ts * sizeof(char));
+    MALLOC_CHK(qstring);
+
+    generate_sequence(moves, states, qual_data, q_shift, q_scale, num_ts, seq_len, base_probs, total_probs, sequence, qstring);
+
+    std::string sequence_str(seq_len, 'N');
+    std::string qstring_str(seq_len, '!');
     std::vector<uint8_t> moves_vec(num_ts);
+
+    std::copy(sequence, sequence + seq_len, sequence_str.begin());
+    std::copy(qstring, qstring + seq_len, qstring_str.begin());
     std::copy(moves, moves + num_ts, moves_vec.begin());
 
     free(states);
     free(moves);
+    free(base_probs);
+    free(total_probs);
+    free(sequence);
+    free(qstring);
 
-    return std::make_tuple(sequence, qstring, moves_vec);
+    return std::make_tuple(sequence_str, qstring_str, moves_vec);
 }
