@@ -60,7 +60,7 @@ int get_num_states(size_t num_trans_states) {
 static inline void generate_sequence(
     const uint8_t* moves,
     const int32_t* states,
-    const std::vector<float>& qual_data,
+    const float* qual_data,
     const float shift,
     const float scale,
     const size_t num_blocks,
@@ -126,7 +126,7 @@ float beam_search(const T* const scores,
                   float fixed_stay_score,
                   int32_t* states,
                   uint8_t* moves,
-                  std::vector<float>& qual_data,
+                  float* qual_data,
                   float temperature,
                   float score_scale) {
     if (max_beam_width > 256) {
@@ -488,7 +488,8 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     uint8_t* moves = (uint8_t*)malloc(num_blocks * sizeof(uint8_t));
     MALLOC_CHK(moves);
 
-    std::vector<float> qual_data(num_blocks * num_bases);
+    float* qual_data = (float*)malloc(num_blocks * num_bases * sizeof(float));
+    MALLOC_CHK(qual_data);
 
     // Posterior probabilities and back guides must be floats regardless of scores type.
     if (posts_t.dtype() != torch::kFloat32 || back_guides_t.dtype() != torch::kFloat32) {
@@ -529,16 +530,16 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         seq_len += moves[i];
     }
 
-    float* base_probs = (float*)calloc(num_blocks, sizeof(float));
+    float* base_probs = (float*)malloc(num_blocks * sizeof(float));
     MALLOC_CHK(base_probs);
 
-    float* total_probs = (float*)calloc(num_blocks, sizeof(float));
+    float* total_probs = (float*)malloc(num_blocks * sizeof(float));
     MALLOC_CHK(total_probs);
 
-    char* sequence = (char*)calloc(num_blocks, sizeof(char));
+    char* sequence = (char*)malloc(num_blocks * sizeof(char));
     MALLOC_CHK(sequence);
 
-    char* qstring = (char*)calloc(num_blocks, sizeof(char));
+    char* qstring = (char*)malloc(num_blocks * sizeof(char));
     MALLOC_CHK(qstring);
 
     generate_sequence(moves, states, qual_data, q_shift, q_scale, num_blocks, seq_len, base_probs, total_probs, sequence, qstring);
@@ -550,6 +551,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     std::vector<uint8_t> moves_vec(num_blocks);
     std::copy(moves, moves + num_blocks, moves_vec.begin());
 
+    free(qual_data);
     free(states);
     free(moves);
     free(base_probs);
