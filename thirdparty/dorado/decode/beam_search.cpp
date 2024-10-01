@@ -12,6 +12,28 @@
 #include <numeric>
 #include <float.h>
 
+// 16 bit state supports 7-mers with 4 bases.
+typedef int16_t state_t;
+
+constexpr int NUM_BASE_BITS = 2;
+constexpr int NUM_BASES = 1 << NUM_BASE_BITS;
+
+// This is the data we need to retain for the whole beam
+typedef struct beam_element {
+    state_t state;
+    uint8_t prev_element_index;
+    bool stay;
+} beam_element_t;
+
+// This is the data we need to retain for only the previous timestep (block) in the beam
+//  (and what we construct for the new timestep)
+typedef struct beam_front_element {
+    uint32_t hash;
+    state_t state;
+    uint8_t prev_element_index;
+    bool stay;
+} beam_front_element_t;
+
 void swapf(float* a, float* b) {
     float temp = *a;
     *a = *b;
@@ -47,28 +69,6 @@ float kth_largestf(float *nums, int k, int n) {
 	}
 	return nums[idx];
 }
-
-// 16 bit state supports 7-mers with 4 bases.
-typedef int16_t state_t;
-
-constexpr int NUM_BASE_BITS = 2;
-constexpr int NUM_BASES = 1 << NUM_BASE_BITS;
-
-// This is the data we need to retain for the whole beam
-struct BeamElement {
-    state_t state;
-    uint8_t prev_element_index;
-    bool stay;
-};
-
-// This is the data we need to retain for only the previous timestep (block) in the beam
-//  (and what we construct for the new timestep)
-struct BeamFrontElement {
-    uint32_t hash;
-    state_t state;
-    uint8_t prev_element_index;
-    bool stay;
-};
 
 float log_sum_exp(float x, float y) {
     float abs_diff = fabs(x - y);
@@ -143,12 +143,11 @@ static inline void generate_sequence(
 
 // Incorporates NUM_NEW_BITS into a Castagnoli CRC32, aka CRC32C
 // (not the same polynomial as CRC32 as used in zip/ethernet).
-template <int NUM_NEW_BITS>
-uint32_t crc32c(uint32_t crc, uint32_t new_bits) {
+uint32_t crc32c(uint32_t crc, uint32_t new_bits, int num_new_bits) {
     // Note that this is the reversed polynomial.
     constexpr uint32_t POLYNOMIAL = 0x82f63b78u;
-    for (int i = 0; i < NUM_NEW_BITS; ++i) {
-        auto b = (new_bits ^ crc) & 1;
+    for (int i = 0; i < num_new_bits; ++i) {
+        uint32_t b = (new_bits ^ crc) & 1;
         crc >>= 1;
         if (b) {
             crc ^= POLYNOMIAL;
@@ -174,15 +173,10 @@ float beam_search(
     float* qual_data,
     float score_scale,
     float posts_scale,
-    BeamElement* beam_vector
+    beam_element_t* beam_vector
 ) {
     const size_t num_states = 1ull << num_state_bits;
     const auto states_mask = static_cast<state_t>(num_states - 1);
-
-    if (max_beam_width > 256) {
-        ERROR("%s", "Beamsearch max_beam_width cannot be greater than 256.");
-        exit(EXIT_FAILURE);
-    }
 
     // Some values we need
     constexpr uint32_t CRC_SEED = 0x12345678u;
@@ -192,8 +186,8 @@ float beam_search(
     // Each existing element can be extended by one of NUM_BASES, or be a stay.
     const size_t max_beam_candidates = (NUM_BASES + 1) * max_beam_width;
 
-    BeamFrontElement current_beam_front[max_beam_candidates];
-    BeamFrontElement prev_beam_front[max_beam_candidates];
+    beam_front_element_t current_beam_front[max_beam_candidates];
+    beam_front_element_t prev_beam_front[max_beam_candidates];
 
     float current_scores[max_beam_candidates];
     float prev_scores[max_beam_candidates];
@@ -207,7 +201,7 @@ float beam_search(
         for (size_t i = 0; i < num_states; ++i) {
             sorted_back_guides[i] = back_guide[i];
         }
-        
+
         beam_init_threshold = kth_largestf(sorted_back_guides, max_beam_width-1, num_states);
     }
 
@@ -215,7 +209,7 @@ float beam_search(
     for (size_t state = 0, beam_element = 0; state < num_states && beam_element < max_beam_width; state++) {
         if (back_guide[state] >= beam_init_threshold) {
             // Note that this first element has a prev_element_index of 0
-            prev_beam_front[beam_element] = {crc32c<32>(CRC_SEED, uint32_t(state)),
+            prev_beam_front[beam_element] = {crc32c(CRC_SEED, uint32_t(state), 32),
                                              static_cast<state_t>(state), 0, false};
             prev_scores[beam_element] = 0.0f;
             ++beam_element;
@@ -285,7 +279,7 @@ float beam_search(
                         (((previous_element.state << NUM_BASE_BITS) >> num_state_bits)));
                 float new_score = prev_scores[prev_elem_idx] + fetch_block_score(move_idx) +
                                   static_cast<float>(block_back_scores[new_state]);
-                uint32_t new_hash = crc32c<NUM_BASE_BITS>(previous_element.hash, new_base);
+                uint32_t new_hash = crc32c(previous_element.hash, new_base, NUM_BASE_BITS);
 
                 step_hash_present[new_hash & HASH_PRESENT_MASK] = true;
 
@@ -464,8 +458,7 @@ float beam_search(
     moves[0] = 1;  // Always step in the first event
 
     // old compute
-    int hp_states[4] = {0, 0, 0,
-                        0};  // What state index are the four homopolymers (A is always state 0)
+    int hp_states[4] = {0, 0, 0, 0};  // What state index are the four homopolymers (A is always state 0)
     hp_states[3] = int(num_states) - 1;  // homopolymer T is always the last state. (11b per base)
     hp_states[1] = hp_states[3] / 3;     // calculate hp C from hp T (01b per base)
     hp_states[2] = hp_states[1] * 2;     // calculate hp G from hp C (10b per base)
@@ -514,16 +507,23 @@ float beam_search(
 }
 
 std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
-        const torch::Tensor& scores_t,
-        const torch::Tensor& back_guides_t,
-        const torch::Tensor& posts_t,
-        const size_t max_beam_width,
-        float beam_cut,
-        float fixed_stay_score,
-        float q_shift,
-        float q_scale,
-        float temperature,
-        float byte_score_scale) {
+    const torch::Tensor& scores_t,
+    const torch::Tensor& back_guides_t,
+    const torch::Tensor& posts_t,
+    const size_t max_beam_width,
+    float beam_cut,
+    float fixed_stay_score,
+    float q_shift,
+    float q_scale,
+    float temperature,
+    float byte_score_scale
+) {
+
+    if (max_beam_width > 256) {
+        ERROR("%s", "Beamsearch max_beam_width cannot be greater than 256.");
+        exit(EXIT_FAILURE);
+    }
+
     const int num_blocks = int(scores_t.size(0));
     const int num_states = get_num_states(scores_t.size(1));
     const int num_state_bits = static_cast<int>(log2(num_states));
@@ -531,7 +531,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         ERROR("%s", "num_states must be an integral power of 2");
         exit(EXIT_FAILURE);
     }
-    BeamElement* beam_vector = (BeamElement*)malloc(max_beam_width * (num_blocks + 1) * sizeof(BeamElement));
+    beam_element_t* beam_vector = (beam_element_t*)malloc(max_beam_width * (num_blocks + 1) * sizeof(beam_element_t));
     MALLOC_CHK(beam_vector);
 
     int32_t* states = (int32_t*)malloc(num_blocks * sizeof(int32_t));
