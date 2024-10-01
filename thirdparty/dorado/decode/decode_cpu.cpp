@@ -170,8 +170,8 @@ typedef struct {
     beam_element_t *beam_vector;
 } decode_thread_arg_t;
 
-void* pthread_single_scan_score(void* voidargs) {
-    decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
+void *pthread_single_scan_score(void *voidargs) {
+    decode_thread_arg_t *args = (decode_thread_arg_t *)voidargs;
 
     const int n_base = 4; // should honor model config
     const int num_states = std::pow(n_base, args->config->state_len);
@@ -193,9 +193,9 @@ void* pthread_single_scan_score(void* voidargs) {
     pthread_exit(0);
 }
 
-void* pthread_single_beam_search(void* voidargs) {
-    decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
-    const DecoderOptions* options = args->options;
+void *pthread_single_beam_search(void *voidargs) {
+    decode_thread_arg_t *args = (decode_thread_arg_t *)voidargs;
+    const DecoderOptions *options = args->options;
 
     const int n_base = 4; // should honor model config
     const int num_states = std::pow(n_base, args->config->state_len);
@@ -246,9 +246,9 @@ void* pthread_single_beam_search(void* voidargs) {
     pthread_exit(0);
 }
 
-void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_results, const int num_chunks, const core_t* core, const int runner_idx) {
-    const runner_t* runner = (*core->runners)[runner_idx];
-    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_results, const int num_chunks, const core_t *core, const int runner_idx) {
+    const runner_t *runner = (*core->runners)[runner_idx];
+    runner_stat_t *ts = (*core->runner_stats)[runner_idx];
     
     // init score tensors
     const auto options = runner->decoder_opts;
