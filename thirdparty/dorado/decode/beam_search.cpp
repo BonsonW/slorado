@@ -12,7 +12,41 @@
 #include <numeric>
 #include <float.h>
 
-//#define REMOVE_FIXED_BEAM_STAYS
+void swapf(float* a, float* b) {
+    float temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+int partitionf(float *nums, int left, int right) {
+	float pivot = nums[left];
+    int l = left+1;
+    int r = right;
+	while (l <= r) {
+		if (nums[l] < pivot && nums[r] > pivot) {
+            swapf(&nums[l], &nums[r]);
+            l += 1;
+            r -= 1;
+        }
+		if (nums[l] >= pivot) ++l;
+		if (nums[r] <= pivot) --r;
+	}
+	swapf(&nums[left], &nums[r]);
+	return r;
+}
+
+float kth_largestf(float *nums, int k, int n) {
+	int left = 0;
+    int right = n-1;
+    int idx = 0;
+	while (true) {
+		idx = partitionf(nums, left, right);
+		if (idx == k) break;
+		else if (idx < k) left = idx+1;
+		else right = idx-1;
+	}
+	return nums[idx];
+}
 
 // 16 bit state supports 7-mers with 4 bases.
 typedef int16_t state_t;
@@ -140,8 +174,7 @@ float beam_search(
     float* qual_data,
     float score_scale,
     float posts_scale,
-    BeamElement* beam_vector,
-    T* sorted_back_guides
+    BeamElement* beam_vector
 ) {
     const size_t num_states = 1ull << num_state_bits;
     const auto states_mask = static_cast<state_t>(num_states - 1);
@@ -169,18 +202,17 @@ float beam_search(
     T beam_init_threshold = std::numeric_limits<T>::lowest();
     if (max_beam_width < num_states) {
         // Copy the first set of back guides and sort to extract max_beam_width highest elements
-        std::memcpy(sorted_back_guides, back_guide, num_states * sizeof(T));
-
-        // Note we don't need a full sort here to get the max_beam_width highest values
-        std::nth_element(sorted_back_guides,
-                         sorted_back_guides + max_beam_width - 1, sorted_back_guides + num_states,
-                         std::greater<T>());
-        beam_init_threshold = sorted_back_guides[max_beam_width - 1];
+        size_t max_states = 1024;
+        float sorted_back_guides[max_states];
+        for (size_t i = 0; i < num_states; ++i) {
+            sorted_back_guides[i] = back_guide[i];
+        }
+        
+        beam_init_threshold = kth_largestf(sorted_back_guides, max_beam_width-1, num_states);
     }
 
     // Initialise the beam
-    for (size_t state = 0, beam_element = 0; state < num_states && beam_element < max_beam_width;
-         state++) {
+    for (size_t state = 0, beam_element = 0; state < num_states && beam_element < max_beam_width; state++) {
         if (back_guide[state] >= beam_init_threshold) {
             // Note that this first element has a prev_element_index of 0
             prev_beam_front[beam_element] = {crc32c<32>(CRC_SEED, uint32_t(state)),
@@ -233,7 +265,7 @@ float beam_search(
         float max_score = -FLT_MAX;
 
         // reset bloom filter
-        for (int i = 0; i < HASH_PRESENT_BITS; ++i) {
+        for (uint32_t i = 0; i < HASH_PRESENT_BITS; ++i) {
             step_hash_present[i] = false;
         }
 
@@ -502,9 +534,6 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     BeamElement* beam_vector = (BeamElement*)malloc(max_beam_width * (num_blocks + 1) * sizeof(BeamElement));
     MALLOC_CHK(beam_vector);
 
-    float* sorted_back_guides = (float*)malloc(num_states * sizeof(float));
-    MALLOC_CHK(sorted_back_guides);
-
     int32_t* states = (int32_t*)malloc(num_blocks * sizeof(int32_t));
     MALLOC_CHK(states);
     
@@ -532,7 +561,7 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         const auto posts = posts_contig->data_ptr<float>();
 
         beam_search<float, float>(scores, scores_block_stride, back_guides, posts, num_state_bits, num_blocks,
-                           max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector, sorted_back_guides);
+                           max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector);
     } else if (scores_t.dtype() == torch::kInt8) {
         // const auto scores = scores_block_contig.data_ptr<int8_t>();
         // const auto back_guides = back_guides_contig->data_ptr<float>();
@@ -573,7 +602,6 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     std::copy(moves, moves + num_blocks, moves_vec.begin());
 
     free(beam_vector);
-    free(sorted_back_guides);
     free(qual_data);
     free(states);
     free(moves);

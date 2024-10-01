@@ -5,8 +5,8 @@ die() {
     exit 1
 }
 
-if [ $# -ne 1 ]; then
-    die "Usage: $0 <fastq file>"
+if [ $# -ne 2 ]; then
+    die "Usage: $0 <fastq file> <reference genome>"
 fi
 
 MINIMAP2="/install/minimap2-2.26/minimap2"
@@ -14,7 +14,9 @@ ${MINIMAP2} --version &> /dev/null || { echo -e $RED"minimap2 not found! Either 
 
 datamash --version &> /dev/null || { echo -e $RED"datamash not found! Please install datamash. e.g., apt-get install datamash"$NORMAL; exit 1;}
 
-REFERENC_GENOME="/genome/hg38noAlt.idx" #path to reference genome
+# gtgpu: /genome/hg38noAlt.idx 
+# scylla: /storage/genome/hg38noAlt.idx 
+REFERENC_GENOME=$2 #path to reference genome
 FASTQ_FILE=$1 #path to basecalled fastq file
 
 echo "identity scores:"
