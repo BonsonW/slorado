@@ -225,7 +225,7 @@ void* pthread_single_beam_search(void* voidargs) {
     MALLOC_CHK(qstring);
 
     for (int c = args->start; c < args->end; c++) {
-        auto scores = args->scores_TNC->data_ptr<float>() + c * T;
+        auto scores = args->scores_TNC->data_ptr<float>() + c * (num_states * n_base);
         auto bwd = args->bwd_NTC->data_ptr<float>() + c * num_states * (T+1);
         auto post = args->post_NTC->data_ptr<float>() + c * num_states * (T+1);
         const int num_state_bits = static_cast<int>(log2(num_states));
