@@ -2,14 +2,6 @@
 
 #include "error.h"
 
-#include <math.h>
-
-#include <algorithm>
-#include <array>
-#include <cstring>
-#include <iostream>
-#include <limits>
-#include <numeric>
 #include <float.h>
 
 constexpr int NUM_BASE_BITS = 2;
