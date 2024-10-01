@@ -166,7 +166,7 @@ void* pthread_single_scan_score(void* voidargs) {
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
 
     const int n_base = 4; // should honor model config
-    const int m_states = std::pow(n_base, args->config->state_len);
+    const int num_states = std::pow(n_base, args->config->state_len);
 
     const float *scores_in = (float *)args->scores_TNC->data_ptr();
     float *bwd_out = (float *)args->bwd_NTC->data_ptr();
@@ -177,9 +177,9 @@ void* pthread_single_scan_score(void* voidargs) {
     const int N = args->scores_TNC->size(1);
 
     for (int c = args->start; c < args->end; c++) {
-        backward_scan(scores_in, bwd_out, c, T, N, m_states);
-        forward_scan(scores_in, bwd_out, fwd_out, c, T, N, m_states);
-        softmax(fwd_out, post_out, c, T, m_states);
+        backward_scan(scores_in, bwd_out, c, T, N, num_states);
+        forward_scan(scores_in, bwd_out, fwd_out, c, T, N, num_states);
+        softmax(fwd_out, post_out, c, T, num_states);
     }
 
     pthread_exit(0);
@@ -189,25 +189,76 @@ void* pthread_single_beam_search(void* voidargs) {
     decode_thread_arg_t* args = (decode_thread_arg_t*)voidargs;
     const DecoderOptions* options = args->options;
 
+    const int n_base = 4; // should honor model config
+    const int num_states = std::pow(n_base, args->config->state_len);
+    const int T = args->scores_TNC->size(0);
+    const int N = args->scores_TNC->size(1);
+    const int C = args->scores_TNC->size(2);
+    const int max_beam_width = 32;
+    const float fixed_stay_score = options->blank_score;
+    const float q_scale = options->q_scale;
+    const float q_shift = options->q_shift;
+    const float beam_cut = options->beam_cut;
+
+    beam_element_t* beam_vector = (beam_element_t*)malloc(max_beam_width * (T + 1) * sizeof(beam_element_t));
+    MALLOC_CHK(beam_vector);
+
+    int32_t* states = (int32_t*)malloc(T * sizeof(int32_t));
+    MALLOC_CHK(states);
+    
+    uint8_t* moves = (uint8_t*)malloc(T * sizeof(uint8_t));
+    MALLOC_CHK(moves);
+
+    float* qual_data = (float*)malloc(T * n_base * sizeof(float));
+    MALLOC_CHK(qual_data);
+
+    float* base_probs = (float*)malloc(T * sizeof(float));
+    MALLOC_CHK(base_probs);
+
+    float* total_probs = (float*)malloc(T * sizeof(float));
+    MALLOC_CHK(total_probs);
+
+    char* sequence = (char*)malloc(T * sizeof(char));
+    MALLOC_CHK(sequence);
+
+    char* qstring = (char*)malloc(T * sizeof(char));
+    MALLOC_CHK(qstring);
+
     for (int c = args->start; c < args->end; c++) {
-        auto bwd = args->bwd_NTC->index({c});
-        auto post = args->post_NTC->index({c});
-        auto scores = args->scores_TNC->index({Slice(), c});
+        auto scores = args->scores_TNC->data_ptr<float>() + c * T;
+        auto bwd = args->bwd_NTC->data_ptr<float>() + c * num_states * (T+1);
+        auto post = args->post_NTC->data_ptr<float>() + c * num_states * (T+1);
+        const int num_state_bits = static_cast<int>(log2(num_states));
 
-        LOG_TRACE("bwd dimensions: %ld, %ld", scores.size(0), scores.size(1));
-        LOG_TRACE("bwd dimensions: %ld, %ld", bwd.size(0), bwd.size(1));
-        LOG_TRACE("post dimensions: %ld, %ld", post.size(0), post.size(1));
+        // LOG_TRACE("bwd dimensions: %ld, %ld", scores.size(0), scores.size(1));
+        // LOG_TRACE("bwd dimensions: %ld, %ld", bwd.size(0), bwd.size(1));
+        // LOG_TRACE("post dimensions: %ld, %ld", post.size(0), post.size(1));
+        beam_search(scores, T, bwd, post, num_state_bits, T, max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector);
 
-        auto decode_result = beam_search_decode(
-                scores, bwd, post, 32, options->beam_cut,
-                options->blank_score, options->q_shift, options->q_scale,
-                options->temperature, 1.0f);
-        (*args->chunk_results)[c] = DecodedChunk{
-                std::get<0>(decode_result),
-                std::get<1>(decode_result),
-                std::get<2>(decode_result),
+        size_t seq_len = 0;
+        for (int i = 0; i < T; ++i) {
+            seq_len += moves[i];
+        }
+
+        generate_sequence(moves, states, qual_data, q_shift, q_scale, T, seq_len, base_probs, total_probs, sequence, qstring);
+    
+        sequence[seq_len] = '\0';
+        qstring[seq_len] = '\0';
+        (*args->chunk_results)[c] = {
+            std::string(sequence),
+            std::string(qstring),
+            std::vector<uint8_t>(moves, moves + T),
         };
     }
+
+    free(beam_vector);
+    free(qual_data);
+    free(states);
+    free(moves);
+    free(base_probs);
+    free(total_probs);
+    free(sequence);
+    free(qstring);
 
     pthread_exit(0);
 }
@@ -230,15 +281,15 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     const int N = scores_TNC.size(1);
     const int C = scores_TNC.size(2);
     const int n_base = 4;
-    const int m_states = std::pow(n_base, config.state_len);
+    const int num_states = std::pow(n_base, config.state_len);
 
     ts->total_dp += T * N * C;
 
     LOG_TRACE("scores tensor dim: %d, %d, %d", T, N, C);
 
-    torch::Tensor bwd_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
-    torch::Tensor fwd_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
-    torch::Tensor post_NTC = torch::empty({N, T + 1, m_states}).to(DTYPE_CPU).contiguous();
+    torch::Tensor bwd_NTC = torch::empty({N, T + 1, num_states}).to(DTYPE_CPU).contiguous();
+    torch::Tensor fwd_NTC = torch::empty({N, T + 1, num_states}).to(DTYPE_CPU).contiguous();
+    torch::Tensor post_NTC = torch::empty({N, T + 1, num_states}).to(DTYPE_CPU).contiguous();
     
     // create threads
     const int target_threads = core->opt.num_thread / core->runners->size();

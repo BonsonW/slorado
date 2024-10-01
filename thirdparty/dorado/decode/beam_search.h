@@ -7,64 +7,43 @@
 #include <string>
 #include <vector>
 
-template <typename T>
-void merge_sort(T* data,
-                const size_t count,
-                const size_t cutoff,
-                bool (*less_func)(const T&, const T&)) {
-    std::vector<T> working_buff(count);
-    T* source_buff = data;
-    T* dest_buff = working_buff.data();
-    for (size_t src_block_size = 1; src_block_size < count; src_block_size *= 2) {
-        // Merge source blocks
-        for (size_t start_idx = 0; start_idx < count; start_idx += src_block_size * 2) {
-            // Merge_blocks (in parallel)
+// 16 bit state supports 7-mers with 4 bases.
+typedef int16_t state_t;
 
-            T* first_blk = source_buff + start_idx;
-            T* second_blk_start = first_blk + src_block_size;
-            T* second_blk = second_blk_start;
-            size_t end_merge_idx = std::min(
-                    count,
-                    start_idx + src_block_size *
-                                        2);  // idx of to element after the last one we should merge
-            // Don't write more than 'cutoff' values into dest (useful if we only need 'cutoff' best results)
-            size_t end_write_idx = std::min(end_merge_idx, start_idx + cutoff);
+typedef struct beam_element {
+    state_t state;
+    uint8_t prev_element_index;
+    bool stay;
+} beam_element_t;
 
-            for (T* dest = dest_buff + start_idx; dest < dest_buff + end_write_idx; dest++) {
-                if (first_blk == second_blk_start  // All of first block consumed
-                    || (second_blk < source_buff + end_merge_idx &&
-                        less_func(*second_blk,
-                                  *first_blk))) {  // second block available and should go first
-                    // Write from second blk
-                    *dest = *second_blk;
-                    second_blk++;
-                } else {
-                    // Write from first blk
-                    *dest = *first_blk;
-                    first_blk++;
-                }
-            }
-        }
-        std::swap(source_buff, dest_buff);
-    }
+void generate_sequence(
+    const uint8_t* moves,
+    const int32_t* states,
+    const float* qual_data,
+    const float shift,
+    const float scale,
+    const size_t num_ts,
+    const size_t seq_len,
+    float* base_probs,
+    float* total_probs,
+    char* sequence,
+    char* qstring
+);
 
-    // If we do an odd number of loops on block size, the destination buffer will not be data, so we need to copy back
-    // NOTE: the last loop's destination buff is now source_buff
-    if (source_buff != data) {
-        for (size_t i = 0; i < count; i++) {
-            data[i] = source_buff[i];
-        }
-    }
-}
-
-std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
-        const torch::Tensor& scores_t,
-        const torch::Tensor& back_guides_t,
-        const torch::Tensor& posts_t,
-        size_t beam_width,
-        float beam_cut,
-        float fixed_stay_score,
-        float q_shift,
-        float q_scale,
-        float temperature,
-        float byte_score_scale);
+float beam_search(
+    const float* const scores,
+    size_t scores_block_stride,
+    const float* const back_guide,
+    const float* const posts,
+    const int num_state_bits,
+    const size_t num_ts,
+    const size_t max_beam_width,
+    const float beam_cut,
+    const float fixed_stay_score,
+    int32_t* states,
+    uint8_t* moves,
+    float* qual_data,
+    float score_scale,
+    float posts_scale,
+    beam_element_t* beam_vector
+);

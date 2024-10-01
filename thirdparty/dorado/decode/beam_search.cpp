@@ -12,18 +12,8 @@
 #include <numeric>
 #include <float.h>
 
-// 16 bit state supports 7-mers with 4 bases.
-typedef int16_t state_t;
-
 constexpr int NUM_BASE_BITS = 2;
 constexpr int NUM_BASES = 1 << NUM_BASE_BITS;
-
-// This is the data we need to retain for the whole beam
-typedef struct beam_element {
-    state_t state;
-    uint8_t prev_element_index;
-    bool stay;
-} beam_element_t;
 
 // This is the data we need to retain for only the previous timestep (block) in the beam
 //  (and what we construct for the new timestep)
@@ -34,13 +24,13 @@ typedef struct beam_front_element {
     bool stay;
 } beam_front_element_t;
 
-void swapf(float* a, float* b) {
+static void swapf(float* a, float* b) {
     float temp = *a;
     *a = *b;
     *b = temp;
 }
 
-int partitionf(float *nums, int left, int right) {
+static int partitionf(float *nums, int left, int right) {
 	float pivot = nums[left];
     int l = left+1;
     int r = right;
@@ -57,7 +47,7 @@ int partitionf(float *nums, int left, int right) {
 	return r;
 }
 
-float kth_largestf(float *nums, int k, int n) {
+static float kth_largestf(float *nums, int k, int n) {
 	int left = 0;
     int right = n-1;
     int idx = 0;
@@ -70,27 +60,19 @@ float kth_largestf(float *nums, int k, int n) {
 	return nums[idx];
 }
 
-float log_sum_exp(float x, float y) {
+static float log_sum_exp(float x, float y) {
     float abs_diff = fabs(x - y);
     float m = x > y ? x : y;
     return m + ((abs_diff < 17.0f) ? (log( 1.0 + exp(-abs_diff))) : 0.0f);
 }
 
-int get_num_states(size_t num_trans_states) {
-    if (num_trans_states % NUM_BASES != 0) {
-        ERROR("%s", "Unexpected number of transition states in beam search decode.");
-        exit(EXIT_FAILURE);
-    }
-    return int(num_trans_states / NUM_BASES);
-}
-
-static inline void generate_sequence(
+void generate_sequence(
     const uint8_t* moves,
     const int32_t* states,
     const float* qual_data,
     const float shift,
     const float scale,
-    const size_t num_blocks,
+    const size_t num_ts,
     const size_t seq_len,
     float* base_probs,
     float* total_probs,
@@ -106,7 +88,7 @@ static inline void generate_sequence(
         total_probs[i] = 0;
     }
 
-    for (size_t blk = 0; blk < num_blocks; ++blk) {
+    for (size_t blk = 0; blk < num_ts; ++blk) {
         int state = states[blk];
         int move = int(moves[blk]);
         int base = state & 3;
@@ -143,7 +125,7 @@ static inline void generate_sequence(
 
 // Incorporates NUM_NEW_BITS into a Castagnoli CRC32, aka CRC32C
 // (not the same polynomial as CRC32 as used in zip/ethernet).
-uint32_t crc32c(uint32_t crc, uint32_t new_bits, int num_new_bits) {
+static uint32_t crc32c(uint32_t crc, uint32_t new_bits, int num_new_bits) {
     // Note that this is the reversed polynomial.
     constexpr uint32_t POLYNOMIAL = 0x82f63b78u;
     for (int i = 0; i < num_new_bits; ++i) {
@@ -157,14 +139,13 @@ uint32_t crc32c(uint32_t crc, uint32_t new_bits, int num_new_bits) {
     return crc;
 }
 
-template <typename T, typename U>
 float beam_search(
-    const T* const scores,
+    const float* const scores,
     size_t scores_block_stride,
     const float* const back_guide,
-    const U* const posts,
+    const float* const posts,
     const int num_state_bits,
-    const size_t num_blocks,
+    const size_t num_ts,
     const size_t max_beam_width,
     const float beam_cut,
     const float fixed_stay_score,
@@ -193,7 +174,7 @@ float beam_search(
     float prev_scores[max_beam_candidates];
 
     // Find the score an initial element needs in order to make it into the beam
-    T beam_init_threshold = std::numeric_limits<T>::lowest();
+    float beam_init_threshold = -FLT_MAX;
     if (max_beam_width < num_states) {
         // Copy the first set of back guides and sort to extract max_beam_width highest elements
         size_t max_states = 1024;
@@ -233,8 +214,8 @@ float beam_search(
     bool step_hash_present[4096];  // Default constructor zeros content.
 
     // Iterate through blocks, extending beam
-    for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
-        const T* const block_scores = scores + (block_idx * scores_block_stride);
+    for (size_t block_idx = 0; block_idx < num_ts; ++block_idx) {
+        const float* const block_scores = scores + (block_idx * scores_block_stride);
         // Retrieves the given score as a float, multiplied by score_scale.
         const auto fetch_block_score = [block_scores, score_scale](size_t idx) {
             return static_cast<float>(block_scores[idx]) * score_scale;
@@ -412,7 +393,7 @@ float beam_search(
 
         // At the last timestep, we need to ensure the best path corresponds to element 0.
         // The other elements don't matter.
-        if (block_idx == num_blocks - 1) {
+        if (block_idx == num_ts - 1) {
             float best_score = -FLT_MAX;
             size_t best_score_index = 0;
             for (size_t i = 0; i < elem_count; i++) {
@@ -449,7 +430,7 @@ float beam_search(
 
     // Note that we don't emit the seed state at the front of the beam, hence the -1 offset when copying the path
     uint8_t element_index = 0;
-    for (size_t beam_idx = num_blocks; beam_idx != 0; --beam_idx) {
+    for (size_t beam_idx = num_ts; beam_idx != 0; --beam_idx) {
         size_t beam_addr = beam_idx * max_beam_width + element_index;
         states[beam_idx - 1] = int32_t(beam_vector[beam_addr].state);
         moves[beam_idx - 1] = beam_vector[beam_addr].stay ? 0 : 1;
@@ -464,7 +445,7 @@ float beam_search(
     hp_states[2] = hp_states[1] * 2;     // calculate hp G from hp C (10b per base)
 
     // Compute per-base qual data
-    for (size_t block_idx = 0; block_idx < num_blocks; block_idx++) {
+    for (size_t block_idx = 0; block_idx < num_ts; block_idx++) {
         int state = states[block_idx];
         states[block_idx] = states[block_idx] % NUM_BASES;
         int base_to_emit = states[block_idx];
@@ -504,111 +485,4 @@ float beam_search(
     }
 
     return final_score;
-}
-
-std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
-    const torch::Tensor& scores_t,
-    const torch::Tensor& back_guides_t,
-    const torch::Tensor& posts_t,
-    const size_t max_beam_width,
-    float beam_cut,
-    float fixed_stay_score,
-    float q_shift,
-    float q_scale,
-    float temperature,
-    float byte_score_scale
-) {
-
-    if (max_beam_width > 256) {
-        ERROR("%s", "Beamsearch max_beam_width cannot be greater than 256.");
-        exit(EXIT_FAILURE);
-    }
-
-    const int num_blocks = int(scores_t.size(0));
-    const int num_states = get_num_states(scores_t.size(1));
-    const int num_state_bits = static_cast<int>(log2(num_states));
-    if (1 << num_state_bits != num_states) {
-        ERROR("%s", "num_states must be an integral power of 2");
-        exit(EXIT_FAILURE);
-    }
-    beam_element_t* beam_vector = (beam_element_t*)malloc(max_beam_width * (num_blocks + 1) * sizeof(beam_element_t));
-    MALLOC_CHK(beam_vector);
-
-    int32_t* states = (int32_t*)malloc(num_blocks * sizeof(int32_t));
-    MALLOC_CHK(states);
-    
-    uint8_t* moves = (uint8_t*)malloc(num_blocks * sizeof(uint8_t));
-    MALLOC_CHK(moves);
-
-    float* qual_data = (float*)malloc(num_blocks * NUM_BASES * sizeof(float));
-    MALLOC_CHK(qual_data);
-
-    // Posterior probabilities and back guides must be floats regardless of scores type.
-    if (posts_t.dtype() != torch::kFloat32 || back_guides_t.dtype() != torch::kFloat32) {
-        ERROR("%s", "beam_search_decode: mismatched tensor types provided for posts and guides");
-        exit(EXIT_FAILURE);
-    }
-
-    // back guides and posts should be contiguous
-    auto back_guides_contig = back_guides_t.expect_contiguous();
-    auto posts_contig = posts_t.expect_contiguous();
-    // scores_t may come from a tensor with chunks interleaved, but make sure the last dimension is contiguous
-    auto scores_block_contig = (scores_t.stride(1) == 1) ? scores_t : scores_t.contiguous();
-    const size_t scores_block_stride = scores_block_contig.stride(0);
-    if (scores_t.dtype() == torch::kFloat32) {
-        const auto scores = scores_block_contig.data_ptr<float>();
-        const auto back_guides = back_guides_contig->data_ptr<float>();
-        const auto posts = posts_contig->data_ptr<float>();
-
-        beam_search<float, float>(scores, scores_block_stride, back_guides, posts, num_state_bits, num_blocks,
-                           max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector);
-    } else if (scores_t.dtype() == torch::kInt8) {
-        // const auto scores = scores_block_contig.data_ptr<int8_t>();
-        // const auto back_guides = back_guides_contig->data_ptr<float>();
-        // const auto posts = posts_contig->data_ptr<float>();
-        // const float posts_scale = static_cast<float>(1.0 / 32767.0);
-        // beam_search<int8_t, int16_t>(scores, scores_block_stride, back_guides, posts, num_states, num_blocks,
-        //                     max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, byte_score_scale,
-        //                              posts_scale);
-    } else {
-        ERROR("beam_search_decode: unsupported tensor type %s", scores_t.dtype().name().data());
-        exit(EXIT_FAILURE);
-    }
-    
-    size_t seq_len = 0;
-    for (int i = 0; i < num_blocks; ++i) {
-        seq_len += moves[i];
-    }
-
-    float* base_probs = (float*)malloc(num_blocks * sizeof(float));
-    MALLOC_CHK(base_probs);
-
-    float* total_probs = (float*)malloc(num_blocks * sizeof(float));
-    MALLOC_CHK(total_probs);
-
-    char* sequence = (char*)malloc(num_blocks * sizeof(char));
-    MALLOC_CHK(sequence);
-
-    char* qstring = (char*)malloc(num_blocks * sizeof(char));
-    MALLOC_CHK(qstring);
-
-    generate_sequence(moves, states, qual_data, q_shift, q_scale, num_blocks, seq_len, base_probs, total_probs, sequence, qstring);
-    
-    sequence[seq_len] = '\0';
-    qstring[seq_len] = '\0';
-    std::string sequence_str(sequence);
-    std::string qstring_str(qstring);
-    std::vector<uint8_t> moves_vec(num_blocks);
-    std::copy(moves, moves + num_blocks, moves_vec.begin());
-
-    free(beam_vector);
-    free(qual_data);
-    free(states);
-    free(moves);
-    free(base_probs);
-    free(total_probs);
-    free(sequence);
-    free(qstring);
-
-    return std::make_tuple(sequence_str, qstring_str, moves_vec);
 }
