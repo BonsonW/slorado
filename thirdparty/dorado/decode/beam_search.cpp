@@ -16,7 +16,7 @@ typedef struct beam_front_element {
     bool stay;
 } beam_front_element_t;
 
-static void swapf(float* a, float* b) {
+static void swapf(float *a, float *b) {
     float temp = *a;
     *a = *b;
     *b = temp;
@@ -59,17 +59,17 @@ static float log_sum_exp(float x, float y) {
 }
 
 void generate_sequence(
-    const uint8_t* moves,
-    const int32_t* states,
-    const float* qual_data,
+    const uint8_t *moves,
+    const int32_t *states,
+    const float *qual_data,
     const float shift,
     const float scale,
     const size_t num_ts,
     const size_t seq_len,
-    float* base_probs,
-    float* total_probs,
-    char* sequence,
-    char* qstring
+    float *base_probs,
+    float *total_probs,
+    char *sequence,
+    char *qstring
 ) {
     size_t seq_pos = 0;
 
@@ -132,21 +132,21 @@ static uint32_t crc32c(uint32_t crc, uint32_t new_bits, int num_new_bits) {
 }
 
 float beam_search(
-    const float* const scores,
+    const float *const scores,
     size_t scores_block_stride,
-    const float* const back_guide,
-    const float* const posts,
+    const float *const back_guide,
+    const float *const posts,
     const int num_state_bits,
     const size_t num_ts,
     const size_t max_beam_width,
     const float beam_cut,
     const float fixed_stay_score,
-    int32_t* states,
-    uint8_t* moves,
-    float* qual_data,
+    int32_t *states,
+    uint8_t *moves,
+    float *qual_data,
     float score_scale,
     float posts_scale,
-    beam_element_t* beam_vector
+    beam_element_t *beam_vector
 ) {
     const size_t num_states = 1ull << num_state_bits;
     const auto states_mask = static_cast<state_t>(num_states - 1);
@@ -207,12 +207,12 @@ float beam_search(
 
     // Iterate through blocks, extending beam
     for (size_t block_idx = 0; block_idx < num_ts; ++block_idx) {
-        const float* const block_scores = scores + (block_idx * scores_block_stride);
+        const float *const block_scores = scores + (block_idx * scores_block_stride);
         // Retrieves the given score as a float, multiplied by score_scale.
         const auto fetch_block_score = [block_scores, score_scale](size_t idx) {
             return static_cast<float>(block_scores[idx]) * score_scale;
         };
-        const float* const block_back_scores = back_guide + ((block_idx + 1) << num_state_bits);
+        const float *const block_back_scores = back_guide + ((block_idx + 1) << num_state_bits);
 
         /*  kmer transitions order:
          *  N^K , N array
@@ -319,7 +319,7 @@ float beam_search(
         auto get_elem_count = [new_elem_count, &beam_cutoff_score, &current_scores]() {
             // Count the elements which meet the beam cutoff.
             size_t elem_count = 0;
-            const float* score_ptr = current_scores;
+            const float *score_ptr = current_scores;
             for (int i = int(new_elem_count); i; --i) {
                 if (*score_ptr >= beam_cutoff_score) {
                     ++elem_count;
@@ -430,7 +430,7 @@ float beam_search(
     }
     moves[0] = 1;  // Always step in the first event
 
-    // old compute
+    // old compute, todo: use new compute from latest dorado branch
     int hp_states[4] = {0, 0, 0, 0};  // What state index are the four homopolymers (A is always state 0)
     hp_states[3] = int(num_states) - 1;  // homopolymer T is always the last state. (11b per base)
     hp_states[1] = hp_states[3] / 3;     // calculate hp C from hp T (01b per base)
@@ -444,7 +444,7 @@ float beam_search(
 
         // Compute a probability for this block, based on the path kmer. See the following explanation:
         // https://git.oxfordnanolabs.local/machine-learning/notebooks/-/blob/master/bonito-basecaller-qscores.ipynb
-        const float* timestep_posts = posts + ((block_idx + 1) * num_states);
+        const float *timestep_posts = posts + ((block_idx + 1) * num_states);
 
         // For states which are homopolymers, we don't want to count the states more than once
         bool is_hp = state == hp_states[0] || state == hp_states[1] || state == hp_states[2] ||

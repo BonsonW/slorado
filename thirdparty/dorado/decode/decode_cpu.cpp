@@ -16,18 +16,18 @@ void backward_scan(const float *scores_in, float *out, const uint64_t chunk, con
 
     const uint64_t ts_states = num_states * kNumBases;
 
-    const float* const chunk_in = scores_in + chunk * ts_states; // should be half float (for GPU impl)
-    float* const chunk_out = out + chunk * (T+1) * num_states;
-    float* const alpha_init = chunk_out + num_states * T;
+    const float *const chunk_in = scores_in + chunk * ts_states; // should be half float (for GPU impl)
+    float *const chunk_out = out + chunk * (T+1) * num_states;
+    float *const alpha_init = chunk_out + num_states * T;
     for (uint64_t state = 0; state < num_states; ++state) { // (for GPU impl) its 1 thread per state, but below we iterate through all the states on 1 thread
         alpha_init[state] = 0.0f;
     }
 
     for (uint64_t ts = 0; ts < T; ++ts) {
         // threadgroup_barrier(mem_flags::medevice); // synchronize all threads before next time step (for GPU impl)
-        const float* const ts_in = chunk_in + N * ts_states * (T - ts - 1);
-        float* const ts_alpha_in = alpha_init - num_states * ts;
-        float* const ts_alpha_out = ts_alpha_in - num_states;
+        const float *const ts_in = chunk_in + N * ts_states * (T - ts - 1);
+        float *const ts_alpha_in = alpha_init - num_states * ts;
+        float *const ts_alpha_out = ts_alpha_in - num_states;
 
         for (uint64_t state = 0; state < num_states; ++state) { // we should have 1 thread for each state (for GPU impl)
             const uint64_t stay_state_idx = state;
@@ -62,7 +62,7 @@ void forward_scan(const float *scores_in, const float *bwd, float *out, const ui
     const uint64_t ts_states = num_states * kNumBases;
 
     // This batch element's scores.
-    const float* const chunk_scores = scores_in + chunk * ts_states;
+    const float *const chunk_scores = scores_in + chunk * ts_states;
 
     // Alternating forward guide buffers used for successive time steps.
     constexpr uint64_t kMaxStates = 1024;
@@ -81,11 +81,11 @@ void forward_scan(const float *scores_in, const float *bwd, float *out, const ui
         const uint64_t ts_idx = (chunk * T + ts) * num_states;
 
         // This time step's scores.
-        const float* const ts_scores = chunk_scores + N * ts_states * ts;
+        const float *const ts_scores = chunk_scores + N * ts_states * ts;
 
         // Alternating TG buffer twiddling.
-        const float* const ts_alpha_in = ts_fwd[ts & 1];
-        float* const ts_alpha_out = ts_fwd[(ts & 1) ^ 1];
+        const float *const ts_alpha_in = ts_fwd[ts & 1];
+        float *const ts_alpha_out = ts_fwd[(ts & 1) ^ 1];
 
         // Calculate the next time step's forward guide from this time step's scores
         // and forward guide.  It's written to threadgroup memory for use in the
@@ -160,6 +160,14 @@ typedef struct {
     int32_t start;
     int32_t end;
     const CRFModelConfig *config;
+    int32_t *states;
+    uint8_t *moves;
+    float *qual_data;
+    float *base_probs;
+    float *total_probs;
+    char *sequence;
+    char *qstring;
+    beam_element_t *beam_vector;
 } decode_thread_arg_t;
 
 void* pthread_single_scan_score(void* voidargs) {
@@ -200,35 +208,19 @@ void* pthread_single_beam_search(void* voidargs) {
     const float q_shift = options->q_shift;
     const float beam_cut = options->beam_cut;
 
-    beam_element_t* beam_vector = (beam_element_t*)malloc(max_beam_width * (T + 1) * sizeof(beam_element_t));
-    MALLOC_CHK(beam_vector);
-
-    int32_t* states = (int32_t*)malloc(T * sizeof(int32_t));
-    MALLOC_CHK(states);
-    
-    uint8_t* moves = (uint8_t*)malloc(T * sizeof(uint8_t));
-    MALLOC_CHK(moves);
-
-    float* qual_data = (float*)malloc(T * n_base * sizeof(float));
-    MALLOC_CHK(qual_data);
-
-    float* base_probs = (float*)malloc(T * sizeof(float));
-    MALLOC_CHK(base_probs);
-
-    float* total_probs = (float*)malloc(T * sizeof(float));
-    MALLOC_CHK(total_probs);
-
-    char* sequence = (char*)malloc(T * sizeof(char));
-    MALLOC_CHK(sequence);
-
-    char* qstring = (char*)malloc(T * sizeof(char));
-    MALLOC_CHK(qstring);
-
     for (int c = args->start; c < args->end; c++) {
         auto scores = args->scores_TNC->data_ptr<float>() + c * (num_states * n_base);
         auto bwd = args->bwd_NTC->data_ptr<float>() + c * num_states * (T+1);
         auto post = args->post_NTC->data_ptr<float>() + c * num_states * (T+1);
         const int num_state_bits = static_cast<int>(log2(num_states));
+        auto states = args->states + c * T;
+        auto moves = args->moves + c * T;
+        auto qual_data = args->qual_data + c * (T * n_base);
+        auto base_probs = args->base_probs + c * T;
+        auto total_probs = args->total_probs + c * T;
+        auto sequence = args->sequence + c * T;
+        auto qstring = args->qstring + c * T;
+        auto beam_vector = args->beam_vector + c * max_beam_width * (T+1);
 
         // LOG_TRACE("bwd dimensions: %ld, %ld", scores.size(0), scores.size(1));
         // LOG_TRACE("bwd dimensions: %ld, %ld", bwd.size(0), bwd.size(1));
@@ -250,15 +242,6 @@ void* pthread_single_beam_search(void* voidargs) {
             std::vector<uint8_t>(moves, moves + T),
         };
     }
-
-    free(beam_vector);
-    free(qual_data);
-    free(states);
-    free(moves);
-    free(base_probs);
-    free(total_probs);
-    free(sequence);
-    free(qstring);
 
     pthread_exit(0);
 }
@@ -290,6 +273,32 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     torch::Tensor bwd_NTC = torch::empty({N, T + 1, num_states}).to(DTYPE_CPU).contiguous();
     torch::Tensor fwd_NTC = torch::empty({N, T + 1, num_states}).to(DTYPE_CPU).contiguous();
     torch::Tensor post_NTC = torch::empty({N, T + 1, num_states}).to(DTYPE_CPU).contiguous();
+
+    // we are only callocing here so we can compare tensors later
+    const int max_beam_width = 32;
+    beam_element_t *beam_vector = (beam_element_t*)calloc(N * max_beam_width * (T + 1), sizeof(beam_element_t));
+    MALLOC_CHK(beam_vector);
+
+    int32_t *states = (int32_t *)calloc(N * T, sizeof(int32_t));
+    MALLOC_CHK(states);
+    
+    uint8_t *moves = (uint8_t *)calloc(N * T, sizeof(uint8_t));
+    MALLOC_CHK(moves);
+
+    float *qual_data = (float *)calloc(N * T * n_base, sizeof(float));
+    MALLOC_CHK(qual_data);
+
+    float *base_probs = (float *)calloc(N * T, sizeof(float));
+    MALLOC_CHK(base_probs);
+
+    float *total_probs = (float *)calloc(N * T, sizeof(float));
+    MALLOC_CHK(total_probs);
+
+    char *sequence = (char *)calloc(N * T, sizeof(char));
+    MALLOC_CHK(sequence);
+
+    char *qstring = (char *)calloc(N * T, sizeof(char));
+    MALLOC_CHK(qstring);
     
     // create threads
     const int target_threads = core->opt.num_thread / core->runners->size();
@@ -314,12 +323,20 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
         pt_args[t].chunk_results = &chunk_results;
         pt_args[t].options = &options;
         pt_args[t].config = &config;
+        pt_args[t].states = states;
+        pt_args[t].moves = moves;
+        pt_args[t].qual_data = qual_data;
+        pt_args[t].base_probs = base_probs;
+        pt_args[t].total_probs = total_probs;
+        pt_args[t].sequence = sequence;
+        pt_args[t].qstring = qstring;
+        pt_args[t].beam_vector = beam_vector;
     }
 
     // score tensors
     ts->time_scan_score -= realtime();
     for (t = 0; t < num_threads; t++) {
-        ret = pthread_create(&tids[t], NULL, pthread_single_scan_score, (void*)(&pt_args[t]));
+        ret = pthread_create(&tids[t], NULL, pthread_single_scan_score, (void *)(&pt_args[t]));
         NEG_CHK(ret);
     }
 
@@ -332,7 +349,7 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     // beam search
     ts->time_beamsearch -= realtime();
     for (t = 0; t < num_threads; t++) {
-        ret = pthread_create(&tids[t], NULL, pthread_single_beam_search, (void*)(&pt_args[t]));
+        ret = pthread_create(&tids[t], NULL, pthread_single_beam_search, (void *)(&pt_args[t]));
         NEG_CHK(ret);
     }
 
@@ -342,4 +359,13 @@ void decode_cpu(const torch::Tensor& scores, std::vector<DecodedChunk>& chunk_re
     }
     ts->time_beamsearch += realtime();
     ts->time_decode_cleanup -= realtime();
+
+    free(beam_vector);
+    free(qual_data);
+    free(states);
+    free(moves);
+    free(base_probs);
+    free(total_probs);
+    free(sequence);
+    free(qstring);
 }

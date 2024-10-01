@@ -45,5 +45,5 @@ float beam_search(
     float* qual_data,
     float score_scale,
     float posts_scale,
-    beam_element_t* beam_vector
+    beam_element_t *beam_vector
 );
