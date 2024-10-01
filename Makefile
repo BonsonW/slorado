@@ -109,7 +109,7 @@ $(BUILD_DIR)/writer.o: src/writer.cpp
 $(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cpp
+$(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/decode_cpu.o: thirdparty/dorado/decode/decode_cpu.cpp

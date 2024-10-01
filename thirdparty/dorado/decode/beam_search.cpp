@@ -1,6 +1,5 @@
 #include "beam_search.h"
 
-#include "fast_hash.h"
 #include "error.h"
 
 #include <math.h>
@@ -11,6 +10,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <float.h>
 
 //#define REMOVE_FIXED_BEAM_STAYS
 
@@ -37,13 +37,15 @@ struct BeamFrontElement {
 };
 
 float log_sum_exp(float x, float y) {
-    float abs_diff = std::abs(x - y);
-    return std::max(x, y) + ((abs_diff < 17.0f) ? (std::log1p(std::exp(-abs_diff))) : 0.0f);
+    float abs_diff = fabs(x - y);
+    float m = x > y ? x : y;
+    return m + ((abs_diff < 17.0f) ? (log( 1.0 + exp(-abs_diff))) : 0.0f);
 }
 
 int get_num_states(size_t num_trans_states) {
     if (num_trans_states % NUM_BASES != 0) {
-        throw std::runtime_error("Unexpected number of transition states in beam search decode.");
+        ERROR("%s", "Unexpected number of transition states in beam search decode.");
+        exit(EXIT_FAILURE);
     }
     return int(num_trans_states / NUM_BASES);
 }
@@ -145,12 +147,13 @@ float beam_search(
     const auto states_mask = static_cast<state_t>(num_states - 1);
 
     if (max_beam_width > 256) {
-        throw std::range_error("Beamsearch max_beam_width cannot be greater than 256.");
+        ERROR("%s", "Beamsearch max_beam_width cannot be greater than 256.");
+        exit(EXIT_FAILURE);
     }
 
     // Some values we need
     constexpr uint32_t CRC_SEED = 0x12345678u;
-    const float log_beam_cut = (beam_cut > 0.0f) ? logf(beam_cut) : std::numeric_limits<float>::max();
+    const float log_beam_cut = (beam_cut > 0.0f) ? logf(beam_cut) : FLT_MAX;
 
     // Create the previous and current beam fronts
     // Each existing element can be extended by one of NUM_BASES, or be a stay.
@@ -188,7 +191,7 @@ float beam_search(
     }
 
     // Copy this initial beam front into the beam persistent state
-    size_t current_beam_width = std::min(max_beam_width, num_states);
+    size_t current_beam_width = max_beam_width < num_states ? max_beam_width : num_states;
     for (size_t element_idx = 0; element_idx < current_beam_width; ++element_idx) {
         beam_vector[element_idx].state = prev_beam_front[element_idx].state;
         beam_vector[element_idx].prev_element_index =
@@ -220,7 +223,7 @@ float beam_search(
          *  Transition (movement) ACGTT (111) -> CGTTG (446) has index 446 * 4 + 0 = 1784
          */
 
-        float max_score = std::numeric_limits<float>::lowest();
+        float max_score = -FLT_MAX;
 
         // Essentially a k=1 Bloom filter, indicating the presence of steps with particular
         // sequence hashes.  Avoids comparing stay hashes against all possible progenitor
@@ -253,7 +256,7 @@ float beam_search(
                 current_beam_front[new_elem_count] = {new_hash, new_state, (uint8_t)prev_elem_idx,
                                                       false};
                 current_scores[new_elem_count] = new_score;
-                max_score = std::max(max_score, new_score);
+                max_score = max_score > new_score ? max_score : new_score;
                 ++new_elem_count;
             }
         }
@@ -266,7 +269,7 @@ float beam_search(
             current_beam_front[new_elem_count] = {previous_element.hash, previous_element.state,
                                                   (uint8_t)prev_elem_idx, true};
             current_scores[new_elem_count] = stay_score;
-            max_score = std::max(max_score, stay_score);
+            max_score = max_score > stay_score ? max_score : stay_score;
 
             // Determine whether the path including this stay duplicates another sequence ending in
             // a step.
@@ -287,17 +290,17 @@ float beam_search(
                             const float folded_score = log_sum_exp(current_scores[stay_elem_idx],
                                                                    current_scores[step_elem_idx]);
                             current_scores[stay_elem_idx] = folded_score;
-                            max_score = std::max(max_score, folded_score);
+                            max_score = max_score > folded_score ? max_score : folded_score;
                             // The step element will end up last, sorted by score
-                            current_scores[step_elem_idx] = std::numeric_limits<float>::lowest();
+                            current_scores[step_elem_idx] = -FLT_MAX;
                         } else {
                             // Fold the stay into the step
                             const float folded_score = log_sum_exp(current_scores[stay_elem_idx],
                                                                    current_scores[step_elem_idx]);
                             current_scores[step_elem_idx] = folded_score;
-                            max_score = std::max(max_score, folded_score);
+                            max_score = max_score > folded_score ? max_score : folded_score;
                             // The stay element will end up last, sorted by score
-                            current_scores[stay_elem_idx] = std::numeric_limits<float>::lowest();
+                            current_scores[stay_elem_idx] = -FLT_MAX;
                         }
                     }
                 }
@@ -360,7 +363,7 @@ float beam_search(
             }
 
             // Clamp the element count to the max beam width in case of failure 2 from above.
-            elem_count = std::min(elem_count, max_beam_width);
+            elem_count = elem_count < max_beam_width ? elem_count : max_beam_width;
         }
 
         size_t write_idx = 0;
@@ -379,7 +382,7 @@ float beam_search(
         // At the last timestep, we need to ensure the best path corresponds to element 0.
         // The other elements don't matter.
         if (block_idx == num_blocks - 1) {
-            float best_score = std::numeric_limits<float>::lowest();
+            float best_score = -FLT_MAX;
             size_t best_score_index = 0;
             for (size_t i = 0; i < elem_count; i++) {
                 if (prev_scores[i] > best_score) {
@@ -387,8 +390,13 @@ float beam_search(
                     best_score_index = i;
                 }
             }
-            std::swap(prev_beam_front[0], prev_beam_front[best_score_index]);
-            std::swap(prev_scores[0], prev_scores[best_score_index]);
+            auto temp0 = prev_beam_front[0];
+            prev_beam_front[0] = prev_beam_front[best_score_index];
+            prev_beam_front[best_score_index] = temp0;
+
+            auto temp1 = prev_scores[0];
+            prev_scores[0] = prev_scores[best_score_index];
+            prev_scores[best_score_index] = temp1;
         }
 
         size_t beam_offset = (block_idx + 1) * max_beam_width;
@@ -548,7 +556,8 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
     const int num_states = get_num_states(scores_t.size(1));
     const int num_state_bits = static_cast<int>(std::log2(num_states));
     if (1 << num_state_bits != num_states) {
-        throw std::runtime_error("num_states must be an integral power of 2");
+        ERROR("%s", "num_states must be an integral power of 2");
+        exit(EXIT_FAILURE);
     }
     BeamElement* beam_vector = (BeamElement*)malloc(max_beam_width * (num_blocks + 1) * sizeof(BeamElement));
     MALLOC_CHK(beam_vector);
@@ -567,9 +576,8 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
 
     // Posterior probabilities and back guides must be floats regardless of scores type.
     if (posts_t.dtype() != torch::kFloat32 || back_guides_t.dtype() != torch::kFloat32) {
-        throw std::runtime_error(
-                "beam_search_decode: mismatched tensor types provided for posts and "
-                "guides");
+        ERROR("%s", "beam_search_decode: mismatched tensor types provided for posts and guides");
+        exit(EXIT_FAILURE);
     }
 
     // back guides and posts should be contiguous
@@ -594,8 +602,8 @@ std::tuple<std::string, std::string, std::vector<uint8_t>> beam_search_decode(
         //                     max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, byte_score_scale,
         //                              posts_scale);
     } else {
-        throw std::runtime_error(std::string("beam_search_decode: unsupported tensor type ") +
-                                 std::string(scores_t.dtype().name()));
+        ERROR("beam_search_decode: unsupported tensor type %s", scores_t.dtype().name().data());
+        exit(EXIT_FAILURE);
     }
     
     size_t seq_len = 0;
