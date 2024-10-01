@@ -233,7 +233,7 @@ void* pthread_single_beam_search(void* voidargs) {
         // LOG_TRACE("bwd dimensions: %ld, %ld", scores.size(0), scores.size(1));
         // LOG_TRACE("bwd dimensions: %ld, %ld", bwd.size(0), bwd.size(1));
         // LOG_TRACE("post dimensions: %ld, %ld", post.size(0), post.size(1));
-        beam_search(scores, T, bwd, post, num_state_bits, T, max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector);
+        beam_search(scores, N * C, bwd, post, num_state_bits, T, max_beam_width, beam_cut, fixed_stay_score, states, moves, qual_data, 1.0f, 1.0f, beam_vector);
 
         size_t seq_len = 0;
         for (int i = 0; i < T; ++i) {
