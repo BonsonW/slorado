@@ -430,45 +430,64 @@ float beam_search(
     }
     moves[0] = 1;  // Always step in the first event
 
-    // old compute, todo: use new compute from latest dorado branch
-    int hp_states[4] = {0, 0, 0, 0};  // What state index are the four homopolymers (A is always state 0)
-    hp_states[3] = int(num_states) - 1;  // homopolymer T is always the last state. (11b per base)
-    hp_states[1] = hp_states[3] / 3;     // calculate hp C from hp T (01b per base)
-    hp_states[2] = hp_states[1] * 2;     // calculate hp G from hp C (10b per base)
+    int shifted_states[2 * NUM_BASES];
 
     // Compute per-base qual data
-    for (size_t block_idx = 0; block_idx < num_ts; block_idx++) {
+    for (size_t block_idx = 0; block_idx < num_ts; ++block_idx) {
         int state = states[block_idx];
         states[block_idx] = states[block_idx] % NUM_BASES;
         int base_to_emit = states[block_idx];
 
         // Compute a probability for this block, based on the path kmer. See the following explanation:
         // https://git.oxfordnanolabs.local/machine-learning/notebooks/-/blob/master/bonito-basecaller-qscores.ipynb
-        const float *timestep_posts = posts + ((block_idx + 1) * num_states);
+        const float* const timestep_posts = posts + ((block_idx + 1) << num_state_bits);
+        const auto fetch_post = [timestep_posts, posts_scale](size_t idx) {
+            return static_cast<float>(timestep_posts[idx]) * posts_scale;
+        };
 
-        // For states which are homopolymers, we don't want to count the states more than once
-        bool is_hp = state == hp_states[0] || state == hp_states[1] || state == hp_states[2] ||
-                     state == hp_states[3];
-        float block_prob = float(timestep_posts[state]) * (is_hp ? -1.0f : 1.0f);
+        float block_prob = fetch_post(state);
 
-        // Add in left-shifted kmers
-        int l_shift_idx = state / NUM_BASES;
-        int msb = int(num_states) / NUM_BASES;
-        for (int shift_base = 0; shift_base < NUM_BASES; shift_base++) {
-            block_prob += float(timestep_posts[l_shift_idx + msb * shift_base]);
+        // Get indices of left- and right-shifted kmers
+        int l_shift_idx = state >> NUM_BASE_BITS;
+        int r_shift_idx = (state << NUM_BASE_BITS) % num_states;
+        int msb = int(num_states) >> NUM_BASE_BITS;
+        int l_shift_state, r_shift_state;
+        for (int shift_base = 0; shift_base < NUM_BASES; ++shift_base) {
+            l_shift_state = l_shift_idx + msb * shift_base;
+            shifted_states[2 * shift_base] = l_shift_state;
+
+            r_shift_state = r_shift_idx + shift_base;
+            shifted_states[2 * shift_base + 1] = r_shift_state;
         }
 
-        // Add in the right-shifted kmers
-        int r_shift_idx = (state * NUM_BASES) % num_states;
-        for (int shift_base = 0; shift_base < NUM_BASES; shift_base++) {
-            block_prob += float(timestep_posts[r_shift_idx + shift_base]);
+        // Add probabilities for unique states
+        int candidate_state;
+        for (size_t state_idx = 0; state_idx < 2 * NUM_BASES; ++state_idx) {
+            candidate_state = shifted_states[state_idx];
+            // don't double-count this shifted state if it matches the current state
+            bool count_state = (candidate_state != state);
+            // or any other shifted state that we've seen so far
+            if (count_state) {
+                for (size_t inner_state = 0; inner_state < state_idx; ++inner_state) {
+                    if (shifted_states[inner_state] == candidate_state) {
+                        count_state = false;
+                        break;
+                    }
+                }
+            }
+            if (count_state) {
+                block_prob += fetch_post(candidate_state);
+            }
         }
-        if (block_prob < 0.0f) block_prob = 0.0f;
-        else if (block_prob > 1.0f) block_prob = 1.0f;
-        block_prob = powf(block_prob, 0.4f);  // Power fudge factor
+        if (block_prob > 1.0f) {
+            block_prob = 1.0f;
+        } else if (block_prob < 0.0f) {
+            block_prob = 0.0f;
+        } 
+        block_prob = pow(block_prob, 0.4f);  // Power fudge factor
 
         // Calculate a placeholder qscore for the "wrong" bases
-        float wrong_base_prob = (1.0f - block_prob) / 3.0f;
+        const float wrong_base_prob = (1.0f - block_prob) / 3.0f;
 
         for (size_t base = 0; base < NUM_BASES; base++) {
             qual_data[block_idx * NUM_BASES + base] =
