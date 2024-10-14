@@ -1,16 +1,10 @@
 #!/bin/bash
 
-# make clean && make -j cuda=1 CUDA_ROOT=/install/cuda-11.8/
+make clean && make -j cuda=1 CUDA_ROOT=/install/cuda-11.8/
 
-<<<<<<< HEAD
 DEVICE=cuda:3
 MODEL=fast
-BATCHSIZE=500
-=======
-DEVICE=cuda:0
-MODEL=sup
-BATCHSIZE=400
->>>>>>> dev
+BATCHSIZE=1000
 CHUNKSIZE=10000
 THREADS=40
 

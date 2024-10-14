@@ -64,8 +64,8 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     ts->time_infer += realtime();
 
     auto scores_TNC = scores;
-    // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
-    scores_TNC = scores_TNC.transpose(0, 1).contiguous();
+    scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
+    // scores_TNC = scores_TNC.transpose(0, 1).contiguous();
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
