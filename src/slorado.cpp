@@ -416,7 +416,7 @@ void init_runner(
 
     runner->model_stride = static_cast<size_t>(model_config.stride);
 
-    runner->decoder_opts = DecoderOptions();
+    runner->decoder_opts = DECODER_INIT;
     runner->decoder_opts.q_shift = model_config.qbias;
     runner->decoder_opts.q_scale = model_config.qscale;
 

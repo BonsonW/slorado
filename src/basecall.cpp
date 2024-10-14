@@ -32,12 +32,10 @@ SOFTWARE.
 #include <stdlib.h>
 #include <vector>
 #include <slow5/slow5.h>
+#include <openfish/openfish.h>
 
 #include "basecall.h"
 #include "error.h"
-
-#include "dorado/decode/decode_cpu.h"
-#include "dorado/decode/decode_gpu.h"
 
 typedef struct {
     core_t* core;
@@ -65,9 +63,38 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 #endif
     ts->time_infer += realtime();
 
+    auto scores_TNC = scores;
+    scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
+
+    const int T = scores_TNC.size(0);
+    const int N = scores_TNC.size(1);
+    const int C = scores_TNC.size(2);
+    const int state_len = runner->model_config.state_len;
+    const int target_threads = core->opt.num_thread / core->runners->size();
+    
+    uint8_t *moves;
+    char *sequence;
+    char *qstring;
+
     LOG_DEBUG("%s", "decoding scores");
-    decode_cpu(scores, chunks, num_chunks, core, runner_idx);
+    decode(T, N, C, target_threads, (float *)scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+    for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
+        size_t idx = chunk * T;
+        // std::vector<uint8_t> mov(&moves[idx], &moves[idx + T]);
+        // auto num_bases = std::accumulate(mov.begin(), mov.end(), 0);
+        // std::string qstr(&qstring[idx], &qstring[idx + num_bases]);
+        // std::string seq(&sequence[idx], &sequence[idx + num_bases]);
+        chunks[chunk] = {
+            std::string(sequence + idx, sequence + idx + num_bases),
+            std::string(qstring + idx, qstring + idx + num_bases),
+            std::move(moves + idx, moves + idx + T),
+        };
+    }
     ts->time_decode_cleanup += realtime();
+
+    free(moves);
+    free(sequence);
+    free(qstring);
 }
 
 void basecall_chunks(

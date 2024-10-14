@@ -6,13 +6,15 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I src/ \
 			-I $(LIBTORCH_DIR)/include/torch/csrc/api/include \
 			-I $(LIBTORCH_DIR)/include -I thirdparty/ \
-			-I thirdparty/tomlc99/
+			-I thirdparty/tomlc99/ \
+			-I thirdparty/openfish/include
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++14
 LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
-			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
+			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so \
+			thirdparty/openfish/lib/libopenfish.a
 LDFLAGS  += $(LIBS) -lz -lm -lpthread -lstdc++fs
 BUILD_DIR = build
 

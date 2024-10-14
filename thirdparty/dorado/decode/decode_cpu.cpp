@@ -4,6 +4,8 @@
 #include "error.h"
 #include "misc.h"
 
+#include <openfish/openfish.h>
+
 #include <math.h>
 #include <vector>
 
@@ -151,7 +153,7 @@ void softmax(const float *fwd, float *out, const uint64_t chunk, const uint64_t 
 }
 
 typedef struct {
-    const DecoderOptions *options;
+    const decoder_opts_t *options;
     const torch::Tensor *scores_TNC;
     torch::Tensor *bwd_NTC;
     torch::Tensor *fwd_NTC;
@@ -195,7 +197,7 @@ void *pthread_single_scan_score(void *voidargs) {
 
 void *pthread_single_beam_search(void *voidargs) {
     decode_thread_arg_t *args = (decode_thread_arg_t *)voidargs;
-    const DecoderOptions *options = args->options;
+    const decoder_opts_t *options = args->options;
 
     const int n_base = 4; // should honor model config
     const int num_states = std::pow(n_base, args->config->state_len);

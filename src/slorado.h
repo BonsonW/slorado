@@ -39,6 +39,7 @@ SOFTWARE.
 #include <vector>
 #include <memory>
 #include <torch/torch.h>
+#include <openfish/openfish.h>
 #include "dorado/Chunk.h"
 #include "dorado/decode/decode.h"
 
@@ -127,7 +128,7 @@ typedef struct {
     std::string device;
     torch::Tensor input_tensor;
     torch::TensorOptions tensor_opts;
-    DecoderOptions decoder_opts;
+    decoder_opts_t decoder_opts;
     torch::nn::ModuleHolder<torch::nn::AnyModule> module{nullptr};
     size_t model_stride;
     size_t chunk_size;
