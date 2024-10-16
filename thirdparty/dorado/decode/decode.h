@@ -6,8 +6,7 @@
 #include <vector>
 
 #define DTYPE_CPU torch::kF32
-// #define DTYPE_GPU torch::kF16
-#define DTYPE_GPU torch::kF16 // todo: this is temp, for testing full float openfish
+#define DTYPE_GPU torch::kF16
 
 struct DecodedChunk {
     std::string sequence;

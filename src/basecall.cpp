@@ -34,6 +34,8 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <openfish/openfish.h>
 
+#include <cuda_runtime_api.h>
+
 #include "basecall.h"
 #include "error.h"
 
@@ -64,8 +66,8 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     ts->time_infer += realtime();
 
     auto scores_TNC = scores;
-    scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
-    // scores_TNC = scores_TNC.transpose(0, 1).contiguous();
+    // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
+    scores_TNC = scores_TNC.transpose(0, 1).contiguous();
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
@@ -78,13 +80,10 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     char *qstring;
 
     LOG_DEBUG("%s", "decoding scores");
+    cudaSetDevice(runner->device_idx);
     decode(T, N, C, target_threads, (float *)scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
-        // std::vector<uint8_t> mov(&moves[idx], &moves[idx + T]);
-        // auto num_bases = std::accumulate(mov.begin(), mov.end(), 0);
-        // std::string qstr(&qstring[idx], &qstring[idx + num_bases]);
-        // std::string seq(&sequence[idx], &sequence[idx + num_bases]);
         chunks[chunk] = {
             std::string(sequence + idx),
             std::string(qstring + idx),
