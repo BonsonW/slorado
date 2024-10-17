@@ -80,8 +80,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     char *qstring;
 
     LOG_DEBUG("%s", "decoding scores");
-    cudaSetDevice(runner->device_idx);
-    decode(T, N, C, target_threads, (float *)scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+    decode(T, N, C, target_threads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
         chunks[chunk] = {
@@ -130,6 +129,9 @@ void* pthread_single_basecall(void* voidargs) {
     const size_t runner_idx = args->runner;
     const size_t start = args->start;
     const size_t end = args->end;
+
+    runner_t* runner = (*core->runners)[runner_idx];
+    cudaSetDevice(runner->device_idx);
 
     opt_t opt = core->opt;
 
