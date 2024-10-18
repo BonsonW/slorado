@@ -39,6 +39,12 @@ SOFTWARE.
 #include "basecall.h"
 #include "error.h"
 
+struct DecodedChunk {
+    std::string sequence;
+    std::string qstring;
+    std::vector<uint8_t> moves;
+};
+
 typedef struct {
     core_t* core;
     db_t* db;

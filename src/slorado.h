@@ -41,7 +41,7 @@ SOFTWARE.
 #include <torch/torch.h>
 #include <openfish/openfish.h>
 #include "dorado/Chunk.h"
-#include "dorado/decode/decode.h"
+#include "dorado/nn/CRFModel.h"
 
 #define SLORADO_VERSION "0.1.0"
 

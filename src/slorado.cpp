@@ -41,9 +41,6 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
-#include "dorado/decode/decode_gpu.h"
-#include "dorado/decode/decode_cpu.h"
-
 #include "dorado/signal_prep.h"
 #include "basecall.h"
 #include "writer.h"
@@ -54,7 +51,6 @@ SOFTWARE.
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
-
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -90,7 +86,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
             init_runner_stat((*core->runner_stats).back());
 
             core->runners->push_back(new runner_t());
-            init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_CPU);
+            init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, torch::kF32);
         }
     } else {
 #ifdef USE_GPU
@@ -103,7 +99,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
                 core->runner_stats->push_back((runner_stat_t*)malloc(sizeof(runner_stat_t)));
                 init_runner_stat((*core->runner_stats).back());
                 core->runners->push_back(new runner_t());
-                init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, DTYPE_GPU);
+                init_runner((*core->runners).back(), model, device, opt.chunk_size, opt.gpu_batch_size, torch::kF16);
             }
         }
 #else

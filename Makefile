@@ -39,9 +39,6 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/error.o \
 	  $(BUILD_DIR)/signal_prep.o \
 	  $(BUILD_DIR)/writer.o \
-	  $(BUILD_DIR)/beam_search.o \
-	  $(BUILD_DIR)/decode_cpu.o \
-	  $(BUILD_DIR)/fast_hash.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/stitch.o \
 	  $(BUILD_DIR)/tensor_utils.o \
@@ -66,13 +63,11 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
-	OBJ += $(BUILD_DIR)/decode_gpu.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
 else
 ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1
-	OBJ += $(BUILD_DIR)/decode_gpu.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
 	LDFLAGS += -lrt -ldl
 endif
@@ -115,18 +110,6 @@ $(BUILD_DIR)/writer.o: src/writer.cpp
 $(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/beam_search.o: thirdparty/dorado/decode/beam_search.cpp src/error.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/decode_cpu.o: thirdparty/dorado/decode/decode_cpu.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/decode_gpu.o: thirdparty/dorado/decode/decode_gpu.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/fast_hash.o: thirdparty/dorado/decode/fast_hash.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
 $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/nn/CRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
@@ -138,7 +121,6 @@ $(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
 
 $(BUILD_DIR)/cuda_utils.o: thirdparty/dorado/utils/cuda_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
 
 #toml
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c

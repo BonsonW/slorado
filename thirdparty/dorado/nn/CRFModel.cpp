@@ -13,11 +13,13 @@ using Slice = torch::indexing::Slice;
 using quantized_lstm = std::function<int(void *, void *, void *, void *, void *, void *, int)>;
 
 template <class Model>
-ModuleHolder<AnyModule> populate_model(Model &&model,
-                                       const std::string &path,
-                                       const torch::TensorOptions &options,
-                                       bool decomposition,
-                                       bool bias) {
+ModuleHolder<AnyModule> populate_model(
+    Model &&model,
+    const std::string &path,
+    const torch::TensorOptions &options,
+    bool decomposition,
+    bool bias
+) {
     auto state_dict = load_crf_model_weights(path, decomposition, bias);
     model->load_state_dict(state_dict);
     model->to(options.dtype_opt().value().toScalarType());
@@ -30,10 +32,8 @@ ModuleHolder<AnyModule> populate_model(Model &&model,
 }
 
 struct ConvolutionImpl : Module {
-    ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false)
-            : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
-        conv = register_module(
-                "conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
+    ConvolutionImpl(int size, int outsize, int k, int stride_, bool to_lstm_ = false) : in_size(size), out_size(outsize), window_size(k), stride(stride_), to_lstm(to_lstm_) {
+        conv = register_module("conv", Conv1d(Conv1dOptions(size, outsize, k).stride(stride).padding(k / 2)));
         activation = register_module("activation", SiLU());
     }
 
@@ -74,9 +74,7 @@ struct LinearCRFImpl : Module {
         if (expand_blanks == true) {
             scores = scores.contiguous();
             int C = scores.size(2);
-            scores = F::pad(scores.view({N, T, C / 4, 4}),
-                            F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score))
-                             .view({N, T, -1});
+            scores = F::pad(scores.view({N, T, C / 4, 4}), F::PadFuncOptions({1, 0, 0, 0, 0, 0, 0, 0}).value(blank_score)).view({N, T, -1});
         }
         // Output is [N, T, C], contiguous
         return scores;
@@ -182,24 +180,19 @@ struct CRFModelImpl : Module {
         conv3 = register_module("conv3", Convolution(16, config.insize, 19, config.stride, true));
         clamp3 = Clamp(-0.5, 3.5, config.clamp);
 
-        rnns = register_module(
-                "rnns", LSTMStackType(config.insize, batch_size, chunk_size / config.stride));
+        rnns = register_module("rnns", LSTMStackType(config.insize, batch_size, chunk_size / config.stride));
 
         if (config.decomposition) {
             // The linear layer is decomposed into 2 matmuls.
             const int decomposition = config.out_features;
             linear1 = register_module("linear1", Linear(config.insize, decomposition));
-            linear2 = register_module(
-                    "linear2", Linear(LinearOptions(decomposition, config.outsize).bias(false)));
+            linear2 = register_module("linear2", Linear(LinearOptions(decomposition, config.outsize).bias(false)));
             clamp4 = Clamp(-5.0, 5.0, config.clamp);
-            encoder = Sequential(conv1, clamp1, conv2, clamp2, conv3, clamp3, rnns, linear1,
-                                 linear2, clamp4);
+            encoder = Sequential(conv1, clamp1, conv2, clamp2, conv3, clamp3, rnns, linear1, linear2, clamp4);
         } else if ((config.conv == 16) && (config.num_features == 1)) {
-            linear1 = register_module(
-                    "linear1", Linear(LinearOptions(config.insize, config.outsize).bias(false)));
+            linear1 = register_module("linear1", Linear(LinearOptions(config.insize, config.outsize).bias(false)));
             clamp4 = Clamp(-5.0, 5.0, config.clamp);
-            encoder =
-                    Sequential(conv1, clamp1, conv2, clamp2, conv3, clamp3, rnns, linear1, clamp4);
+            encoder = Sequential(conv1, clamp1, conv2, clamp2, conv3, clamp3, rnns, linear1, clamp4);
         } else {
             linear = register_module("linear1", LinearCRF(config.insize, config.outsize));
             encoder = Sequential(conv1, conv2, conv3, rnns, linear);
@@ -331,28 +324,29 @@ std::vector<torch::Tensor> load_crf_model_weights(const std::string &dir,
                                                   bool decomposition,
                                                   bool bias) {
     auto tensors = std::vector<std::string>{
-            "0.conv.weight.tensor",      "0.conv.bias.tensor",
+        "0.conv.weight.tensor",      "0.conv.bias.tensor",
 
-            "1.conv.weight.tensor",      "1.conv.bias.tensor",
+        "1.conv.weight.tensor",      "1.conv.bias.tensor",
 
-            "2.conv.weight.tensor",      "2.conv.bias.tensor",
+        "2.conv.weight.tensor",      "2.conv.bias.tensor",
 
-            "4.rnn.weight_ih_l0.tensor", "4.rnn.weight_hh_l0.tensor",
-            "4.rnn.bias_ih_l0.tensor",   "4.rnn.bias_hh_l0.tensor",
+        "4.rnn.weight_ih_l0.tensor", "4.rnn.weight_hh_l0.tensor",
+        "4.rnn.bias_ih_l0.tensor",   "4.rnn.bias_hh_l0.tensor",
 
-            "5.rnn.weight_ih_l0.tensor", "5.rnn.weight_hh_l0.tensor",
-            "5.rnn.bias_ih_l0.tensor",   "5.rnn.bias_hh_l0.tensor",
+        "5.rnn.weight_ih_l0.tensor", "5.rnn.weight_hh_l0.tensor",
+        "5.rnn.bias_ih_l0.tensor",   "5.rnn.bias_hh_l0.tensor",
 
-            "6.rnn.weight_ih_l0.tensor", "6.rnn.weight_hh_l0.tensor",
-            "6.rnn.bias_ih_l0.tensor",   "6.rnn.bias_hh_l0.tensor",
+        "6.rnn.weight_ih_l0.tensor", "6.rnn.weight_hh_l0.tensor",
+        "6.rnn.bias_ih_l0.tensor",   "6.rnn.bias_hh_l0.tensor",
 
-            "7.rnn.weight_ih_l0.tensor", "7.rnn.weight_hh_l0.tensor",
-            "7.rnn.bias_ih_l0.tensor",   "7.rnn.bias_hh_l0.tensor",
+        "7.rnn.weight_ih_l0.tensor", "7.rnn.weight_hh_l0.tensor",
+        "7.rnn.bias_ih_l0.tensor",   "7.rnn.bias_hh_l0.tensor",
 
-            "8.rnn.weight_ih_l0.tensor", "8.rnn.weight_hh_l0.tensor",
-            "8.rnn.bias_ih_l0.tensor",   "8.rnn.bias_hh_l0.tensor",
+        "8.rnn.weight_ih_l0.tensor", "8.rnn.weight_hh_l0.tensor",
+        "8.rnn.bias_ih_l0.tensor",   "8.rnn.bias_hh_l0.tensor",
 
-            "9.linear.weight.tensor"};
+        "9.linear.weight.tensor"
+    };
 
     if (bias) {
         tensors.push_back("9.linear.bias.tensor");
@@ -365,13 +359,14 @@ std::vector<torch::Tensor> load_crf_model_weights(const std::string &dir,
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_crf_model(const std::string &path,
-                                       const CRFModelConfig &model_config,
-                                       const int batch_size,
-                                       const int chunk_size,
-                                       const torch::TensorOptions &options) {
+ModuleHolder<AnyModule> load_crf_model(
+    const std::string &path,
+    const CRFModelConfig &model_config,
+    const int batch_size,
+    const int chunk_size,
+    const torch::TensorOptions &options
+) {
     const bool expand_blanks = true;
     auto model = CpuCRFModel(model_config, expand_blanks, batch_size, chunk_size);
-    return populate_model(model, path, options, model_config.decomposition,
-                            model_config.bias);
+    return populate_model(model, path, options, model_config.decomposition, model_config.bias);
 }
