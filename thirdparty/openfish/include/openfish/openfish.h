@@ -21,11 +21,23 @@ typedef struct decoder_opts {
     bool move_pad;
 } decoder_opts_t;
 
-void decode(
+void decode_cpu(
     const int T,
     const int N,
     const int C,
-    const int target_threads,
+    int nthreads,
+    void *scores_TNC,
+    const int state_len,
+    const decoder_opts_t *options,
+    uint8_t **moves,
+    char **sequence,
+    char **qstring
+);
+
+void decode_gpu(
+    const int T,
+    const int N,
+    const int C,
     void *scores_TNC,
     const int state_len,
     const decoder_opts_t *options,

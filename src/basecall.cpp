@@ -34,7 +34,9 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <openfish/openfish.h>
 
-#include <cuda_runtime_api.h>
+#ifdef USE_GPU
+#include <c10/cuda/CUDAGuard.h>
+#endif
 
 #include "basecall.h"
 #include "error.h"
@@ -79,14 +81,22 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     const int N = scores_TNC.size(1);
     const int C = scores_TNC.size(2);
     const int state_len = runner->model_config.state_len;
-    const int target_threads = core->opt.num_thread / core->runners->size();
+    int nthreads = core->opt.num_thread / core->runners->size();
     
     uint8_t *moves;
     char *sequence;
     char *qstring;
 
     LOG_DEBUG("%s", "decoding scores");
-    decode(T, N, C, target_threads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+
+    if (runner->device == "cpu") {
+        decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+    } else {
+#ifdef USE_GPU
+        decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+#endif
+    }
+
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
         chunks[chunk] = {
@@ -135,11 +145,12 @@ void* pthread_single_basecall(void* voidargs) {
     const size_t runner_idx = args->runner;
     const size_t start = args->start;
     const size_t end = args->end;
-
-    runner_t* runner = (*core->runners)[runner_idx];
-    cudaSetDevice(runner->device_idx);
-
     opt_t opt = core->opt;
+
+#ifdef USE_GPU
+    runner_t* runner = (*core->runners)[runner_idx];
+    c10::cuda::CUDAGuard device_guard(runner->device_idx);
+#endif
 
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor> tensors;

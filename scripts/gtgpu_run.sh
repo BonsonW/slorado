@@ -1,8 +1,6 @@
 #!/bin/bash
 
-make clean && make -j cuda=1
-
-DEVICE=cuda:3
+DEVICE=cuda:0,1,2,3
 MODEL=fast
 BATCHSIZE=900
 CHUNKSIZE=10000

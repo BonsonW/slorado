@@ -13,8 +13,7 @@ CXXFLAGS   += -g -Wall -O2  -std=c++14
 LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
-			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so \
-			thirdparty/openfish/lib/libopenfish.a
+			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
 LDFLAGS  += $(LIBS) -lz -lm -lpthread -lstdc++fs
 BUILD_DIR = build
 
@@ -63,14 +62,16 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
+	LIBS += thirdparty/openfish/lib/libopenfish_cuda.a
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
-else
-ifdef rocm
+else ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1
+	LIBS += thirdparty/openfish/lib/libopenfish_rocm.a
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
 	LDFLAGS += -lrt -ldl
-endif
+else
+	LIBS += thirdparty/openfish/lib/libopenfish.a
 endif
 
 CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
