@@ -74,8 +74,6 @@ else
 	LIBS += thirdparty/openfish/lib/libopenfish.a
 endif
 
-CPPFLAGS += -DREMOVE_FIXED_BEAM_STAYS=1
-
 .PHONY: clean distclean test
 
 # slorado
@@ -103,7 +101,6 @@ $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-
 $(BUILD_DIR)/writer.o: src/writer.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
@@ -118,9 +115,6 @@ $(BUILD_DIR)/stitch.o: thirdparty/dorado/utils/stitch.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/cuda_utils.o: thirdparty/dorado/utils/cuda_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 #toml
