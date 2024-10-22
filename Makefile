@@ -69,9 +69,14 @@ ifdef cuda
 else ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1
 	CPPFLAGS += -DHAVE_HIP=1
+	CPPFLAGS += -D__HIP_PLATFORM_AMD__
+	ROCM_ROOT = /opt/rocm
+	HIP_INC = $(ROCM_ROOT)/include
+	HIP_LIB ?= $(ROCM_ROOT)/lib
+	CPPFLAGS += -I $(HIP_INC)
 	LIBS += thirdparty/openfish/lib/libopenfish_rocm.a
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
-	LDFLAGS += -lrt -ldl
+	LDFLAGS += -L$(HIP_LIB) -lamdhip64 -lrt -ldl
 else
 	LIBS += thirdparty/openfish/lib/libopenfish.a
 endif

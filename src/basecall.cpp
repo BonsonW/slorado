@@ -34,8 +34,12 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <openfish/openfish.h>
 
-#ifdef USE_GPU
+#ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
+#endif
+
+#ifdef HAVE_HIP
+#include <c10/hip/HIPGuard.h>
 #endif
 
 #include "basecall.h"
@@ -149,7 +153,12 @@ void* pthread_single_basecall(void* voidargs) {
 
 #ifdef USE_GPU
     runner_t* runner = (*core->runners)[runner_idx];
+#ifdef HAVE_CUDA
     c10::cuda::CUDAGuard device_guard(runner->device_idx);
+#endif
+#ifdef HAVE_HIP
+    c10::hip::HIPGuard device_guard(runner->device_idx);
+#endif
 #endif
 
     std::vector<Chunk *> chunks;
