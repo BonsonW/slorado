@@ -91,7 +91,9 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     const int state_len = runner->model_config.state_len;
     int nthreads = core->opt.num_thread / core->runners->size();
 
+#ifdef HAVE_CUDA
     cuda_freemem(runner->device_idx);
+#endif
     
     uint8_t *moves;
     char *sequence;
@@ -107,7 +109,9 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 #endif
     }
 
+#ifdef HAVE_CUDA
     cuda_freemem(runner->device_idx);
+#endif
 
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;

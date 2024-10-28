@@ -2,6 +2,8 @@
 #define HIP_UTILS_H
 
 #include <hip/hip_runtime.h>
+#include <cstdint>
+
 #include "error.h"
 
 #ifdef __cplusplus
@@ -20,6 +22,15 @@ extern "C" {
             exit(EXIT_FAILURE);                                                             \
         }                                                                                   \
     }
+
+static inline uint64_t hip_freemem(int32_t devicenum) {
+
+    uint64_t freemem, total;
+    HIP_CHECK(hipMemGetInfo(&freemem, &total));
+    fprintf(stderr, "[%s] %lu free of total %lu GPU memory\n",__func__, freemem, total);
+
+    return freemem;
+}
 
 #ifdef __cplusplus
 }
