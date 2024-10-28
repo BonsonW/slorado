@@ -36,6 +36,7 @@ SOFTWARE.
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
+#include "cuda_utils.h"
 #endif
 
 #ifdef HAVE_HIP
@@ -89,6 +90,8 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     const int C = scores_TNC.size(2);
     const int state_len = runner->model_config.state_len;
     int nthreads = core->opt.num_thread / core->runners->size();
+
+    cuda_freemem(runner->device_idx);
     
     uint8_t *moves;
     char *sequence;
@@ -103,6 +106,8 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
         decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
 #endif
     }
+
+    cuda_freemem(runner->device_idx);
 
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
