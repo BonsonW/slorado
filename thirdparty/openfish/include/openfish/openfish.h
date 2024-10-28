@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#include "openfish_error.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

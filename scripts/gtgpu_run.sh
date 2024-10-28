@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DEVICE=cuda:0,1,2,3
+DEVICE=cuda:0
 MODEL=fast
 BATCHSIZE=900
 CHUNKSIZE=10000

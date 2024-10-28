@@ -35,6 +35,8 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
+#include <openfish/openfish_error.h>
+
 #include <assert.h>
 #include <cstddef>
 #include <cstdint>
@@ -138,6 +140,7 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 'v') {
             int v = atoi(optarg);
             set_log_level((enum log_level_opt)v);
+            set_openfish_log_level((enum openfish_log_level_opt)v);
         } else if (c == 'x') {
             opt.device = optarg;
         } else if (c == 'c') {

@@ -80,6 +80,9 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     auto scores_TNC = scores;
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
     scores_TNC = scores_TNC.transpose(0, 1).contiguous();
+#ifdef USE_GPU
+    torch::cuda::synchronize(runner->device_idx);
+#endif
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
@@ -108,6 +111,23 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
             std::string(qstring + idx),
             std::vector<uint8_t>(moves + idx, moves + idx + T),
         };
+
+        if (chunks[chunk].sequence.size() == 0) {
+            ERROR("%s", "empty sequence returned by decoder");
+            exit(EXIT_FAILURE);
+        }
+
+        if (chunks[chunk].qstring.size() == 0) {
+            ERROR("%s", "empty qstring returned by decoder");
+            exit(EXIT_FAILURE);
+        }
+        
+        size_t seq_size = chunks[chunk].sequence.size();
+        size_t qstr_size = chunks[chunk].qstring.size();
+        if (seq_size != qstr_size) {
+            ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
+            exit(EXIT_FAILURE);
+        }
     }
     ts->time_decode_cleanup += realtime();
 
