@@ -101,6 +101,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 
     LOG_DEBUG("%s", "decoding scores");
 
+    ts->time_beamsearch -= realtime();
     if (runner->device == "cpu") {
         decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
     } else {
@@ -138,7 +139,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
             exit(EXIT_FAILURE);
         }
     }
-    ts->time_decode_cleanup += realtime();
+    ts->time_beamsearch += realtime();
 
     free(moves);
     free(sequence);
