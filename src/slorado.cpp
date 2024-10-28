@@ -67,6 +67,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->time_basecall = 0;
     core->time_postproc = 0;
     core->time_output = 0;
+    core->time_parse = 0;
 
     core->sp = slow5_open(slow5file, "r");
     if (core->sp == NULL) {
