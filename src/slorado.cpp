@@ -342,20 +342,23 @@ void output_db(core_t* core, db_t* db) {
 
 /* partially free a data batch - only the read dependent allocations are freed */
 void free_db_tmp(db_t* db) {
+    LOG_DEBUG("%s", "freeing db_tmp");
     int32_t i = 0;
     for (i = 0; i < db->n_rec; ++i) {
         free(db->mem_records[i]);
         free((*db->sequence)[i]);
         free((*db->qstring)[i]);
+        for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
+        (*db->chunks)[i].clear();
     }
 }
 
 /* completely free a data batch */
 void free_db(db_t* db) {
+    LOG_DEBUG("%s", "freeing db");
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
         slow5_rec_free(db->slow5_rec[i]);
-        for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
     }
     free(db->slow5_rec);
     free(db->mem_records);
