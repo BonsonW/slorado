@@ -13,7 +13,20 @@ extern "C" {
 
 #define DECODER_INIT {32, 100.0, 2.0, 0.0, 1.0, 1.0, false}
 
-typedef struct decoder_opts {
+typedef struct openfish_gpubuf {
+    float *bwd_NTC;
+    float *post_NTC;
+    uint8_t *moves;
+    char *sequence;
+    char *qstring;
+    void *beam_vector;
+    void *states;
+    float *qual_data;
+    float *base_probs;
+    float *total_probs;
+} openfish_gpubuf_t;
+
+typedef struct openfish_opt {
     size_t beam_width;
     float beam_cut;
     float blank_score;
@@ -21,31 +34,42 @@ typedef struct decoder_opts {
     float q_scale;
     float temperature;
     bool move_pad;
-} decoder_opts_t;
+} openfish_opt_t;
 
-void decode_cpu(
+void openfish_decode_cpu(
     const int T,
     const int N,
     const int C,
     int nthreads,
     void *scores_TNC,
     const int state_len,
-    const decoder_opts_t *options,
+    const openfish_opt_t *options,
     uint8_t **moves,
     char **sequence,
     char **qstring
 );
 
-void decode_gpu(
+void openfish_decode_gpu(
     const int T,
     const int N,
     const int C,
     void *scores_TNC,
     const int state_len,
-    const decoder_opts_t *options,
+    const openfish_opt_t *options,
+    const openfish_gpubuf_t *gpubuf,
     uint8_t **moves,
     char **sequence,
     char **qstring
+);
+
+openfish_gpubuf_t *openfish_gpubuf_init(
+    const int T,
+    const int N,
+    const int state_len
+);
+
+void openfish_gpubuf_free(
+    openfish_gpubuf_t *gpubuf
 );
 
 #ifdef __cplusplus

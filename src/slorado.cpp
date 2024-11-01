@@ -47,6 +47,15 @@ SOFTWARE.
 #include "dorado/utils/stitch.h"
 
 #include <slow5/slow5.h>
+#include <openfish/openfish.h>
+
+#ifdef HAVE_CUDA
+#include <c10/cuda/CUDAGuard.h>
+#endif
+
+#ifdef HAVE_HIP
+#include <c10/hip/HIPGuard.h>
+#endif
 
 #include <sys/wait.h>
 #include <unistd.h>
@@ -146,7 +155,17 @@ void free_core(core_t* core, opt_t opt) {
     }
 
     for (size_t i = 0; i < core->runners->size(); ++i) {
-        delete (*core->runners)[i];
+        runner_t* runner = (*core->runners)[i];
+#ifdef USE_GPU
+#ifdef HAVE_CUDA
+        c10::cuda::CUDAGuard device_guard(runner->device_idx);
+#endif
+#ifdef HAVE_HIP
+        c10::hip::HIPGuard device_guard(runner->device_idx);
+#endif
+        openfish_gpubuf_free(runner->gpubuf);
+#endif
+        delete runner;
     }
 
     slow5_close(core->sp);
@@ -431,8 +450,19 @@ void init_runner(
     runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     runner->chunk_size = runner->input_tensor.size(2);
 
+#ifdef USE_GPU
     int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
     runner->device_idx = device_idx;
+
+#ifdef HAVE_CUDA
+    c10::cuda::CUDAGuard device_guard(device_idx);
+#endif
+#ifdef HAVE_HIP
+    c10::hip::HIPGuard device_guard(device_idx);
+#endif
+
+    runner->gpubuf = openfish_gpubuf_init(chunk_size, batch_size, model_config.state_len);
+#endif
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }

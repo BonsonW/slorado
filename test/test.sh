@@ -17,7 +17,7 @@ fi
 
 ex() {
     if [ $mem -eq 1 ]; then
-        /install/valgrind-3.21/bin/valgrind --leak-check=full --error-exitcode=1 "$@"
+        /install/valgrind-3.21/bin/valgrind --error-exitcode=1  --leak-check=full --show-leak-kinds=all --suppressions=test/valgrind.supp --gen-suppressions=yes "$@"
     else
         "$@"
     fi

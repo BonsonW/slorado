@@ -278,10 +278,10 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
             } else if (strcmp(type, "linear") == 0) {
                 // Specifying out_features implies a decomposition of the linear layer matrix
                 // multiply with a bottleneck before the final feature size.
-                try {
+                if (toml_key_exists(segment, "out_features")) {
                     config.out_features = toml_int_in(segment, "out_features").u.i;
                     config.decomposition = true;
-                } catch (std::out_of_range e) {
+                } else {
                     config.decomposition = false;
                 }
             } else if (strcmp(type, "clamp") == 0) {

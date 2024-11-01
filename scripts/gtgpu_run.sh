@@ -1,13 +1,13 @@
 #!/bin/bash
 
-DEVICE=cuda:0
+DEVICE=cuda:0,1,2,3
 MODEL=fast
-BATCHSIZE=900
+BATCHSIZE=700
 CHUNKSIZE=10000
 THREADS=40
 
-BLOW5=/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_reads_500k.blow5
-# BLOW5=/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5
+# BLOW5=/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_reads_500k.blow5
+BLOW5=/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5
 # BLOW5=/data/bonwon/slorado/test/one_5khz.blow5
 # BLOW5=test/4khz_r10/1k_reads.blow5
 

@@ -36,7 +36,6 @@ SOFTWARE.
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
-#include "cuda_utils.h"
 #endif
 
 #ifdef HAVE_HIP
@@ -91,10 +90,6 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     const int state_len = runner->model_config.state_len;
     int nthreads = core->opt.num_thread / core->runners->size();
 
-#ifdef HAVE_CUDA
-    cuda_freemem(runner->device_idx);
-#endif
-    
     uint8_t *moves;
     char *sequence;
     char *qstring;
@@ -103,16 +98,12 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 
     ts->time_beamsearch -= realtime();
     if (runner->device == "cpu") {
-        decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+        openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
     } else {
 #ifdef USE_GPU
-        decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+        openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #endif
     }
-
-#ifdef HAVE_CUDA
-    cuda_freemem(runner->device_idx);
-#endif
 
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
