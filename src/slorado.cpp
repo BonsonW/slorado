@@ -460,8 +460,7 @@ void init_runner(
 #ifdef HAVE_HIP
     c10::hip::HIPGuard device_guard(device_idx);
 #endif
-
-    runner->gpubuf = openfish_gpubuf_init(chunk_size, batch_size, model_config.state_len);
+    runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
 #endif
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
