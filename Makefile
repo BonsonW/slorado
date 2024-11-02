@@ -7,7 +7,7 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I $(LIBTORCH_DIR)/include/torch/csrc/api/include \
 			-I $(LIBTORCH_DIR)/include -I thirdparty/ \
 			-I thirdparty/tomlc99/ \
-			-I thirdparty/openfish/include
+			-I openfish/include
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++14
 LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
@@ -63,7 +63,6 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
-	LIBS += thirdparty/openfish/lib/libopenfish_cuda.a
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
 else ifdef rocm
@@ -74,18 +73,15 @@ else ifdef rocm
 	HIP_INC = $(ROCM_ROOT)/include
 	HIP_LIB ?= $(ROCM_ROOT)/lib
 	CPPFLAGS += -I $(HIP_INC)
-	LIBS += thirdparty/openfish/lib/libopenfish_rocm.a
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
 	LDFLAGS += -L$(HIP_LIB) -lamdhip64 -lrt -ldl
-else
-	LIBS += thirdparty/openfish/lib/libopenfish.a
 endif
 
 .PHONY: clean distclean test
 
 # slorado
-$(BINARY): $(OBJ) slow5lib/lib/libslow5.a
-	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a $(LDFLAGS) -o $@
+$(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
+	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
@@ -124,10 +120,12 @@ $(BUILD_DIR)/stitch.o: thirdparty/dorado/utils/stitch.cpp
 $(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-#toml
+# toml
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
+openfish/lib/libopenfish.a:
+	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) lib/libopenfish.a
 
 slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a
@@ -135,6 +133,7 @@ slow5lib/lib/libslow5.a:
 clean:
 	rm -rf $(BINARY) $(BUILD_DIR)/*.o
 	make -C slow5lib clean
+	make -C openfish clean
 
 # Delete all gitignored files (but not directories)
 distclean: clean
