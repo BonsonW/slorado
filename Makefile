@@ -9,7 +9,7 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I thirdparty/tomlc99/ \
 			-I openfish/include
 CFLAGS	+= 	-g -Wall -O2
-CXXFLAGS   += -g -Wall -O2  -std=c++14
+CXXFLAGS   += -g -Wall -O2  -std=c++17
 LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
