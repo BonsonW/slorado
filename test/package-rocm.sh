@@ -9,7 +9,7 @@ VERSION=`git describe --tags`
 [ -z "$VERSION" ] && VERSION=`git rev-parse --short HEAD`
 
 rm -rf slorado-$VERSION slorado-*.tar.gz models/
-test/download-models.sh || die "Download models failed"
+scripts/download-models.sh || die "Download models failed"
 
 mkdir -p slorado-$VERSION
 mkdir -p slorado-$VERSION/bin slorado-$VERSION/lib slorado-$VERSION/share
