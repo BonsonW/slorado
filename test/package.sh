@@ -6,7 +6,7 @@ die() {
 }
 
 VERSION=`git describe --tags`
-[ -z "$VERSION" ] && VERSION = "unknown"
+[ -z "$VERSION" ] && VERSION=`git rev-parse --short HEAD`
 
 rm -rf slorado-$VERSION
 mkdir -p slorado-$VERSION
