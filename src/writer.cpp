@@ -28,14 +28,20 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include <errno.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stdlib.h>
+
+#include "error.h"
 
 void write_to_file(FILE *out, char *sequence, char *qstring, char *read_id, bool emit_fastq) {
     if (emit_fastq) {
-        fprintf(out, "@%s\n", read_id);
-        fprintf(out, "%s\n", sequence);
-        fprintf(out, "+\n");
-        fprintf(out, "%s\n", qstring);
+        if (fprintf(out, "@%s\n%s\n+\n%s\n", read_id, sequence, qstring) == EOF) {
+            ERROR("%s", "error writing to file");
+            exit(EXIT_FAILURE);
+        }
     } else {
         // todo: samline outuput
     }
