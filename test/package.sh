@@ -5,7 +5,7 @@ die() {
     exit 1
 }
 
-VERSION = `git describe --tags`
+VERSION=`git describe --tags`
 [ -z "$VERSION" ] && VERSION = "unknown"
 
 rm -rf slorado-$VERSION
