@@ -3,4 +3,4 @@
 	url = https://github.com/hasindu2008/slow5lib
 [submodule "openfish"]
 	path = openfish
-	url = https://github.com/warp9seq/openfish
+	url = git@github.com:warp9seq/openfish.git

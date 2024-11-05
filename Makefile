@@ -10,7 +10,7 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I openfish/include
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++17
-LIBS    +=  -Wl,-rpath,$(LIBTORCH_DIR)/lib \
+LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../lib' \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
 			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
@@ -59,18 +59,16 @@ endif
 ifdef cuda
     CPPFLAGS += -DUSE_GPU=1
     CPPFLAGS += -DHAVE_CUDA=1
-	CUDA_ROOT = /usr/local/cuda
+	CUDA_ROOT ?= /usr/local/cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
 else ifdef rocm
-	CPPFLAGS += -DUSE_GPU=1
-	CPPFLAGS += -DHAVE_HIP=1
-	CPPFLAGS += -D__HIP_PLATFORM_AMD__
-	ROCM_ROOT = /opt/rocm
-	HIP_INC = $(ROCM_ROOT)/include
+	CPPFLAGS += -DUSE_GPU=1 -DHAVE_HIP=1 -D__HIP_PLATFORM_AMD__
+	ROCM_ROOT ?= /opt/rocm
+	HIP_INC ?= $(ROCM_ROOT)/include
 	HIP_LIB ?= $(ROCM_ROOT)/lib
 	CPPFLAGS += -I $(HIP_INC)
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
@@ -125,7 +123,7 @@ $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 openfish/lib/libopenfish.a:
-	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) lib/libopenfish.a
+	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT=$(ROCM_ROOT) CUDA_ROOT=$(CUDA_ROOT) lib/libopenfish.a
 
 slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a
