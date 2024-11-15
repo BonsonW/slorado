@@ -34,6 +34,7 @@ To run on your own data, below are the steps. If you run into a problem, feel fr
 We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 8 MI250X GPUs on the node. The executions times were as follows for the three different basecalling models:
 
 | Basecalling model | Execution time |
+|---|---|
 | super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    |                |
 | high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    |                |
 | fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             |                |
@@ -41,6 +42,7 @@ We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverag
 After basecalling, we aligned the reads to the hg38 genome using minimap2 and calculated the statistics (e.g., mean, median) for the identity scores. The values were as expected to what we see in the same model versions in original Dorado:
 
 | Basecalling model | mean identity score | median identity score |
+|---|---|---|
 | super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    |                |           |
 | high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    |                |           |
 | fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             |                |           |
