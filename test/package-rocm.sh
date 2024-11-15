@@ -16,7 +16,7 @@ test -d thirdparty/torch/libtorch || scripts/install-torch2.sh rocm || die "Inst
 mkdir -p slorado-$VERSION
 mkdir -p slorado-$VERSION/bin slorado-$VERSION/lib slorado-$VERSION/share
 make clean
-make rocm=1 -j HIP_ARCH="--offload-arch=gfx1030 --offload-arch=gfx1100 --offload-arch=gfx900 --offload-arch=gfx906 --offload-arch=gfx908 --offload-arch=gfx90a" || die "Build failed"
+make rocm=1 -j HIP_ARCH='"--offload-arch=gfx1030 --offload-arch=gfx1100 --offload-arch=gfx900 --offload-arch=gfx906 --offload-arch=gfx908 --offload-arch=gfx90a"' || die "Build failed"
 cp -r thirdparty/torch/libtorch/* slorado-$VERSION/|| die "Copy failed"
 mv  ./slorado slorado-$VERSION/bin/ || die "Copy failed"
 cp -r models/ slorado-$VERSION/ || die "Copy failed"
