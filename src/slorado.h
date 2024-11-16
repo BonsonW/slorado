@@ -37,11 +37,8 @@ SOFTWARE.
 #include <stdint.h>
 #include <slow5/slow5.h>
 #include <vector>
-#include <memory>
-#include <torch/torch.h>
-#include <openfish/openfish.h>
+
 #include "dorado/Chunk.h"
-#include "dorado/nn/CRFModel.h"
 
 #define SLORADO_VERSION "0.1.0"
 
@@ -75,6 +72,7 @@ typedef struct {
     int32_t num_runners;        // number of runners: r
 } opt_t;
 
+typedef struct elephant_s elephant_t;
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -90,7 +88,8 @@ typedef struct {
 
     // each slow5 record has a vec of chunks and tensors assigned to it
     std::vector<std::vector<Chunk *>> *chunks;
-    std::vector<std::vector<torch::Tensor>> *tensors;
+
+    elephant_t *elephant;
 
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
@@ -126,20 +125,7 @@ typedef struct {
     uint64_t total_dp;
 } runner_stat_t;
 
-typedef struct {
-    std::string device;
-    torch::Tensor input_tensor;
-    torch::TensorOptions tensor_opts;
-    openfish_opt_t decoder_opts;
-    torch::nn::ModuleHolder<torch::nn::AnyModule> module{nullptr};
-    size_t model_stride;
-    size_t chunk_size;
-    CRFModelConfig model_config;
-#ifdef USE_GPU
-    int64_t device_idx;
-    openfish_gpubuf_t *gpubuf;
-#endif
-} runner_t;
+typedef struct runner_s runner_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
@@ -235,11 +221,5 @@ void free_db(db_t* db);
 
 /* free the core data structure */
 void free_core(core_t* core,opt_t opt);
-
-/* initialise runner_stat */
-void init_runner_stat(runner_stat_t* time_stamps);
-
-/* intialise model runner */
-void init_runner(runner_t* runner, const std::string &model_path, const std::string &device, int chunk_size, int batch_size, torch::ScalarType dtype);
 
 #endif

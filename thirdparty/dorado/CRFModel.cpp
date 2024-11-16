@@ -5,7 +5,7 @@
 #include "toml.h"
 #include "CRFModel.h"
 #include "error.h"
-#include "../utils/tensor_utils.h"
+#include "signal_prep_stitch_tensor_utils.h"
 
 using namespace torch::nn;
 namespace F = torch::nn::functional;

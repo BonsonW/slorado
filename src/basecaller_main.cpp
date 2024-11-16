@@ -42,7 +42,6 @@ SOFTWARE.
 #include "slorado.h"
 #include "misc.h"
 #include "error.h"
-#include "dorado/signal_prep.h"
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]

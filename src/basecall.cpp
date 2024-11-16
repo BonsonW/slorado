@@ -34,6 +34,10 @@ SOFTWARE.
 #include <slow5/slow5.h>
 #include <openfish/openfish.h>
 
+#include <torch/torch.h>
+#include "elephant.h"
+#include "misc.h"
+
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
 #endif
@@ -41,6 +45,7 @@ SOFTWARE.
 #ifdef HAVE_HIP
 #include <c10/hip/HIPGuard.h>
 #endif
+
 
 #include "basecall.h"
 #include "error.h"
@@ -122,7 +127,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
             ERROR("%s", "empty qstring returned by decoder");
             exit(EXIT_FAILURE);
         }
-        
+
         size_t seq_size = chunks[chunk].sequence.size();
         size_t qstr_size = chunks[chunk].qstring.size();
         if (seq_size != qstr_size) {
@@ -187,7 +192,7 @@ void* pthread_single_basecall(void* voidargs) {
 
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
         auto this_chunk = (*db->chunks)[read_idx];
-        auto this_tensor = (*db->tensors)[read_idx];
+        auto this_tensor = (*db->elephant->tensors)[read_idx];
 
         for (size_t chunk_idx = 0; chunk_idx < this_chunk.size(); ++chunk_idx) {
             chunks.push_back(this_chunk[chunk_idx]);

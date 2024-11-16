@@ -37,14 +37,15 @@ SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 
+#include "elephant.h"
+
 #include "slorado.h"
 #include "misc.h"
 #include "error.h"
 
-#include "dorado/signal_prep.h"
+#include "dorado/signal_prep_stitch_tensor_utils.h"
 #include "basecall.h"
 #include "writer.h"
-#include "dorado/utils/stitch.h"
 
 #include <slow5/slow5.h>
 #include <openfish/openfish.h>
@@ -60,6 +61,14 @@ SOFTWARE.
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
+
+/* initialise runner_stat */
+void init_runner_stat(runner_stat_t* time_stamps);
+
+/* intialise model runner */
+void init_runner(runner_t* runner, const std::string &model_path, const std::string &device, int chunk_size, int batch_size, torch::ScalarType dtype);
+
+std::vector<std::string> parse_cuda_device_string(std::string device_arg);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -194,7 +203,9 @@ db_t* init_db(core_t* core) {
     MALLOC_CHK(db->means);
 
     db->chunks = new std::vector<std::vector<Chunk *>>(db->capacity_rec, std::vector<Chunk *>());
-    db->tensors = new std::vector<std::vector<torch::Tensor>>(db->capacity_rec, std::vector<torch::Tensor>());
+    db->elephant = (elephant_t*) malloc(sizeof(elephant_t));
+    MALLOC_CHK(db->elephant);
+    db->elephant->tensors = new std::vector<std::vector<torch::Tensor>>(db->capacity_rec, std::vector<torch::Tensor>());
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
     db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
 
@@ -285,7 +296,7 @@ void preprocess_signal(core_t* core, db_t* db, int32_t i) {
 
         std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
 
-        (*db->tensors)[i] = tensors;
+        (*db->elephant->tensors)[i] = tensors;
         LOG_TRACE("%s","assigned tensors");
     }
 }
@@ -386,7 +397,8 @@ void free_db(db_t* db) {
     delete db->chunks;
     delete db->sequence;
     delete db->qstring;
-    delete db->tensors;
+    delete db->elephant->tensors;
+    free(db->elephant);
     free(db);
 }
 
@@ -464,4 +476,31 @@ void init_runner(
 #endif
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
+}
+
+
+std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
+    std::vector<std::string> devices;
+
+    if (device_arg == "cuda:all" || device_arg == "cuda:auto") {
+        for (size_t i = 0; i < torch::cuda::device_count(); i++) {
+            devices.push_back("cuda:" + std::to_string(i));
+        }
+        return devices;
+    }
+
+    std::string device_name = "";
+    std::string delimiter = ":";
+    size_t pos = device_arg.find(delimiter);
+    device_name = device_arg.substr(0, pos + delimiter.length());
+    device_arg.erase(0, pos + delimiter.length());
+
+    delimiter = ",";
+    while ((pos = device_arg.find(delimiter)) != std::string::npos) {
+        devices.push_back(device_name + device_arg.substr(0, pos));
+        device_arg.erase(0, pos + delimiter.length());
+    }
+    devices.push_back(device_name + device_arg.substr(0, pos));
+
+    return devices;
 }

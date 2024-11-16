@@ -14,7 +14,7 @@ LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../li
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
 			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
-LDFLAGS  += $(LIBS) -lz -lm -lpthread -lstdc++fs
+LDFLAGS  += $(LIBS) -lz -lm -lpthread
 BUILD_DIR = build
 
 ifeq ($(zstd),1)
@@ -36,11 +36,9 @@ OBJ = $(BUILD_DIR)/main.o \
       $(BUILD_DIR)/thread.o \
 	  $(BUILD_DIR)/misc.o \
 	  $(BUILD_DIR)/error.o \
-	  $(BUILD_DIR)/signal_prep.o \
+	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
 	  $(BUILD_DIR)/writer.o \
 	  $(BUILD_DIR)/CRFModel.o \
-	  $(BUILD_DIR)/stitch.o \
-	  $(BUILD_DIR)/tensor_utils.o \
 	  $(BUILD_DIR)/toml.o \
 
 
@@ -106,16 +104,10 @@ $(BUILD_DIR)/writer.o: src/writer.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # dorado
-$(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
+$(BUILD_DIR)/signal_prep_stitch_tensor_utils.o: thirdparty/dorado/signal_prep_stitch_tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/nn/CRFModel.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/stitch.o: thirdparty/dorado/utils/stitch.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
+$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # toml
