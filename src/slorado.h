@@ -75,6 +75,7 @@ typedef struct {
     int32_t num_runners;        // number of runners: r
 } opt_t;
 
+
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
     int32_t n_rec;
