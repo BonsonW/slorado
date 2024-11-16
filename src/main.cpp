@@ -2,10 +2,12 @@
  * @file main.c
  * @brief entry point
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
+ * @author Bonson Wong (bonson.ym@gmail.com)
 
 MIT License
 
 Copyright (c) 2019 Hasindu Gamaarachchi (hasindu@unsw.edu.au)
+Copyright (c) 2023 Bonson Wong (bonson.ym@gmail.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

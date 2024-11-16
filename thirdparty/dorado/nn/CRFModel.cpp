@@ -223,16 +223,19 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     FILE* fp;
     char errbuf[200];
 
-    fp = fopen((path + "/config.toml").c_str(), "r");
+    const char *cpath = (path + "/config.toml").c_str();
+    fp = fopen(cpath, "r");
     if (!fp) {
-        ERROR("cannot open toml - %s", (path + "/config.toml").c_str());
+        ERROR("cannot open toml - %s: %s", cpath, strerror(errno));
+        exit(EXIT_FAILURE);
     }
 
     toml_table_t *config_toml = toml_parse_file(fp, errbuf, sizeof(errbuf));
     fclose(fp);
 
     if (!config_toml) {
-        ERROR("cannot parse - %s", errbuf);
+        ERROR("Could not parse toml file %s at '%s'", cpath, errbuf);
+        exit(EXIT_FAILURE);
     }
 
     CRFModelConfig config;
