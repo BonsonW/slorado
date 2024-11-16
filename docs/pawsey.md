@@ -35,14 +35,14 @@ We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverag
 
 | Basecalling model | Execution time |
 |---|---|
-| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    |                |
-| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    |                |
-| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             |                |
+| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 21:03:59       |
+| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 7:30:45        |
+| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 4:46:31        |
 
 After basecalling, we aligned the reads to the hg38 genome using minimap2 and calculated the statistics (e.g., mean, median) for the identity scores. The values were as expected to what we see in the same model versions in original Dorado:
 
 | Basecalling model | mean identity score | median identity score |
 |---|---|---|
-| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    |                |           |
-| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    |                |           |
-| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             |                |           |
+| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 0.950    | 0.993    |
+| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 0.941    | 0.977    |
+| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 0.912    | 0.938    |
