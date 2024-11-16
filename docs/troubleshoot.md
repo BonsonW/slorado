@@ -10,7 +10,7 @@ tar: Exiting with failure status due to previous errors
 
 Solution:
 - try to extract to a different location that supports symbolic links
-- or else, make a hard link `ln libamdhip64.so slorado-e7c7e54/lib/libamdhip64.so.5`
+- or else, make a hard link. You can do this by `cd slorado-binary-dir/lib/ && ln libamdhip64.so libamdhip64.so.5`
 
 
 # Getting an error when that /tmp/something is unwritable

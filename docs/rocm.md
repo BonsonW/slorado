@@ -1,0 +1,27 @@
+# Basecalling on AMD GPUs
+
+With slorado, now you can do some nanopore basecalling on AMD GPUs. This is in early development, so don't have too many expectations. We have some compiled binaries which should work On Linux if you have GLIBC >= 2.28 (invoke `ldd --version` to check). See the following instructions.
+
+First, download and extract the slorado rocm linux binaries tar ball. Note that this is for testing only and the link will not be persistent!!!!
+
+```
+wget -O slorado-16-11-2024-e7c7e54.tar.gz "https://www.dropbox.com/s/odgcqtpp0d1hi4f/slorado-16-11-2024-e7c7e54.tar.gz?dl=1"
+tar xf slorado-16-11-2024-e7c7e54.tar.gz
+cd slorado-e7c7e54
+bin/slorado --help
+```
+
+Download the test dataset with 20,000 reads and run slorado:
+```
+wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample
+./bin/slorado basecaller PGXXXX230339_reads_20k.blow5 models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 -o out.fastq -x cuda:all  -C 500 -v5
+```
+
+Test if the output maps and identity scores are good (required  minimap2, the human genome and datamash):
+```
+minimap2 -cx map-ont hg38noAlt.fa out.fastq --secondary=no -t16  | awk '{print $10/$11}' | datamash mean 1 median 1 count
+```
+It should print the mean identity score, median identity score and the number of alignments. The numbers are expected to be close to the following (would not be identical due to floating point deviations):
+```
+0.94113261325097        0.9771185       24768
+```
