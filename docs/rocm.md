@@ -25,3 +25,7 @@ It should print the mean identity score, median identity score and the number of
 ```
 0.94113261325097        0.9771185       24768
 ```
+
+Note: Currently, we have tested these binaries on following systems:
+1. O/S: SUSE Linux Enterprise Server 15, GPU: AMD MI250X
+2. O/S: Ubuntu 20, GPUs: MI50/MI60, MI100 and MI210
