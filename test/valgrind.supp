@@ -100,3 +100,30 @@
    ...
    obj:*/libtorch_cpu.so
 }
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible
+   fun:_Znwm
+   ...
+   fun:_dl_init
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible
+   fun:_Znwm
+   ...
+   fun:_dl_init
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible
+   fun:malloc
+   ...
+   fun:_dl_init
+}
