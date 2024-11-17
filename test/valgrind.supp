@@ -91,3 +91,12 @@
    ...
    obj:*/libtorch_cpu.so
 }
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible
+   fun:_Znwm
+   ...
+   obj:*/libtorch_cpu.so
+}
