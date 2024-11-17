@@ -1,6 +1,6 @@
 # Slorado
 
-Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled. A minimum g++ version of 5.4 is required. Currently slorado only supports Linux on x86_64 architecture or aarm64 Jetson-based devices.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled.  Currently slorado only supports Linux on x86_64 architecture or aarm64 Jetson-based devices.
 
 Slorado is mainly for research and educational purposes and performance is currently not the key goal. Slorado will only support a minimal set of features and may not be up to date with Dorado.
 A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
@@ -23,6 +23,9 @@ On Fedora/CentOS : sudo dnf/yum install zlib-devel
 On OS X : brew install zlib
 ```
 
+A minimum g++ version of 5.4 is required for CPU or CUDA versions due to libtorch.
+For CUDA version, you need the cuda toolkit installed.
+
 ### 2. Downloading Models
 
 Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.2.0, dna_r10.4.1_e8.2_400bps_hac@v4.2.0 and dna_r10.4.1_e8.2_400bps_hac@v4.2.0). We have tested slorado only on these models.
@@ -33,11 +36,20 @@ scripts/download-models.sh
 
 ### 3. Make
 
-<details><summary> <b>Option 2:</b> CUDA GPU version. This version still uses the CPU decoder, thus considerably slow: </summary>
-    
+<details><summary> <b>Option 1:</b> CUDA GPU version for NVIDIA GPUs.  </summary>
+
 ```
 scripts/install-torch2.sh cuda
 make cuda=1 -j
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
+```
+</details>
+
+<details><summary> <b>Option 2:</b> ROCM GPU version for AMD GPUs.  </summary>
+
+```
+scripts/install-torch2.sh rocm
+make rocm=1 -j
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
 ```
 </details>
@@ -100,7 +112,7 @@ make -j
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5
 ```
 
-Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. 
+Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used.
 Currently, slorado does not implement automatic batch size selection based on available memory. Thus, if you see an out of RAM error, reduce the batch size using -K or -B. If you see an out of GPU memory error, reduce the GPU batch size using -C option. All options supported by slorado are detailed below:
 
 
@@ -127,11 +139,7 @@ scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
 ## Acknowledgement
 
 - A lot of code is coming from [Dorado](https://github.com/nanoporetech/dorado) which is licensed under [Oxford Nanopore Technologies PLC. Public License Version 1.0](thirdparty/dorado/LICENCE). Those files are located at [thirdparty/dorado](thirdparty/dorado).
-
 - [tomlc99](https://github.com/cktan/tomlc99) library under [thirdparty/tomlc99](thirdparty/tomlc99), is licensed under [MIT license](thirdparty/tomlc99/LICENSE).
-
-- [koi_lib] library under [thirdparty/koi_lib](thirdparty/koi_lib) are proprietary binaries from Oxford Nanopore Technologies.
-
 - Some code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
 
 
