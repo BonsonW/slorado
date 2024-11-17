@@ -1,6 +1,6 @@
 # Slorado
 
-Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled.  Currently slorado only supports Linux on x86_64 architecture or aarm64 Jetson-based devices.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced dependecies so that it can be (relatively) easily compiled.  Currently slorado only supports Linux on x86_64 architecture or arm64 Jetson-based devices.
 
 Slorado is mainly for research and educational purposes and performance is currently not the key goal. Slorado will only support a minimal set of features and may not be up to date with Dorado.
 A feature rich, fast and up to date version of Dorado that supports S/BLOW5 (called slow5-dorado) can be found [here](https://github.com/hiruna72/slow5-dorado).
@@ -25,6 +25,7 @@ On OS X : brew install zlib
 
 A minimum g++ version of 5.4 is required for CPU or CUDA versions due to libtorch.
 For CUDA version, you need the cuda toolkit installed.
+For ROCM version, you need the rocm SDK installed.
 
 ### 2. Downloading Models
 
@@ -64,9 +65,7 @@ make -j
 
 </details>
 
-### Building for ARM64 Jetson-based devices
-
-<details><summary>Click to expand</summary>
+<details><summary>Option 4: For ARM64 Jetson-based devices</summary>
 
 1. Install and activate python venv.
 
@@ -92,7 +91,8 @@ make -j
     ```
 </details>
 
-### Advanced Options
+
+#### Advanced Building Options
 
 - Custom libtorch path:
     ```
@@ -104,7 +104,11 @@ make -j
     make cxx11_abi=1
     ```
 
-- You can optionally enable zstd support for builtin slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
+- You can optionally enable zstd support for built-in slow5lib when building slorado by invoking make zstd=1. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf and zstd for homebrew).
+
+- For CUDA you can provide the architecture as `make cuda=1 CUDA_ARCH=-arch=sm_xy`
+
+- For ROCM you can provide the architecture as `make rocm=1 CUDA_ARCH=--offload-arch=gfxnnn`
 
 ### 4. Running, options and testing
 
