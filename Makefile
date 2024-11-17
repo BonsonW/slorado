@@ -31,17 +31,17 @@ endif
 BINARY = slorado
 
 OBJ = $(BUILD_DIR)/main.o \
-      $(BUILD_DIR)/slorado.o \
       $(BUILD_DIR)/basecaller_main.o \
-	  $(BUILD_DIR)/basecall.o \
+      $(BUILD_DIR)/slorado.o \
       $(BUILD_DIR)/thread.o \
 	  $(BUILD_DIR)/misc.o \
 	  $(BUILD_DIR)/error.o \
-	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
 	  $(BUILD_DIR)/writer.o \
+	  $(BUILD_DIR)/elephant.o \
+	  $(BUILD_DIR)/basecall.o \
+	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/toml.o \
-
 
 # add more objects here if needed
 
@@ -83,13 +83,10 @@ $(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/basecall.o: src/basecall.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
 $(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
@@ -102,6 +99,12 @@ $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/writer.o: src/writer.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/elephant.o: src/elephant.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/basecall.o: src/basecall.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # dorado

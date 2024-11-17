@@ -219,11 +219,14 @@ struct CRFModelImpl : Module {
 using CpuCRFModelImpl = CRFModelImpl<LSTMStack>;
 TORCH_MODULE(CpuCRFModel);
 
-CRFModelConfig load_crf_model_config(const std::string &path) {
+CRFModelConfig load_crf_model_config(char *path) {
     FILE* fp;
     char errbuf[200];
 
-    const char *cpath = (path + "/config.toml").c_str();
+    char *cpath = (char *)malloc(strlen(path) + 100);
+    MALLOC_CHK(cpath);
+    sprintf(cpath, "%s/config.toml", path);
+
     fp = fopen(cpath, "r");
     if (!fp) {
         ERROR("cannot open toml - %s: %s", cpath, strerror(errno));
@@ -319,6 +322,8 @@ CRFModelConfig load_crf_model_config(const std::string &path) {
     config.outsize = pow(4, config.state_len) * 4;
 
     toml_free(config_toml);
+
+    free(cpath);
 
     return config;
 }
