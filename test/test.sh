@@ -17,7 +17,7 @@ fi
 
 ex() {
     if [ $mem -eq 1 ]; then
-        ${VALGRIND} --error-exitcode=1  --leak-check=full --show-leak-kinds=all --suppressions=test/valgrind.supp --gen-suppressions=yes "$@"
+        ${VALGRIND} --error-exitcode=1  --leak-check=full --show-leak-kinds=all --suppressions=test/valgrind.supp  "$@"
     else
         "$@"
     fi
