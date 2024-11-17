@@ -17,13 +17,14 @@ fi
 
 ex() {
     if [ $mem -eq 1 ]; then
-        /install/valgrind-3.21/bin/valgrind --error-exitcode=1  --leak-check=full --show-leak-kinds=all --suppressions=test/valgrind.supp --gen-suppressions=yes "$@"
+        ${VALGRIND} --error-exitcode=1  --leak-check=full --show-leak-kinds=all --suppressions=test/valgrind.supp  "$@"
     else
         "$@"
     fi
 }
 
 test -z "$DEVICE" && DEVICE=cuda:0
+test -z "$VALGRIND" && VALGRIND=valgrind
 
 download_model () {
     test -e $1.zip && rm $1.zip
