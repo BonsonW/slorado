@@ -161,3 +161,7 @@ jobs:
       run: make -j2
     - name: test
       run: export DEVICE=cpu && make test
+    - name: build asan
+      run: make asan=1 -j2
+    - name: asam
+      run: export DEVICE=cpu && make test

@@ -25,7 +25,7 @@ struct CRFModelConfig {
     int num_features;
 };
 
-CRFModelConfig load_crf_model_config(const std::string& path);
+CRFModelConfig load_crf_model_config(char *path);
 
 std::vector<torch::Tensor> load_crf_model_weights(const std::string& dir,  bool decomposition, bool bias);
 

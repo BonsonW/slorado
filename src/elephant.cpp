@@ -72,7 +72,7 @@ std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
 /* initialise runners */
 void init_runner(
     runner_t* runner,
-    const std::string &model_path,
+    char *model_path,
     const std::string &device,
     int chunk_size,
     int batch_size,
