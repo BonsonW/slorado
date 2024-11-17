@@ -10,6 +10,24 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
+  ubuntu_16:
+    name: Ubuntu 16
+    runs-on: ubuntu-20.04
+    container: ubuntu:16.04
+    steps:
+    - name: install git
+      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https bc
+    - name: torch
+      run: scripts/install-torch2.sh cpu
+    - name: build
+      run: make -j2
+    - name: test
+      run: export DEVICE=cpu && make test
   ubuntu_16_cuda:
     name: Ubuntu 16 CUDA
     runs-on: ubuntu-20.04
@@ -35,10 +53,10 @@ jobs:
       run: scripts/install-torch2.sh
     - name: build cuda=1
       run: make cuda=1 -j2
-  ubuntu_16:
-    name: Ubuntu 16
+  ubuntu_18:
+    name: Ubuntu 18
     runs-on: ubuntu-20.04
-    container: ubuntu:16.04
+    container: ubuntu:18.04
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
@@ -108,7 +126,7 @@ jobs:
     - name: test
       run: export DEVICE=cpu && make test
     - name: valgrind
-      run: export DEVICE=cpu && test/mem.sh mem
+      run: export DEVICE=cpu && test/test.sh mem
   ubuntu_22_rocm:
     name: Ubuntu 22 ROCm
     runs-on: ubuntu-22.04
@@ -129,3 +147,18 @@ jobs:
       run: scripts/install-torch2.sh rocm
     - name: build
       run: make rocm=1 -j2
+  ubuntu_24:
+    name: Ubuntu 24
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: torch
+      run: scripts/install-torch2.sh cpu
+    - name: build
+      run: make -j2
+    - name: test
+      run: export DEVICE=cpu && make test
