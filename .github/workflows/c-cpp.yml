@@ -138,6 +138,8 @@ jobs:
       run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
     - name: rocm
       run: |
+        test -e /etc/apt/keyrings || sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+        wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
         export DEBIAN_FRONTEND=noninteractive
         echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 jammy main" | sudo tee --append /etc/apt/sources.list.d/rocm.list
         echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | sudo tee /etc/apt/preferences.d/rocm-pin-600
