@@ -52,7 +52,7 @@ jobs:
     - name: build
       run: make -j2
     - name: test
-      run: make test
+      run: export DEVICE=cpu && make test
   ubuntu_20:
     name: Ubuntu 20
     runs-on: ubuntu-20.04
@@ -67,7 +67,7 @@ jobs:
     - name: build
       run: make -j2
     - name: test
-      run: make test
+      run: export DEVICE=cpu && make test
   ubuntu_20_cuda:
     name: Ubuntu 20 CUDA
     runs-on: ubuntu-20.04
@@ -100,13 +100,15 @@ jobs:
       with:
         submodules: recursive
     - name: install packages
-      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2 valgrind
     - name: torch
       run: scripts/install-torch2.sh cpu
     - name: build
       run: make -j2
     - name: test
-      run: make test
+      run: export DEVICE=cpu && make test
+    - name: valgrind
+      run: export DEVICE=cpu && test/mem.sh mem
   ubuntu_22_rocm:
     name: Ubuntu 22 ROCm
     runs-on: ubuntu-22.04
