@@ -45,7 +45,6 @@ Thumbs.db
 # binaries
 /slorado
 /thirdparty/torch
-/thirdparty/koi_lib
 /thirdparty/toml11
 cmake-build-debug/
 build/
