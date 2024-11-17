@@ -92,3 +92,38 @@ jobs:
       run: scripts/install-torch2.sh
     - name: build cuda=1
       run: make -j2 cuda=1
+  ubuntu_22:
+    name: Ubuntu 22
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: torch
+      run: scripts/install-torch2.sh cpu
+    - name: build
+      run: make -j2
+    - name: test
+      run: make test
+  ubuntu_22_rocm:
+    name: Ubuntu 22 ROCm
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: rocm
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 jammy main" | sudo tee --append /etc/apt/sources.list.d/rocm.list
+        echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | sudo tee /etc/apt/preferences.d/rocm-pin-600
+        sudo apt update
+        sudo apt install -y rocm
+    - name: torch
+      run: scripts/install-torch2.sh rocm
+    - name: build
+      run: make rocm=1 -j2
