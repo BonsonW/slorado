@@ -65,13 +65,13 @@ ifdef cuda
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
 else ifdef rocm
-	CPPFLAGS += -DUSE_GPU=1 -DHAVE_HIP=1 -D__HIP_PLATFORM_AMD__
+	CPPFLAGS += -DUSE_GPU=1 -DHAVE_ROCM=1 -D__HIP_PLATFORM_AMD__
 	ROCM_ROOT ?= /opt/rocm
-	HIP_INC ?= $(ROCM_ROOT)/include
-	HIP_LIB ?= $(ROCM_ROOT)/lib
-	CPPFLAGS += -I $(HIP_INC)
+	ROCM_INC ?= $(ROCM_ROOT)/include
+	ROCM_LIB ?= $(ROCM_ROOT)/lib
+	CPPFLAGS += -I $(ROCM_INC)
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
-	LDFLAGS += -L$(HIP_LIB) -lamdhip64 -lrt -ldl
+	LDFLAGS += -L$(ROCM_LIB) -lamdhip64 -lrt -ldl
 endif
 
 .PHONY: clean distclean test

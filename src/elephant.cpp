@@ -38,7 +38,7 @@ SOFTWARE.
 #include <c10/cuda/CUDAGuard.h>
 #endif
 
-#ifdef HAVE_HIP
+#ifdef HAVE_ROCM
 #include <c10/hip/HIPGuard.h>
 #endif
 
@@ -107,7 +107,7 @@ void init_runner(
 #ifdef HAVE_CUDA
     c10::cuda::CUDAGuard device_guard(device_idx);
 #endif
-#ifdef HAVE_HIP
+#ifdef HAVE_ROCM
     c10::hip::HIPGuard device_guard(device_idx);
 #endif
     runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
@@ -177,7 +177,7 @@ void free_runners(core_t *core) {
 #ifdef HAVE_CUDA
         c10::cuda::CUDAGuard device_guard(runner->device_idx);
 #endif
-#ifdef HAVE_HIP
+#ifdef HAVE_ROCM
         c10::hip::HIPGuard device_guard(runner->device_idx);
 #endif
         openfish_gpubuf_free(runner->gpubuf);

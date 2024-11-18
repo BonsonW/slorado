@@ -42,7 +42,7 @@ SOFTWARE.
 #include <c10/cuda/CUDAGuard.h>
 #endif
 
-#ifdef HAVE_HIP
+#ifdef HAVE_ROCM
 #include <c10/hip/HIPGuard.h>
 #endif
 
@@ -182,7 +182,7 @@ void* pthread_single_basecall(void* voidargs) {
 #ifdef HAVE_CUDA
     c10::cuda::CUDAGuard device_guard(runner->device_idx);
 #endif
-#ifdef HAVE_HIP
+#ifdef HAVE_ROCM
     c10::hip::HIPGuard device_guard(runner->device_idx);
 #endif
 #endif
