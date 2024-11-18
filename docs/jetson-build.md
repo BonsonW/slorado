@@ -1,5 +1,7 @@
 
-# Buiding for ARM64-based Jetson devices
+# Building for ARM64-based Jetson devices
+
+We do not check the building for ARM64-based Jetson using CI/CD, so please note that the following instruction may not work as it is.
 
 1. Install zlib development files needed for slow5lib:
 
@@ -7,7 +9,7 @@
     On Debian/Ubuntu : sudo apt-get install zlib1g-dev
     ```
 
-2. Install and activate python venv (need for getting pytorch that includes torchlib, as as of 1811/2024 no binary libtorch download is available)
+2. As of 18/11/2024, no binary libtorch download is available for ARM64-based Jetson. So we will install pytorch that includes torchlib. First make a Python virtual environment:
 
     ```
     sudo apt install python3.8-venv

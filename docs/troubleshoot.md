@@ -1,6 +1,6 @@
 # Troubleshooting
 
-## when extracting binaries, got the following error about n permission to create a symlink
+## when extracting binaries, got the following error about no permission to create a symlink
 
 Error:
 ```
@@ -13,7 +13,7 @@ Solution:
 - or else, make a hard link. You can do this by `cd slorado-binary-dir/lib/ && ln libamdhip64.so libamdhip64.so.5`
 
 
-# Getting an error when that /tmp/something is unwritable
+# Getting an error that /tmp/something is unwritable
 
 Error example:
 ```

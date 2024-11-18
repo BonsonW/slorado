@@ -1,8 +1,8 @@
 # Building CUDA version of slorado on x84_64
 
-1. To build for the NVIDIA GPU, you need to have the CUDA toolkit installed.
+1. To build for the NVIDIA GPU, you need to have the CUDA toolkit installed. We have tested with CUDA 10, 11 and 12.
 
-2. A minimum g++ version of 5.4 (available on Ubuntu 16.04 or higher) is required as of 18.11.2024 due to libtorch v2.0.0 we use currently.
+2. A minimum g++ version of 5.4 (available on Ubuntu 16.04 or higher) is required as of slorado 0.2.0 due to libtorch v2.0.0.
 
 3. Install zlib development files needed for slow5lib:
 
@@ -11,7 +11,7 @@
     On Fedora/CentOS : sudo dnf/yum install zlib-devel
     ```
 
-4. Clone the slorado repository recursively
+4. Clone the slorado repository **recursively**
 
     ```
     git clone --recursive https://github.com/BonsonW/slorado
@@ -24,7 +24,7 @@
     scripts/install-torch2.sh cuda
     ```
 
-5. Call make
+5. Invoke make
 
     ```
     make cuda=1 -j
@@ -38,13 +38,13 @@
 
 ## Advanced building options
 
-- By default it is assumed that you have CUDA on the standard location (`/usr/local/cuda/`). Otherwise, you can specify the path manually as:
+- By default it is assumed that you have CUDA on the standard system location (`/usr/local/cuda/`). There should be the `nvcc` compiler at `/usr/local/cuda/bin/nvcc`. The library files (.a files) should be present under `/usr/local/cuda/lib64/`. If the CUDA location is different, you can specify the path manually as:
    ```
-   make cuda=1 CUDA_LIB=/path/to/cuda/library/
+   make cuda=1 CUDA_LIB=/path/to/cuda/
    ```
-   Make sure you have `/path/to/cuda/library/bin/nvcc` and `/path/to/cuda/library/lib64`.
+   Make sure you have `nvcc` at `/path/to/cuda/bin/nvcc` and library files at `/path/to/cuda/lib64`.
 
-- For CUDA you can provide the architecture as `make cuda=1 CUDA_ARCH=-arch=sm_xy`
+- You can provide the CUDA architecture as `make cuda=1 CUDA_ARCH=-arch=sm_xy`
 
 - Custom libtorch path:
     ```

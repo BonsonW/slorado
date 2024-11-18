@@ -1,11 +1,12 @@
 # Slorado
 
-Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4) and reduced external dependencies (mainly [torchlib](https://pytorch.org/cppdocs/)) for relatively easier compilation.  slorado is developed using C/C++. Currently, slorado only supports Linux operating system (works on Windows through WSL). slorado can utilise NVIDIA or AMD GPU accelerators on x86_64 CPUs. Slorado also works on ARM64-based NVIDIA Jetson devices.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4)>. Slorado has lesser  external dependencies (mainly [torchlib](https://pytorch.org/cppdocs/)) and is easier compile compared to Dorado.  slorado is developed using C/C++. Currently, slorado only supports Linux operating system (works on Windows through WSL). slorado can utilise NVIDIA or AMD GPU accelerators on x86_64 CPUs. Slorado also works on ARM64-based NVIDIA Jetson devices.
 
 Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and will not be up to date with Dorado. For a feature rich and up-to-date S/BLOW5-based basecaller for routine use, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel).
 
+## Compilation and running
 
-## Compilation from Github
+### Compilation
 
 Compilation instructions differs based on the system. Please pick one of the following that matches your system:
 
@@ -14,15 +15,15 @@ Compilation instructions differs based on the system. Please pick one of the fol
 - [AMD GPUs (ROCM) on x84_64 systems](docs/rocm-build.md)
 - [ARM-based NVIDIA Jetson (CUDA) systems](docs/jetson-build.md)
 
-## Running, options and testing
+### Running
 
-Download fast, high accuracy, and super accuracy simplex basecalling models (dna_r10.4.1_e8.2_400bps_fast@v4.2.0, dna_r10.4.1_e8.2_400bps_hac@v4.2.0 and dna_r10.4.1_e8.2_400bps_hac@v4.2.0). We have tested slorado only on these models.
+We have tested slorado on basecalling models `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` and `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`. First download them:
 
 ```
 scripts/download-models.sh
 ```
 
-Now run on a test dataset
+Now run on a test dataset:
 ```
 # for CPU
 ./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5 -o reads.fastq
@@ -30,8 +31,19 @@ Now run on a test dataset
 ./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5 -o reads.fastq
 ```
 
-Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used.
-Currently, slorado does not implement automatic batch size selection based on available memory. Thus, if you see an out of RAM error, reduce the batch size using -K or -B. If you see an out of GPU memory error, reduce the GPU batch size using -C option. All options supported by slorado are detailed below:
+## Testing
+
+After running on a test dataset, you can use minimap2 to align the reads to the reference and calculate the identity score statistics. If the identity score statistics are close enough to what we would expect from these models, that means things are good.
+
+A script to calculate Basecalling Accuracy is provided:
+```
+set environment variable MINIMAP2, if minimap2 is not in PATH.
+scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
+```
+
+## Options
+
+All options supported by slorado are detailed below:
 
 
 | Option:           | Decription:                                           | Default Value: |
@@ -48,11 +60,10 @@ Currently, slorado does not implement automatic batch size selection based on av
 | --verbose INT     | verbosity level                                       | 4              |
 | --version         | print version                                         |                |
 
-A script to calculate Basecalling Accuracy is provided:
-```
-set environment variable MINIMAP2 if minimap2 is not in PATH.
-scripts/calculate_basecalling_accuarcy.sh /genome/hg38noAlt.idx reads.fastq
-```
+## Batchsizes
+
+Using a large batch size may take up a significant amount of RAM during run-time. Similarly, your GPU batch size will determine how much GPU memory is used. Currently, slorado does not implement automatic batch size selection based on available memory. Thus, if you see an out of RAM error, reduce the batch size using -K or -B. If you see an out of GPU memory error, reduce the GPU batch size using -C option.
+
 
 ## Acknowledgement
 
