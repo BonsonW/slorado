@@ -12,7 +12,7 @@ Compilation instructions differs based on the system. Please pick one of the fol
 - [x84_64 CPU-only (basecalling will be horribly slow)](docs/cpu-build.md)
 - [NVIDIA GPUs (CUDA) on x84_64 systems](docs/cuda-build.md)
 - [AMD GPUs (ROCM) on x84_64 systems](docs/rocm-build.md)
-- [ARM-based NVIDIA Jetson (CUDA) systems](jetson-build.md)
+- [ARM-based NVIDIA Jetson (CUDA) systems](docs/jetson-build.md)
 
 ## Running, options and testing
 

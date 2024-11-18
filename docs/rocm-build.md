@@ -6,34 +6,35 @@
 
 3. Install zlib development files needed for slow5lib:
 
-```
-On Debian/Ubuntu : sudo apt-get install zlib1g-dev
-On Fedora/CentOS : sudo dnf/yum install zlib-devel
-```
+    ```
+    On Debian/Ubuntu : sudo apt-get install zlib1g-dev
+    On Fedora/CentOS : sudo dnf/yum install zlib-devel
+    ```
 
 4. Clone the slorado repository recursively
 
-```
-git clone --recursive https://github.com/BonsonW/slorado
-cd slorado
-```
+    ```
+    git clone --recursive https://github.com/BonsonW/slorado
+    cd slorado
+    ```
 
 5. Run the script that downloads and extracts torchlib.
 
-```
-scripts/install-torch2.sh rocm
-```
+    ```
+    scripts/install-torch2.sh rocm
+    ```
 
 5. Call make
 
-```
-make cuda=1 -j
-```
+    ```
+    make cuda=1 -j
+    ```
 
 6. See the slorado version
 
-./slorado --version
-```
+    ```
+    ./slorado --version
+    ```
 
 ## Advanced building options
 

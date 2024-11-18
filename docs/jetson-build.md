@@ -3,9 +3,9 @@
 
 1. Install zlib development files needed for slow5lib:
 
-```
-On Debian/Ubuntu : sudo apt-get install zlib1g-dev
-```
+    ```
+    On Debian/Ubuntu : sudo apt-get install zlib1g-dev
+    ```
 
 2. Install and activate python venv (need for getting pytorch that includes torchlib, as as of 1811/2024 no binary libtorch download is available)
 
