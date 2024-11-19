@@ -35,8 +35,11 @@ SOFTWARE.
 #include <openfish/openfish.h>
 
 #include <torch/torch.h>
+
 #include "elephant.h"
+#include "basecall.h"
 #include "misc.h"
+#include "error.h"
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
@@ -45,10 +48,6 @@ SOFTWARE.
 #ifdef HAVE_ROCM
 #include <c10/hip/HIPGuard.h>
 #endif
-
-
-#include "basecall.h"
-#include "error.h"
 
 struct DecodedChunk {
     std::string sequence;

@@ -76,20 +76,23 @@ endif
 
 .PHONY: clean distclean test
 
+#include ""
+#include ""
+
 # slorado
 $(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
 	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/main.o: src/main.cpp
+$(BUILD_DIR)/main.o: src/main.cpp src/error.h src/misc.h src/slorado.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h
+$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h src/misc.h src/slorado.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h src/basecall.h src/writer.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
+$(BUILD_DIR)/thread.o: src/thread.cpp src/misc.h src/error.h src/slorado.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
@@ -98,13 +101,13 @@ $(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
 $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/writer.o: src/writer.cpp
+$(BUILD_DIR)/writer.o: src/writer.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/elephant.o: src/elephant.cpp
+$(BUILD_DIR)/elephant.o: src/elephant.cpp src/elephant.h src/slorado.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecall.o: src/basecall.cpp
+$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/elephant.h 
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # dorado
