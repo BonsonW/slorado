@@ -11,10 +11,11 @@ CPPFLAGS += -I slow5lib/include/ \
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2  -std=c++17
 LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../lib' \
+			-Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
 			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
-LDFLAGS  += $(LIBS) -lz -lm -lpthread -lstdc++fs
+LDFLAGS  += $(LIBS) -lz -lm -lpthread
 BUILD_DIR = build
 
 ifeq ($(zstd),1)
@@ -30,19 +31,17 @@ endif
 BINARY = slorado
 
 OBJ = $(BUILD_DIR)/main.o \
-      $(BUILD_DIR)/slorado.o \
       $(BUILD_DIR)/basecaller_main.o \
-	  $(BUILD_DIR)/basecall.o \
+      $(BUILD_DIR)/slorado.o \
       $(BUILD_DIR)/thread.o \
 	  $(BUILD_DIR)/misc.o \
 	  $(BUILD_DIR)/error.o \
-	  $(BUILD_DIR)/signal_prep.o \
 	  $(BUILD_DIR)/writer.o \
+	  $(BUILD_DIR)/elephant.o \
+	  $(BUILD_DIR)/basecall.o \
+	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
 	  $(BUILD_DIR)/CRFModel.o \
-	  $(BUILD_DIR)/stitch.o \
-	  $(BUILD_DIR)/tensor_utils.o \
 	  $(BUILD_DIR)/toml.o \
-
 
 # add more objects here if needed
 
@@ -66,13 +65,13 @@ ifdef cuda
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
 else ifdef rocm
-	CPPFLAGS += -DUSE_GPU=1 -DHAVE_HIP=1 -D__HIP_PLATFORM_AMD__
+	CPPFLAGS += -DUSE_GPU=1 -DHAVE_ROCM=1 -D__HIP_PLATFORM_AMD__
 	ROCM_ROOT ?= /opt/rocm
-	HIP_INC ?= $(ROCM_ROOT)/include
-	HIP_LIB ?= $(ROCM_ROOT)/lib
-	CPPFLAGS += -I $(HIP_INC)
+	ROCM_INC ?= $(ROCM_ROOT)/include
+	ROCM_LIB ?= $(ROCM_ROOT)/lib
+	CPPFLAGS += -I $(ROCM_INC)
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
-	LDFLAGS += -L$(HIP_LIB) -lamdhip64 -lrt -ldl
+	LDFLAGS += -L$(ROCM_LIB) -lamdhip64 -lrt -ldl
 endif
 
 .PHONY: clean distclean test
@@ -84,13 +83,10 @@ $(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/basecall.o: src/basecall.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
 $(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/thread.o: src/thread.cpp src/slorado.h
@@ -105,17 +101,17 @@ $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 $(BUILD_DIR)/writer.o: src/writer.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
+$(BUILD_DIR)/elephant.o: src/elephant.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/basecall.o: src/basecall.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
 # dorado
-$(BUILD_DIR)/signal_prep.o: thirdparty/dorado/signal_prep.cpp
+$(BUILD_DIR)/signal_prep_stitch_tensor_utils.o: thirdparty/dorado/signal_prep_stitch_tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/nn/CRFModel.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/stitch.o: thirdparty/dorado/utils/stitch.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/tensor_utils.o: thirdparty/dorado/utils/tensor_utils.cpp
+$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # toml
@@ -123,7 +119,7 @@ $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 openfish/lib/libopenfish.a:
-	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT=$(ROCM_ROOT) HIP_ARCH=$(HIP_ARCH) CUDA_ROOT=$(CUDA_ROOT) CUDA_ARCH=$(CUDA_ARCH) lib/libopenfish.a
+	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT=$(ROCM_ROOT) ROCM_ARCH=$(ROCM_ARCH) CUDA_ROOT=$(CUDA_ROOT) CUDA_ARCH=$(CUDA_ARCH) lib/libopenfish.a
 
 slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a

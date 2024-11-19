@@ -120,13 +120,13 @@ qscore_compare() {
     n=0
 
     shopt -s lastpipe
-    while 
+    while
         read score_a &&
         read score_b <&3
     do
         diff=$(echo "$score_a - $score_b" | bc)
         diff=$(echo ${diff#-})
-        sum=$(echo "$sum + $diff" | bc) 
+        sum=$(echo "$sum + $diff" | bc)
         n=$(($n+1))
     done < $tmp_a 3<$tmp_b
 
@@ -182,16 +182,16 @@ echo ""
 echo "********************************************************************"
 
 echo "GPU - HAC model - 20k reads"
-ex ./slorado basecaller models/$HAC $SUBSAMPLE -xcuda:all -B500M -c10000 -C1000 > test/tmp.fastq || die "Running the tool failed"
+ex ./slorado basecaller models/$HAC $SUBSAMPLE -xcuda:all -B500M -c10000 -C500 > test/tmp.fastq || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")
 check_accuracy $HAC $MEDIAN
-qscore_compare $HAC $FASTQ_REF test/tmp.fastq 
+qscore_compare $HAC $FASTQ_REF test/tmp.fastq
 echo ""
 echo "********************************************************************"
 
 echo "GPU - SUP model - 20k reads"
-ex ./slorado basecaller models/$SUP $SUBSAMPLE -xcuda:all -B500M -c10000 -C400 > test/tmp.fastq || die "Running the tool failed"
+ex ./slorado basecaller models/$SUP $SUBSAMPLE -xcuda:all -B500M -c10000 -C200 > test/tmp.fastq || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")
 check_accuracy $SUP $MEDIAN
