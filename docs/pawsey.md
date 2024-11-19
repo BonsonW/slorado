@@ -43,6 +43,6 @@ After basecalling, we aligned the reads to the hg38 genome using minimap2 and ca
 
 | Basecalling model | mean (slorado) | median (slorado) | mean (Dorado) | median (Dorado) |
 |---|---|---|---|---|
-| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 0.950    | 0.993    |  calculating     |  calculating     |
+| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 0.950829    | 0.985673    |  calculating     |  calculating     |
 | high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 0.941249    | 0.977212    | 0.938371 | 0.977654 |
-| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 0.912    | 0.938    | 0.906703 | 0.937500 |
+| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 0.912168    | 0.938976    | 0.906703 | 0.937500 |
