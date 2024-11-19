@@ -68,7 +68,6 @@ std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     return devices;
 }
 
-
 /* initialise runners */
 void init_runner(
     runner_t* runner,
@@ -100,39 +99,37 @@ void init_runner(
     runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     runner->chunk_size = runner->input_tensor.size(2);
 
+    if (device != "cpu") {
 #ifdef USE_GPU
-    int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
-    runner->device_idx = device_idx;
+        int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
+        runner->device_idx = device_idx;
 
 #ifdef HAVE_CUDA
-    c10::cuda::CUDAGuard device_guard(device_idx);
+        c10::cuda::CUDAGuard device_guard(device_idx);
 #endif
 #ifdef HAVE_ROCM
-    c10::hip::HIPGuard device_guard(device_idx);
+        c10::hip::HIPGuard device_guard(device_idx);
 #endif
-    runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
-#endif
+        runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
+#endif        
+    }
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }
 
 /* initialise runner_stat */
-void init_runner_stat(runner_stat_t* time_stamps) {
+void init_runner_stat(runner_stat_t *time_stamps) {
     memset(time_stamps, 0, sizeof(runner_stat_t));
 }
 
-
-
 void init_runners(core_t* core, opt_t *opt, char *model){
-
-
-    core->runners = new std::vector<runner_t*>();
-    core->runner_stats = new std::vector<runner_stat_t*>();
+    core->runners = new std::vector<runner_t *>();
+    core->runner_stats = new std::vector<runner_stat_t *>();
 
     if (strcmp(opt->device, "cpu") == 0) {
         std::string device = opt->device;
         for (int i = 0; i < opt->num_runners; ++i) {
-            core->runner_stats->push_back((runner_stat_t*)malloc(sizeof(runner_stat_t)));
+            core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
             init_runner_stat((*core->runner_stats).back());
 
             core->runners->push_back(new runner_t());
@@ -143,17 +140,21 @@ void init_runners(core_t* core, opt_t *opt, char *model){
         std::vector<std::string> devices;
         std::string device_args = std::string(opt->device);
         devices = parse_cuda_device_string(device_args);
+        if (devices.size() < 1) {
+            ERROR("%s", "Could not locate any cuda devices");
+            exit(EXIT_FAILURE);
+        }
 
         for (auto device: devices) {
             for (int i = 0; i < opt->num_runners; ++i) {
-                core->runner_stats->push_back((runner_stat_t*)malloc(sizeof(runner_stat_t)));
+                core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
                 init_runner_stat((*core->runner_stats).back());
                 core->runners->push_back(new runner_t());
                 init_runner((*core->runners).back(), model, device, opt->chunk_size, opt->gpu_batch_size, torch::kF16);
             }
         }
 #else
-        fprintf(stderr, "Error. Please compile again for GPU\n");
+        ERROR("Invalid device: %s. Please compile again for GPU", opt->device);
         exit(EXIT_FAILURE);
 #endif
     }
@@ -166,29 +167,30 @@ void init_runners(core_t* core, opt_t *opt, char *model){
 }
 
 void free_runners(core_t *core) {
-
     for (size_t i = 0; i < core->runner_stats->size(); ++i) {
         free((*core->runner_stats)[i]);
     }
 
     for (size_t i = 0; i < core->runners->size(); ++i) {
-        runner_t* runner = (*core->runners)[i];
+        runner_t *runner = (*core->runners)[i];
+        if (runner->device != "cpu") {
 #ifdef USE_GPU
 #ifdef HAVE_CUDA
-        c10::cuda::CUDAGuard device_guard(runner->device_idx);
+            c10::cuda::CUDAGuard device_guard(runner->device_idx);
 #endif
 #ifdef HAVE_ROCM
-        c10::hip::HIPGuard device_guard(runner->device_idx);
+            c10::hip::HIPGuard device_guard(runner->device_idx);
 #endif
-        openfish_gpubuf_free(runner->gpubuf);
+            openfish_gpubuf_free(runner->gpubuf);
 #endif
+        }
         delete runner;
     }
 
 }
 
 void init_elephant(db_t *db) {
-    db->elephant = (elephant_t*) malloc(sizeof(elephant_t));
+    db->elephant = (elephant_t *)malloc(sizeof(elephant_t));
     MALLOC_CHK(db->elephant);
     db->elephant->tensors = new std::vector<std::vector<torch::Tensor>>(db->capacity_rec, std::vector<torch::Tensor>());
 }
@@ -198,8 +200,8 @@ void free_elephant(db_t *db) {
     free(db->elephant);
 }
 
-void preprocess_signal(core_t* core, db_t* db, int32_t i) {
-    slow5_rec_t* rec = db->slow5_rec[i];
+void preprocess_signal(core_t *core, db_t *db, int32_t i) {
+    slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
 
@@ -209,13 +211,9 @@ void preprocess_signal(core_t* core, db_t* db, int32_t i) {
         scale_signal(signal, rec->range / rec->digitisation, rec->offset);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-
         (*db->chunks)[i] = chunks;
-        LOG_TRACE("%s","assigned chunks");
 
         std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
-
         (*db->elephant->tensors)[i] = tensors;
-        LOG_TRACE("%s","assigned tensors");
     }
 }
