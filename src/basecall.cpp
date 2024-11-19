@@ -105,6 +105,12 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
         openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
     } else {
 #ifdef USE_GPU
+#ifdef HAVE_CUDA
+    c10::cuda::CUDAGuard device_guard(runner->device_idx);
+#endif
+#ifdef HAVE_ROCM
+    c10::hip::HIPGuard device_guard(runner->device_idx);
+#endif
         openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else
         ERROR("Invalid device: %s. Please compile again for GPU", runner->device);
@@ -178,16 +184,6 @@ void* pthread_single_basecall(void* voidargs) {
     const size_t start = args->start;
     const size_t end = args->end;
     opt_t opt = core->opt;
-
-#ifdef USE_GPU
-    runner_t* runner = (*core->runners)[runner_idx];
-#ifdef HAVE_CUDA
-    c10::cuda::CUDAGuard device_guard(runner->device_idx);
-#endif
-#ifdef HAVE_ROCM
-    c10::hip::HIPGuard device_guard(runner->device_idx);
-#endif
-#endif
 
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor> tensors;
