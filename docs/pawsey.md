@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/138a5ad3-1205-463a-905c-723ba0c110d6)![image](https://github.com/user-attachments/assets/f34eb080-c120-4bb5-9831-afc053cd0c22)# Basecalling on Pawsey's AMD GPUs
+# Basecalling on Pawsey's AMD GPUs
 
 With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Sentonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has many AMD Instinct MI250X GPUs.
 For those who have access to Pawsey, this post will show how you can do this. The binaries have already been installed on a shared location, so you do not need to compile them. 
@@ -36,13 +36,13 @@ We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverag
 | Basecalling model | Execution time (hh:mm:ss) |
 |---|---|
 | super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 21:03:59       |
-| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 7:30:45        |
-| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 4:46:31        |
+| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 07:30:45        |
+| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 04:46:31        |
 
 After basecalling, we aligned the reads to the hg38 genome using minimap2 and calculated the statistics (e.g., mean, median) for the identity scores. The values were as expected to what we see in the same model versions in the original Dorado:
 
 | Basecalling model | mean (slorado) | median (slorado) | mean (Dorado) | median (Dorado) |
 |---|---|---|---|---|
-| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 0.950    | 0.993    |       |       |
+| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 0.950    | 0.993    |  calculating     |  calculating     |
 | high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 0.941249    | 0.977212    | 0.938371 | 0.977654 |
 | fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 0.912    | 0.938    | 0.906703 | 0.937500 |
