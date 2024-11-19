@@ -38,8 +38,10 @@ SOFTWARE.
 
 void write_to_file(FILE *out, char *sequence, char *qstring, char *read_id, bool emit_fastq) {
     if (emit_fastq) {
-        if (fprintf(out, "@%s\n%s\n+\n%s\n", read_id, sequence, qstring) == EOF) {
-            ERROR("%s", "error writing to file");
+        int expected_len_bytes = strlen(read_id) + strlen(sequence) + strlen(qstring) + 6;
+        int ret = fprintf(out, "@%s\n%s\n+\n%s\n", read_id, sequence, qstring);
+        if (ret != expected_len_bytes) {
+            ERROR("error writing fastq: %s", strerror(ret));
             exit(EXIT_FAILURE);
         }
     } else {
