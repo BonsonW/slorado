@@ -247,8 +247,18 @@ CRFModelConfig load_crf_model_config(char *path) {
 
     if (toml_key_exists(config_toml, "qscore")) {
         toml_table_t *qscore = toml_table_in(config_toml, "qscore");
-        config.qbias = (float)toml_double_in(qscore, "bias").u.d;
-        config.qscale = (float)toml_double_in(qscore, "scale").u.d;
+        toml_datum_t qbias = toml_double_in(qscore, "bias");
+        if (!qbias.ok) {
+            ERROR("%s", "Cannot read qscore.bias");
+            exit(EXIT_FAILURE);
+        }
+        toml_datum_t qscale = toml_double_in(qscore, "scale");
+        if (!qscale.ok) {
+            ERROR("%s", "Cannot read qscore.scale");
+            exit(EXIT_FAILURE);
+        }
+        config.qbias = (float)qbias.u.d;
+        config.qscale = (float)qscale.u.d;
     } else {
         // no qscore calibration found
     }
@@ -265,27 +275,66 @@ CRFModelConfig load_crf_model_config(char *path) {
     config.scale = 1.0f;
 
     toml_table_t *input = toml_table_in(config_toml, "input");
-    config.num_features = toml_int_in(input, "features").u.i;
+    if (!input) {
+        ERROR("%s", "Missing [input]");
+        exit(EXIT_FAILURE);
+    }
+    toml_datum_t num_features = toml_int_in(input, "features");
+    if (!num_features.ok) {
+        ERROR("%s", "Cannot read input.features");
+        exit(EXIT_FAILURE);
+    }
+    config.num_features = num_features.u.i;
 
     toml_table_t *encoder = toml_table_in(config_toml, "encoder");
+    if (!encoder) {
+        ERROR("%s", "Missing [encoder]");
+        exit(EXIT_FAILURE);
+    }
     if (toml_key_exists(encoder, "type")) {
         // v4-type model
         toml_array_t *sublayers = toml_array_in(encoder, "sublayers");
+        if (!sublayers) {
+            ERROR("%s", "Missing [encoder.sublayers]");
+            exit(EXIT_FAILURE);
+        }
+
         for (int i = 0; ; i++) {
             toml_table_t *segment = toml_table_at(sublayers, i);
             if (!segment) break;
 
-            char *type = toml_string_in(segment, "type").u.s;
+            toml_datum_t type_dt = toml_string_in(segment, "type");
+            if (!type_dt.ok) {
+                ERROR("%s", "Cannot read segment.type");
+                exit(EXIT_FAILURE);
+            }
+            char *type = type_dt.u.s;
+
             if (strcmp(type, "convolution") == 0) {
                 // Overall stride is the product of all conv layers' strides.
-                config.stride *= toml_int_in(segment, "stride").u.i;
+                toml_datum_t stride = toml_int_in(segment, "stride");
+                if (!stride.ok) {
+                    ERROR("%s", "Cannot read segment.stride");
+                    exit(EXIT_FAILURE);
+                }
+                config.stride *= stride.u.i;
             } else if (strcmp(type, "lstm") == 0) {
-                config.insize = toml_int_in(segment, "size").u.i;
+                toml_datum_t insize = toml_int_in(segment, "insize");
+                if (!insize.ok) {
+                    ERROR("%s", "Cannot read segment.insize");
+                    exit(EXIT_FAILURE);
+                }
+                config.insize = insize.u.i;
             } else if (strcmp(type, "linear") == 0) {
                 // Specifying out_features implies a decomposition of the linear layer matrix
                 // multiply with a bottleneck before the final feature size.
                 if (toml_key_exists(segment, "out_features")) {
-                    config.out_features = toml_int_in(segment, "out_features").u.i;
+                    toml_datum_t out_features = toml_int_in(segment, "out_features");
+                    if (!out_features.ok) {
+                        ERROR("%s", "Cannot read segment.out_features");
+                        exit(EXIT_FAILURE);
+                    }
+                    config.out_features = out_features.u.i;
                     config.decomposition = true;
                 } else {
                     config.decomposition = false;
@@ -293,7 +342,12 @@ CRFModelConfig load_crf_model_config(char *path) {
             } else if (strcmp(type, "clamp") == 0) {
                 config.clamp = true;
             } else if (strcmp(type, "linearcrfencoder") == 0) {
-                config.blank_score = (float)toml_double_in(segment, "blank_score").u.d;
+                toml_datum_t blank_score = toml_double_in(segment, "blank_score");
+                if (!blank_score.ok) {
+                    ERROR("%s", "Cannot read segment.blank_score");
+                    exit(EXIT_FAILURE);
+                }
+                config.blank_score = (float)blank_score.u.d;
             }
 
             free(type);
@@ -303,20 +357,58 @@ CRFModelConfig load_crf_model_config(char *path) {
         config.bias = config.insize > 128;
     } else {
         // pre-v4 model
-        config.stride = toml_int_in(encoder, "stride").u.i;
-        config.insize = toml_int_in(encoder, "features").u.i;
-        config.blank_score = (float)toml_double_in(encoder, "blank_score").u.d;
-        config.scale = (float)toml_double_in(encoder, "scale").u.d;
+        toml_datum_t stride = toml_int_in(encoder, "stride");
+        if (!stride.ok) {
+            ERROR("%s", "Cannot read encoder.stride");
+            exit(EXIT_FAILURE);
+        }
+        config.stride = stride.u.i;
+
+        toml_datum_t features = toml_int_in(encoder, "features");
+        if (!features.ok) {
+            ERROR("%s", "Cannot read encoder.features");
+            exit(EXIT_FAILURE);
+        }
+        config.insize = features.u.i;
+
+        toml_datum_t blank_score = toml_double_in(encoder, "blank_score");
+        if (!blank_score.ok) {
+            ERROR("%s", "Cannot read encoder.blank_score");
+            exit(EXIT_FAILURE);
+        }
+        config.blank_score = (float)blank_score.u.d;
+
+        toml_datum_t scale = toml_double_in(encoder, "scale");
+        if (!scale.ok) {
+            ERROR("%s", "Cannot read encoder.scale");
+            exit(EXIT_FAILURE);
+        }
+        config.scale = (float)scale.u.d;
 
         if (toml_key_exists(encoder, "first_conv_size")) {
-            config.conv = toml_int_in(encoder, "first_conv_size").u.i;
+            toml_datum_t conv = toml_int_in(encoder, "first_conv_size");
+            if (!conv.ok) {
+                ERROR("%s", "Cannot read encoder.first_conv_size");
+                exit(EXIT_FAILURE);
+            }
+            config.conv = conv.u.i;
         }
     }
 
     toml_table_t *global_norm = toml_table_in(config_toml, "global_norm");
+    if (!global_norm) {
+        ERROR("%s", "Missing [global_norm]");
+        exit(EXIT_FAILURE);
+    }
+
     // Note that in v4 files state_len appears twice: under global_norm and under
     // linearcrfencoder.  We are ignoring the latter.
-    config.state_len = toml_int_in(global_norm, "state_len").u.i;
+    toml_datum_t state_len = toml_int_in(global_norm, "state_len");
+    if (!state_len.ok) {
+        ERROR("%s", "Cannot read encoder.state_len");
+        exit(EXIT_FAILURE);
+    }
+    config.state_len = state_len.u.i;
 
     // CUDA and CPU paths do not output explicit stay scores from the NN.
     config.outsize = pow(4, config.state_len) * 4;
