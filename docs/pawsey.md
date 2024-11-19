@@ -1,7 +1,7 @@
-# Basecalling on Pawsey's AMD GPUs
+![image](https://github.com/user-attachments/assets/138a5ad3-1205-463a-905c-723ba0c110d6)![image](https://github.com/user-attachments/assets/f34eb080-c120-4bb5-9831-afc053cd0c22)# Basecalling on Pawsey's AMD GPUs
 
 With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Sentonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has many AMD Instinct MI250X GPUs.
-For those who have access to Pawsey, this post will show how you can do this. The binaries have been already installed on a shared location, so you do not need to compile. 
+For those who have access to Pawsey, this post will show how you can do this. The binaries have already been installed on a shared location, so you do not need to compile them. 
 
 Following are the directory paths to get started:
 
@@ -27,22 +27,22 @@ To run on your own data, below are the steps. If you run into a problem, feel fr
     ```
    
 2. Now change the example slurm script to point to this BLOW5 file you just created.
-3. Edit other options such as the model, output file path, the max wall-clock time, number of GPUs in the script as you wish (see the comments in the script)
+3. Edit other options such as the model, output file path, the max wall-clock time, and number of GPUs in the script as you wish (see the comments in the script)
 4. Now submit the job
-5. Once the job is finished, you can do some sanity checks, for instance, mapping the reads to the reference using minimap2 and see checking the identity scores.
+5. Once the job is finished, you can do some sanity checks, for instance, mapping the reads to the reference using minimap2 and checking the identity scores.
 
-We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 8 MI250X GPUs on the node. The executions times were as follows for the three different basecalling models:
+We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 8 MI250X GPUs on the node. The execution times were as follows for the three different basecalling models:
 
-| Basecalling model | Execution time |
+| Basecalling model | Execution time (hh:mm:ss) |
 |---|---|
 | super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 21:03:59       |
 | high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 7:30:45        |
 | fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 4:46:31        |
 
-After basecalling, we aligned the reads to the hg38 genome using minimap2 and calculated the statistics (e.g., mean, median) for the identity scores. The values were as expected to what we see in the same model versions in original Dorado:
+After basecalling, we aligned the reads to the hg38 genome using minimap2 and calculated the statistics (e.g., mean, median) for the identity scores. The values were as expected to what we see in the same model versions in the original Dorado:
 
-| Basecalling model | mean identity score | median identity score |
-|---|---|---|
-| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 0.950    | 0.993    |
-| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 0.941    | 0.977    |
-| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 0.912    | 0.938    |
+| Basecalling model | mean (slorado) | median (slorado) | mean (Dorado) | median (Dorado) |
+|---|---|---|---|---|
+| super accuracy (dna_r10.4.1_e8.2_400bps_sup@v4.2.0)    | 0.950    | 0.993    |       |       |
+| high accuracy  (dna_r10.4.1_e8.2_400bps_hac@v4.2.0)    | 0.941249    | 0.977212    | 0.938371 | 0.977654 |
+| fast (dna_r10.4.1_e8.2_400bps_fast@v4.2.0)             | 0.912    | 0.938    | 0.906703 | 0.937500 |
