@@ -181,14 +181,12 @@ void* pthread_single_basecall(void* voidargs) {
 
 #ifdef USE_GPU
     runner_t* runner = (*core->runners)[runner_idx];
-    if (runner->device != "cpu") {
 #ifdef HAVE_CUDA
-        c10::cuda::CUDAGuard device_guard(runner->device_idx);
+    c10::cuda::CUDAGuard device_guard(runner->device_idx);
 #endif
 #ifdef HAVE_ROCM
-        c10::hip::HIPGuard device_guard(runner->device_idx);
+    c10::hip::HIPGuard device_guard(runner->device_idx);
 #endif
-    }
 #endif
 
     std::vector<Chunk *> chunks;
