@@ -216,7 +216,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"batch size:         %d\n", opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
-    fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
+    //fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
 

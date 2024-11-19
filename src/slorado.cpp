@@ -288,14 +288,21 @@ void free_db(db_t* db) {
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
     opt->batch_size = 2000;
-    opt->gpu_batch_size = 800;
-    opt->batch_size_bytes = 200*1000*1000;
+    opt->gpu_batch_size = 500;
+    opt->batch_size_bytes = 500*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;
 
-    opt->device = "cuda:0";
-    opt->chunk_size = 8000;
+#ifdef USE_GPU
+    opt->device = "cuda:all";
+#else
+    opt->device = "cpu";
+#endif
+
+
+
+    opt->chunk_size = 10000;
     opt->overlap = 150;
     opt->num_runners = 1;
 

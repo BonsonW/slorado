@@ -50,12 +50,12 @@ All options supported by slorado are detailed below:
 |-------------------|-------------------------------------------------------|----------------|
 | -t INT            | number of processing threads.                         | 8              |
 | -K INT            | batch size (max number of reads loaded at once).      | 2000           |
-| -C INT            | gpu batch size (max number of chunks loaded at once)  | 800            |
-| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 200.0M         |
+| -C INT            | gpu batch size (max number of chunks loaded at once)  | 500            |
+| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 500.0M         |
 | -o FILE           | output to file                                        | stdout         |
-| -c INT            | chunk size                                            | 8000           |
+| -c INT            | chunk size                                            | 10000           |
 | -p INT            | overlap                                               | 150            |
-| -x DEVICE         | specify device (e.g., cpu, cuda:0, cuda:1,2: cuda:all)| cuda:0         |
+| -x DEVICE         | specify device (e.g., cpu, cuda:0, cuda:1,2: cuda:all)| cuda:all (GPU version) or cpu (CPU version)         |
 | -h                | shows help message and exits                          | -              |
 | --verbose INT     | verbosity level                                       | 4              |
 | --version         | print version                                         |                |
