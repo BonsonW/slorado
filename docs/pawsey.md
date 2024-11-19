@@ -1,9 +1,12 @@
 # Basecalling on Pawsey's AMD GPUs
 
-## Getting started
 
 With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has many AMD Instinct MI250X GPUs.
-For those who have access to Pawsey, this post will show how you can do this. The binaries have already been installed on a shared location, so you do not need to compile them. 
+For those who have access to Pawsey, this post will show how you can do this. 
+
+## Getting started
+
+The binaries have already been installed on a shared location, so you do not need to compile them. 
 
 Following are the directory paths to get started:
 
