@@ -5,6 +5,8 @@ die() {
     exit 1
 }
 
+git submodule update --remote || die "Update failed"
+
 VERSION=`git describe --tags`
 [ -z "$VERSION" ] && VERSION=`git rev-parse --short HEAD`
 
