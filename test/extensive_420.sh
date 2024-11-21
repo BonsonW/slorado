@@ -4,7 +4,6 @@ MINIMAP2="/install/minimap2-2.26/minimap2"
 REFERENC_GENOME="/genome/hg38noAlt.idx"
 
 SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5"
-FASTQ_REF="/data/bonwon/reads_koi_20k.fastq"
 
 FAST="dna_r10.4.1_e8.2_400bps_fast@v4.2.0"
 HAC="dna_r10.4.1_e8.2_400bps_hac@v4.2.0"
@@ -177,7 +176,7 @@ ex ./slorado basecaller models/$FAST $SUBSAMPLE -xcuda:all -B500M -c10000 -C1000
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1)
 check_accuracy $FAST $MEDIAN
-qscore_compare $FAST $FASTQ_REF test/tmp.fastq
+qscore_compare $FAST /data/bonwon/reads_koi_fast_20k.fastq test/tmp.fastq
 echo ""
 echo "********************************************************************"
 
@@ -186,7 +185,7 @@ ex ./slorado basecaller models/$HAC $SUBSAMPLE -xcuda:all -B500M -c10000 -C500 >
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")
 check_accuracy $HAC $MEDIAN
-qscore_compare $HAC $FASTQ_REF test/tmp.fastq
+qscore_compare $HAC /data/bonwon/reads_koi_hac_20k.fastq test/tmp.fastq
 echo ""
 echo "********************************************************************"
 
@@ -195,6 +194,6 @@ ex ./slorado basecaller models/$SUP $SUBSAMPLE -xcuda:all -B500M -c10000 -C200 >
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")
 check_accuracy $SUP $MEDIAN
-qscore_compare $SUP $FASTQ_REF test/tmp.fastq
+qscore_compare $SUP /data/bonwon/reads_koi_sup_20k.fastq test/tmp.fastq
 echo ""
 echo "********************************************************************"
