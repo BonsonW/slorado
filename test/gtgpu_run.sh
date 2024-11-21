@@ -9,10 +9,10 @@ if [ "$MODEL" = "fast" ]; then
     BATCH_SIZE=1000
 fi
 if [ "$MODEL" = "hac" ]; then
-    BATCH_SIZE=800
+    BATCH_SIZE=400
 fi
 if [ "$MODEL" = "sup" ]; then
-    BATCH_SIZE=300
+    BATCH_SIZE=200
 fi
 
 # BLOW5=/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_reads_500k.blow5
