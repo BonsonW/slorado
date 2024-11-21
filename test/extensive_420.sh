@@ -165,8 +165,14 @@ test -e minimap2/minimap2 || download_minimap2
 # memory check
 make clean && make -j asan=1
 
-echo "Memory Check - CPU - FAST model - 1 reads"
-ex ./slorado basecaller models/$FAST test/5khz_r10/one_5khz.blow5 -xcpu > test/tmp.fastq  || die "Running the tool failed"
+echo "Memory Check - CPU - FAST model - 1 5khz reads"
+ex ./slorado basecaller models/$FAST test/5khz_r10/one_5khz.blow5 -xcpu -c100 -C10 > test/tmp.fastq  || die "Running the tool failed"
+
+echo "Memory Check - CPU - FAST model - 2 batch"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -C5 > test/tmp.fastq  || die "Running the tool failed"
+
+echo "Memory Check - CPU - FAST model - incomplete batch"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -C6 > test/tmp.fastq  || die "Running the tool failed"
 
 # accuracy check
 make clean && make -j cuda=1 CUDA_ROOT=/data/install/cuda-11.8/
