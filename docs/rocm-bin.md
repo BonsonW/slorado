@@ -1,6 +1,6 @@
 # Basecalling on AMD GPUs
 
-With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some compiled binaries which should work On Linux if you have GLIBC >= 2.28 (invoke `ldd --version` to check).  Note that this is in early development and we have tested them only on systems in [Note 1](note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
+With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some compiled binaries which should work On Linux if you have GLIBC >= 2.28 (invoke `ldd --version` to check).  Note that this is in early development and we have tested them only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
 
 
 ## Getting Started
