@@ -19,9 +19,7 @@
 #include <torch/version.h>
 
 #include <cmath>
-#if TORCH_VERSION_MAJOR >= 2
 #include <ATen/ops/scaled_dot_product_attention.h>
-#endif
 
 #include <filesystem>
 #include <stdexcept>
@@ -76,23 +74,13 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_)
 
 at::Tensor GatedMLPImpl::forward(const at::Tensor &x) {
     at::Tensor t;
-    {
-        {
-            utils::ScopedProfileRange spr("FC1", 3);
-            t = fc1(x);
-        }
-        {
-            utils::ScopedProfileRange spr("SILU", 3);
-            const auto chunks = t.chunk(2, -1);
-            const auto &y = chunks[0];
-            const auto &gate = chunks[1];
-            t = functional::silu(gate).mul_(y);
-        }
-    }
-    {
-        utils::ScopedProfileRange spr("FC2", 3);
-        return fc2(t);
-    }
+    t = fc1(x);
+    const auto chunks = t.chunk(2, -1);
+    const auto &y = chunks[0];
+    const auto &gate = chunks[1];
+    t = functional::silu(gate).mul_(y);
+    
+    return fc2(t);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(int dim_,
@@ -220,7 +208,6 @@ at::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
 }
 
 at::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size) const {
-    utils::ScopedProfileRange spr("AWM", 3);
     const auto [win_upper, win_lower] = attn_window;
     at::Tensor mask = at::ones({size, size}, options.device());
     mask.triu_(-win_upper).tril_(win_lower);
@@ -235,56 +222,37 @@ at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
 
     at::Tensor qkv;
     at::Tensor attn_output_ntc;
-    {
-        utils::ScopedProfileRange spr("QKV", 3);
-        // in_feat=512, out_feat=1536 (3*in), nhead=8, head_dim=64=(512/8), dim_ff=2048
-        qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
-    }
-    {
-        utils::ScopedProfileRange spr("ROTE", 3);
-        {
-            qkv = rotary_emb(qkv);
-        }
-    }
+    qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
+    qkv = rotary_emb(qkv);
     attn_output_ntc = at::empty({N, T, C}, x.options());
-    {
-        utils::ScopedProfileRange spr("MEA", 3);
-        auto attn_window_mask = get_attn_window_mask(T);
-        auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
-        const auto [win_upper, win_lower] = attn_window;
-        // The MPS backend refuses to work on a span of the mask that doesn't have an
-        // alignment of 4 elements, so pad the amount we process each loop to that.
-        const auto elems_per_split =
-                utils::pad_to(utils::div_round_up(T, int64_t{num_splits}), int64_t{4});
-        for (int i = 0; i < num_splits; ++i) {
-            const auto qb = i * elems_per_split;
-            if (qb >= T) {
-                break;
-            }
-            const auto qe = std::min(T, qb + elems_per_split);
-            const auto kvb = std::max<int64_t>(0, qb - win_lower);
-            const auto kve = std::min<int64_t>(T, qe + win_upper);
-            const auto q = qkv[0].slice(-2, qb, qe);
-            const auto k = qkv[1].slice(-2, kvb, kve);
-            const auto v = qkv[2].slice(-2, kvb, kve);
-            const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
-#if TORCH_VERSION_MAJOR >= 2
-            c10::optional<at::Tensor> opt_mask;
-            // Not using the mask gets us significantly better performance, at the cost of some
-            // accuracy. Accuracy loss is minimised by larger num_splits.
-            if (utils::get_dev_opt<bool>("mha_use_mask", true)) {
-                opt_mask = mask;
-            }
-            attn_output.slice(-2, qb, qe) = at::scaled_dot_product_attention(q, k, v, opt_mask);
-#else
-            attn_output.slice(-2, qb, qe) = scaled_dot_product_attention_naive(q, k, v, mask);
-#endif
+    auto attn_window_mask = get_attn_window_mask(T);
+    auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+    const auto [win_upper, win_lower] = attn_window;
+    // The MPS backend refuses to work on a span of the mask that doesn't have an
+    // alignment of 4 elements, so pad the amount we process each loop to that.
+    const auto elems_per_split =
+            utils::pad_to(utils::div_round_up(T, int64_t{num_splits}), int64_t{4});
+    for (int i = 0; i < num_splits; ++i) {
+        const auto qb = i * elems_per_split;
+        if (qb >= T) {
+            break;
         }
+        const auto qe = std::min(T, qb + elems_per_split);
+        const auto kvb = std::max<int64_t>(0, qb - win_lower);
+        const auto kve = std::min<int64_t>(T, qe + win_upper);
+        const auto q = qkv[0].slice(-2, qb, qe);
+        const auto k = qkv[1].slice(-2, kvb, kve);
+        const auto v = qkv[2].slice(-2, kvb, kve);
+        const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
+        c10::optional<at::Tensor> opt_mask;
+        // Not using the mask gets us significantly better performance, at the cost of some
+        // accuracy. Accuracy loss is minimised by larger num_splits.
+        if (utils::get_dev_opt<bool>("mha_use_mask", true)) {
+            opt_mask = mask;
+        }
+        attn_output.slice(-2, qb, qe) = at::scaled_dot_product_attention(q, k, v, opt_mask);
     }
-    {
-        utils::ScopedProfileRange spr("OUTP", 3);
-        x = out_proj(attn_output_ntc);
-    }
+    x = out_proj(attn_output_ntc);
     return x;
 };
 
@@ -305,27 +273,13 @@ at::Tensor TxEncoderImpl::forward(at::Tensor x) {
     const auto deepnorm_alpha = named_buffers()["deepnorm_alpha"];
 
     auto run_norm = [&](RMSNorm norm, const at::Tensor &in) {
-        {
-            x = norm(in + (x * deepnorm_alpha));
-        }
+        x = norm(in + (x * deepnorm_alpha));
     };
+    attn = self_attn(x);
+    run_norm(norm1, attn);
+    f = ff(x);
+    run_norm(norm2, f);
 
-    {
-        utils::ScopedProfileRange spr("MHE", 2);
-        attn = self_attn(x);
-    }
-    {
-        utils::ScopedProfileRange spr("LNORM1", 2);
-        run_norm(norm1, attn);
-    }
-    {
-        utils::ScopedProfileRange spr("FF", 2);
-        f = ff(x);
-    }
-    {
-        utils::ScopedProfileRange spr("LNORM2", 2);
-        run_norm(norm2, f);
-    }
     return x;
 }
 
@@ -383,23 +337,10 @@ TxModelImpl::TxModelImpl(const basecall::CRFModelConfig &config, const at::Tenso
 
 at::Tensor TxModelImpl::forward(const at::Tensor &chunk_NCT) {
     at::Tensor h;
-    {
-        utils::ScopedProfileRange spr("Conv", 1);
-        // Returns: NTC
-        h = convs->forward(chunk_NCT);
-    }
-    {
-        utils::ScopedProfileRange spr("TransEnc", 1);
-        h = tx_encoder(h);
-    }
-    {
-        utils::ScopedProfileRange spr("TransDec", 1);
-        h = tx_decoder(h);
-    }
-    {
-        utils::ScopedProfileRange spr("CRF", 1);
-        h = crf(h);
-    }
+    h = convs->forward(chunk_NCT);
+    h = tx_encoder(h);
+    h = tx_decoder(h);
+    h = crf(h);
     // Returns: NTC
     return h;
 }
