@@ -113,7 +113,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 #endif
         openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else
-        ERROR("Invalid device: %s. Please compile again for GPU", runner->device);
+        ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
         exit(EXIT_FAILURE);
 #endif
     }
