@@ -23,6 +23,6 @@ MIOpen(HIP): Error [FlushUnsafe] File is unwritable: /tmp/gfx90a68.HIP.2_20_0_f1
 Solution:
 ```
 mkdir /tmp/a_unique_name
-export TMPDIR=/tmp/a_unnique_name
+export TMPDIR=/tmp/a_unique_name
 ./slorado .....
 ```
