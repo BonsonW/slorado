@@ -154,7 +154,7 @@ void init_runners(core_t* core, opt_t *opt, char *model){
             }
         }
 #else
-        ERROR("Invalid device: %s. Please compile again for GPU", opt->device);
+        ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
         exit(EXIT_FAILURE);
 #endif
     }
