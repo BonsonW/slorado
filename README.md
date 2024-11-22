@@ -11,7 +11,7 @@ We provide compiled binaries for NVIDIA (cuda) and AMD (rocm) GPU accelerators o
 ```
 VERSION=v0.2.0-beta
 GPU=cuda   # GPU=rocm for AMD GPUs
-wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/$VERSION-x86_64-$GPU-linux-binaries.tar.gz" && tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.gz && cd slorado-$VERSION
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.gz" && tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.gz && cd slorado-$VERSION
 ./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 reads.blow5  -o out.fastq -x cuda:all
 ```
 
