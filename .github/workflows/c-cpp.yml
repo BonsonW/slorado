@@ -2,7 +2,7 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ 'main', 'compilation_tests' ]
+    branches: [ '*' ]
   pull_request:
     branches: [ '*' ]
 
@@ -10,6 +10,24 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
+  ubuntu_16:
+    name: Ubuntu 16
+    runs-on: ubuntu-20.04
+    container: ubuntu:16.04
+    steps:
+    - name: install git
+      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https bc
+    - name: torch
+      run: scripts/install-torch2.sh cpu
+    - name: build
+      run: make -j2
+    - name: test
+      run: export DEVICE=cpu && make test
   ubuntu_16_cuda:
     name: Ubuntu 16 CUDA
     runs-on: ubuntu-20.04
@@ -35,10 +53,10 @@ jobs:
       run: scripts/install-torch2.sh
     - name: build cuda=1
       run: make cuda=1 -j2
-  ubuntu_16:
-    name: Ubuntu 16
+  ubuntu_18:
+    name: Ubuntu 18
     runs-on: ubuntu-20.04
-    container: ubuntu:16.04
+    container: ubuntu:18.04
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
@@ -52,7 +70,7 @@ jobs:
     - name: build
       run: make -j2
     - name: test
-      run: make test
+      run: export DEVICE=cpu && make test
   ubuntu_20:
     name: Ubuntu 20
     runs-on: ubuntu-20.04
@@ -63,13 +81,13 @@ jobs:
     - name: install packages
       run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
     - name: torch
-      run: scripts/install-torch2.sh
+      run: scripts/install-torch2.sh cpu
     - name: build
       run: make -j2
     - name: test
-      run: make test
-  ubuntu_20_koi:
-    name: Ubuntu 20 CUDA KOI
+      run: export DEVICE=cpu && make test
+  ubuntu_20_cuda:
+    name: Ubuntu 20 CUDA
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v2
@@ -87,10 +105,63 @@ jobs:
         sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
         sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
         sudo apt-get update
-        sudo apt-get -y install cuda
-    - name: koi
-      run: scripts/install-koi.sh
+        sudo apt-get -y install cuda-11-1
     - name: torch
       run: scripts/install-torch2.sh
-    - name: build koi=1 cuda=1
-      run: make -j2 koi=1 cuda=1
+    - name: build cuda=1
+      run: make -j2 cuda=1
+  ubuntu_22:
+    name: Ubuntu 22
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2 valgrind
+    - name: torch
+      run: scripts/install-torch2.sh cpu
+    - name: build
+      run: make -j2
+    - name: test
+      run: export DEVICE=cpu && make test
+    - name: valgrind
+      run: export DEVICE=cpu && test/test.sh mem
+  ubuntu_22_rocm:
+    name: Ubuntu 22 ROCm
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: rocm
+      run: |
+        sudo apt update
+        wget https://repo.radeon.com/amdgpu-install/5.7.1/ubuntu/jammy/amdgpu-install_5.7.50701-1_all.deb
+        sudo apt install ./amdgpu-install_5.7.50701-1_all.deb
+        sudo amdgpu-install --no-dkms --usecase=rocmdev
+    - name: torch
+      run: scripts/install-torch2.sh rocm
+    - name: build
+      run: make rocm=1 -j2
+  ubuntu_24:
+    name: Ubuntu 24
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: torch
+      run: scripts/install-torch2.sh cpu
+    - name: build
+      run: make -j2
+    - name: test
+      run: export DEVICE=cpu && make test
+    - name: build asan
+      run: make clean && make asan=1 -j2
+    - name: asan
+      run: export DEVICE=cpu && make test

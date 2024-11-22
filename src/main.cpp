@@ -2,10 +2,12 @@
  * @file main.c
  * @brief entry point
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
+ * @author Bonson Wong (bonson.ym@gmail.com)
 
 MIT License
 
 Copyright (c) 2019 Hasindu Gamaarachchi (hasindu@unsw.edu.au)
+Copyright (c) 2023 Bonson Wong (bonson.ym@gmail.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -39,38 +41,36 @@ SOFTWARE.
 
 int basecaller_main(int argc, char* argv[]);
 
-int print_usage(FILE *fp_help){
+int print_usage(FILE *fp_help) {
     fprintf(fp_help,"Usage: slorado <command> [options]\n\n");
     fprintf(fp_help,"command:\n");
     fprintf(fp_help,"         basecaller      basecall S/BLOW5 file\n");
 
-    if(fp_help==stderr){
+    if (fp_help == stderr) {
         return(EXIT_FAILURE);
-    } else if(fp_help==stdout){
+    } else if (fp_help == stdout) {
         return(EXIT_SUCCESS);
     } else {
         return(EXIT_FAILURE);
     }
 }
 
-int main(int argc, char* argv[]){
+int main(int argc, char* argv[]) {
     double realtime0 = realtime();
 
-    int ret=1;
+    int ret = 1;
 
-    if(argc<2){
+    if (argc < 2) {
         return print_usage(stderr);
-    } else if (strcmp(argv[1],"basecaller")==0){
-        ret=basecaller_main(argc-1, argv+1);
-    } else if (strcmp(argv[1],"subtool2")==0){
-        ret=basecaller_main(argc-1, argv+1);
-    } else if(strcmp(argv[1],"--version")==0 || strcmp(argv[1],"-V")==0){
+    } else if (strcmp(argv[1], "basecaller") == 0){
+        ret = basecaller_main(argc-1, argv+1);
+    } else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0){
         fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
         exit(EXIT_SUCCESS);
-    } else if(strcmp(argv[1],"--help")==0 || strcmp(argv[1],"-h")==0){
+    } else if (strcmp(argv[1],"--help") == 0 || strcmp(argv[1], "-h") == 0){
         return print_usage(stdout);
-    } else{
-        fprintf(stderr,"[slorado] Unrecognised command %s\n",argv[1]);
+    } else {
+        fprintf(stderr,"[slorado] Unrecognised command %s\n", argv[1]);
         return print_usage(stderr);
     }
 
@@ -78,7 +78,7 @@ int main(int argc, char* argv[]){
     fprintf(stderr, "[%s] CMD:", __func__);
     for (int i = 0; i < argc; ++i) fprintf(stderr, " %s", argv[i]);
     fprintf(stderr, "\n[%s] Real time: %.3f sec; CPU time: %.3f sec; Peak RAM: %.3f GB\n\n",
-            __func__, realtime() - realtime0, cputime(),peakrss() / 1024.0 / 1024.0 / 1024.0);
+            __func__, realtime() - realtime0, cputime(), peakrss() / 1024.0 / 1024.0 / 1024.0);
 
     return ret;
 }

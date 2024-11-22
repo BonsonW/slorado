@@ -37,42 +37,42 @@ SOFTWARE.
 #include <stdint.h>
 #include <slow5/slow5.h>
 #include <vector>
-#include <memory>
-#include "dorado/nn/ModelRunner.h"
+
 #include "dorado/Chunk.h"
 
-#define SLORADO_VERSION "0.1.0"
+#define SLORADO_VERSION "0.2.0-beta"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *
  *******************************************************/
 
-#define SLORADO_PRF 0x001 //cpu-profile mode
-#define SLORADO_ACC 0x002 //accelerator enable
-#define SLORADO_EFQ 0x004 //emit fastq enable
+#define SLORADO_PRF 0x001 // cpu-profile mode
+#define SLORADO_ACC 0x002 // accelerator enable
+#define SLORADO_EFQ 0x004 // emit fastq enable
 
-#define WORK_STEAL 1 //simple work stealing enabled or not (no work stealing mean no load balancing)
-#define STEAL_THRESH 1 //stealing threshold
+#define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
+#define STEAL_THRESH 1 // stealing threshold
 
 /* user specified options */
 typedef struct {
-    uint64_t flag;              //flags
-    int32_t batch_size;         //max reads loaded at once: K
-    int32_t gpu_batch_size;     //max chunks loaded at once: C
-    int64_t batch_size_bytes;   //max bytes loaded at once: B
+    uint64_t flag;              // flags
+    int32_t batch_size;         // max reads loaded at once: K
+    int32_t gpu_batch_size;     // max chunks loaded at once: C
+    int64_t batch_size_bytes;   // max bytes loaded at once: B
 
-    int32_t num_thread;         //number of threads used: t
+    int32_t num_thread;         // number of threads used: t
     int32_t debug_break;
 
-    const char *out_path;       //path to output file: o
+    const char *out_path;       // path to output file: o
     FILE *out;
 
-    const char *device;         //specified device: x
-    size_t chunk_size;         //size of chunks: c
-    int32_t overlap;            //overlap: p
-    int32_t num_runners;       //number of runners: r
+    const char *device;         // specified device: x
+    size_t chunk_size;          // size of chunks: c
+    int32_t overlap;            // overlap: p
+    int32_t num_runners;        // number of runners: r
 } opt_t;
 
+typedef struct elephant_s elephant_t;
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -86,66 +86,79 @@ typedef struct {
 
     double *means;
 
+    // each slow5 record has a vec of chunks and tensors assigned to it
     std::vector<std::vector<Chunk *>> *chunks;
-    std::vector<std::vector<torch::Tensor>> *tensors;
+
+    elephant_t *elephant;
 
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
 
-    //stats
+    // stats
     int64_t sum_bytes;
-    int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+    int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } db_t;
 
 /* time stamps */
 typedef struct {
-    double_t time_init_runners;
-    double_t time_read;
-    double_t time_tens;
-    double_t time_trim;
-    double_t time_scale;
-    double_t time_chunk;
-    double_t time_copy;
-    double_t time_pad;
-    double_t time_assign;
-    double_t time_accept;
-    double_t time_basecall;
-    double_t time_decode;
-    double_t time_stitch;
-    double_t time_sync;
-    double_t time_write;
-    double_t time_total;
+    double time_read;
+    double time_tens;
+    double time_trim;
+    double time_scale;
+    double time_chunk;
+    double time_copy;
+    double time_pad;
+    double time_assign;
+    double time_accept;
+    double time_basecall;
+    double time_decode;
+    double time_copy_score;
+    double time_scan_score;
+    double time_beamsearch;
+    double time_decode_cleanup;
+    double time_infer;
+    double time_stitch;
+    double time_sync;
+    double time_write;
+    double time_total;
 
-} timestamps_t;
+    uint64_t total_dp;
+} runner_stat_t;
+
+typedef struct runner_s runner_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
-    //slow5
+    // slow5
     slow5_file_t *sp;
 
     // options
     opt_t opt;
 
     // create model runner
-    // only one is used for now
-    std::vector<Runner> *runners;
+    // only one per GPU is used for now
+    std::vector<runner_t *> *runners;
 
-    //realtime0
+    // realtime0
     double realtime0;
 
-    double load_db_time;
-    double process_db_time;
-    double parse_time;
-    double preproc_time;
-    double basecall_time;
-    double postproc_time;
-    double output_time;
-    timestamps_t ts;
-    std::vector<timestamps_t *> *runner_ts;
+    // timings
+    double time_init_runners;
+    double time_sync;
+    double time_load_db;
+    double time_process_db;
+    double time_parse;
+    double time_preproc;
+    double time_basecall;
+    double time_postproc;
+    double time_output;
 
-    //stats //set by output_db
+    // stats for each runner
+    std::vector<runner_stat_t *> *runner_stats;
+
+    // stats, set by output_db
     int64_t sum_bytes;
-    int64_t total_reads; //total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+    int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } core_t;
 
 /* argument wrapper for the multithreaded framework used for data processing */
@@ -154,14 +167,14 @@ typedef struct {
     db_t* db;
     int32_t starti;
     int32_t endi;
-    void (*func)(core_t*,db_t*,int);
+    void (*func)(core_t*, db_t*, int);
     int32_t thread_index;
 #ifdef WORK_STEAL
     void *all_pthread_args;
 #endif
 #ifdef HAVE_CUDA
-    int32_t *ultra_long_reads; //reads that are assigned to the CPU due to the unsuitability to process on the GPU
-    double ret1;    //return value
+    int32_t *ultra_long_reads; // reads that are assigned to the CPU due to the unsuitability to process on the GPU
+    double ret1; // return value
 #endif
 } pthread_arg_t;
 
@@ -187,9 +200,9 @@ db_t* init_db(core_t* core);
 /* load a data batch from disk */
 ret_status_t load_db(core_t* dg, db_t* db);
 
-void work_per_single_read(core_t* core,db_t* db, int32_t i);
+void work_per_single_read(core_t* core, db_t* db, int32_t i);
 /* process all reads in the given batch db */
-void work_db(core_t* core, db_t* db, void (*func)(core_t*,db_t*,int));
+void work_db(core_t* core, db_t* db, void (*func)(core_t*, db_t*, int));
 
 /* process a data batch */
 void process_db(core_t* core, db_t* db);
@@ -208,7 +221,5 @@ void free_db(db_t* db);
 
 /* free the core data structure */
 void free_core(core_t* core,opt_t opt);
-
-void init_timestamps(timestamps_t* time_stamps);
 
 #endif

@@ -30,20 +30,18 @@ SOFTWARE.
 
 ******************************************************************************/
 
-#include "slorado.h"
-#include "dorado/signal_prep.h"
-#include "misc.h"
-
-#include <assert.h>
-#include <cstddef>
-#include <cstdint>
 #include <getopt.h>
-#include <memory>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include <openfish/openfish_error.h>
+
+#include "slorado.h"
+#include "misc.h"
+#include "error.h"
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
@@ -55,7 +53,7 @@ static struct option long_options[] = {
     {"output", required_argument, 0, 'o'},          //6 output to a file [stdout]
     {"debug-break", required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
     {"profile-cpu", required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
-    {"accel",required_argument, 0, 0},              //9 accelerator
+    {"accel",required_argument, 0, 0},              //9 accelerator //not used, can be reused for something elese
     {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
     {"device", required_argument, 0, 'x'},          //12 device [cpu]
@@ -87,9 +85,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
     // fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
-#ifdef HAVE_ACC
-    // fprintf(fp_help,"   --accel=yes|no             Running on accelerator [%s]\n",(opt.flag&SLORADO_ACC?"yes":"no"));
-#endif
 }
 
 int basecaller_main(int argc, char* argv[]) {
@@ -106,9 +101,9 @@ int basecaller_main(int argc, char* argv[]) {
     FILE *fp_help = stderr;
 
     opt_t opt;
-    init_opt(&opt); //initialise options to defaults
+    init_opt(&opt); // initialise options to defaults
 
-    //parse the user args
+    // parse the user args
     while ((c = getopt_long(argc, argv, optstring, long_options, &longindex)) >= 0) {
         if (c == 'B') {
             opt.batch_size_bytes = mm_parse_num(optarg);
@@ -137,6 +132,7 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 'v') {
             int v = atoi(optarg);
             set_log_level((enum log_level_opt)v);
+            set_openfish_log_level((enum openfish_log_level_opt)v);
         } else if (c == 'x') {
             opt.device = optarg;
         } else if (c == 'c') {
@@ -155,7 +151,7 @@ int basecaller_main(int argc, char* argv[]) {
             opt.out_path = optarg;
             opt.out = fopen(opt.out_path, "w");
             if (opt.out == NULL) {
-                fprintf(stderr,"Error in opening output file\n");
+                ERROR("Error in opening output file %s: %s\n", opt.out_path, strerror(errno));
                 exit(EXIT_FAILURE);
             }
         } else if (c == 'r') {
@@ -163,23 +159,20 @@ int basecaller_main(int argc, char* argv[]) {
             if (opt.num_runners < 1) {
                 ERROR("Number of runners should larger than 0. You entered %d", opt.num_runners);
                 exit(EXIT_FAILURE);
+            } else if (opt.num_runners > 1) {
+                ERROR("Number of runners greater than 1 is not supported yet. You entered %d", opt.num_runners);
+                exit(EXIT_FAILURE);
             }
         } else if (c == 'V') {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
-        } else if (c == 'h'){
+        } else if (c == 'h') {
             fp_help = stdout;
-        } else if(c == 0 && longindex == 7) { //debug break
+        } else if (c == 0 && longindex == 7) { // debug break
             opt.debug_break = atoi(optarg);
-        } else if(c == 0 && longindex == 8) { //sectional benchmark todo : warning for gpu mode
+        } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
-        } else if(c == 0 && longindex == 9) { //accel
-        #ifdef HAVE_ACC
-            yes_or_no(&opt.flag, SLORADO_ACC, long_options[longindex].name, optarg, 1);
-        #else
-            WARNING("%s", "--accel has no effect when compiled for the CPU");
-        #endif
-        } else if(c == 0 && longindex == 14) { //sectional benchmark todo : warning for gpu mode
+        } else if (c == 0 && longindex == 14) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_EFQ, long_options[longindex].name, optarg, 1);
         }
     }
@@ -187,7 +180,7 @@ int basecaller_main(int argc, char* argv[]) {
     // Incorrect number of arguments given
     if (argc - optind != 2 || fp_help == stdout) {
         print_help_msg(fp_help, opt);
-        if(fp_help == stdout){
+        if (fp_help == stdout) {
             exit(EXIT_SUCCESS);
         }
         exit(EXIT_FAILURE);
@@ -197,7 +190,7 @@ int basecaller_main(int argc, char* argv[]) {
 
     if (model == NULL) {
         print_help_msg(fp_help, opt);
-        if(fp_help == stdout){
+        if (fp_help == stdout) {
             exit(EXIT_SUCCESS);
         }
         exit(EXIT_FAILURE);
@@ -223,77 +216,80 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"batch size:         %d\n", opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
-    fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
+    //fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
 
 /////////////////////////////////////////////////////////////////////////////
 
-    //initialise the core data structure
+    // initialise the core data structure
     core_t* core = init_core(data, opt, model, realtime0);
 
-    int32_t counter=0;
+    int32_t counter = 0;
 
-    //initialise a databatch
+    // initialise a databatch
     db_t* db = init_db(core);
 
-    ret_status_t status = {core->opt.batch_size,core->opt.batch_size_bytes};
+    ret_status_t status = {core->opt.batch_size, core->opt.batch_size_bytes};
     while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
-        //load a databatch
+        // load a databatch
         status = load_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
 
-        //process a databatch
+        // process a databatch
         process_db(core, db);
 
         fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) processed\n", __func__,
                 realtime() - realtime0, cputime() / (realtime() - realtime0),
                 status.num_reads,status.num_bytes/(1000.0*1000.0));
 
-        //output print
+        // output print
         output_db(core, db);
 
-        //free temporary
+        // free temporary
         free_db_tmp(db);
 
-        if(opt.debug_break==counter){
+        if (opt.debug_break == counter) {
             break;
         }
         counter++;
     }
 
-    //free the databatch
+    // free the databatch
     free_db(db);
 
-    fprintf(stderr, "[%s] total entries: %ld", __func__,(long)core->total_reads);
-    fprintf(stderr,"\n[%s] total bytes: %.1f M",__func__,core->sum_bytes/(float)(1000*1000));
+    fprintf(stderr, "[%s] total entries: %ld", __func__, (long)core->total_reads);
+    fprintf(stderr, "\n[%s] total bytes: %.1f M", __func__, core->sum_bytes/(float)(1000*1000));
 
-    fprintf(stderr, "\n[%s] Model initialization time: %.3f sec", __func__,core->ts.time_init_runners);
-    fprintf(stderr, "\n[%s] Data loading time: %.3f sec", __func__,core->load_db_time);
-    fprintf(stderr, "\n[%s] Data processing time: %.3f sec", __func__,core->process_db_time);
-    //if((core->opt.flag&SLORADO_PRF)|| core->opt.flag & SLORADO_ACC){
-            fprintf(stderr, "\n[%s]     - Parse time: %.3f sec",__func__, core->parse_time);
-            fprintf(stderr, "\n[%s]     - Preprocess time: %.3f sec",__func__, core->preproc_time);
-            fprintf(stderr, "\n[%s]     - Basecall+decode time: %.3f sec",__func__, core->basecall_time);
-            fprintf(stderr, "\n[%s]          - Synchronisation time: %.3f sec",__func__, core->ts.time_sync);
+    fprintf(stderr, "\n[%s] model initialization: %.3f sec", __func__, core->time_init_runners);
+    fprintf(stderr, "\n[%s] data loading: %.3f sec", __func__, core->time_load_db);
+    fprintf(stderr, "\n[%s] data processing: %.3f sec", __func__, core->time_process_db);
+    fprintf(stderr, "\n[%s]     - parse: %.3f sec", __func__, core->time_parse);
+    fprintf(stderr, "\n[%s]     - preprocess: %.3f sec", __func__, core->time_preproc);
+    fprintf(stderr, "\n[%s]     - basecall: %.3f sec", __func__, core->time_basecall);
+    fprintf(stderr, "\n[%s]          - synchronisation: %.3f sec", __func__, core->time_sync);
 
-    auto runner_ts = *core->runner_ts;
-    for (size_t i = 0; i < runner_ts.size(); ++i) {
-            fprintf(stderr, "\n[%s]          - Model Runner [%zu] time: %.3f",__func__, i, runner_ts[i]->time_basecall + runner_ts[i]->time_decode + runner_ts[i]->time_accept);
-            fprintf(stderr, "\n[%s]             - Accept time: %.3f sec",__func__, runner_ts[i]->time_accept);
-            fprintf(stderr, "\n[%s]             - Decode time: %.3f sec",__func__, runner_ts[i]->time_decode);
+    auto runner_stats = *core->runner_stats;
+    for (size_t i = 0; i < runner_stats.size(); ++i) {
+        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_stats[i]->time_basecall + runner_stats[i]->time_decode + runner_stats[i]->time_accept);
+        fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_stats[i]->time_accept);
+        fprintf(stderr, "\n[%s]             - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
+        fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_stats[i]->time_infer);
+        // fprintf(stderr, "\n[%s]                 - copy to cpu: %.3f sec", __func__, runner_stats[i]->time_copy_score);
+        // fprintf(stderr, "\n[%s]                 - scan scores: %.3f sec", __func__, runner_stats[i]->time_scan_score);
+        fprintf(stderr, "\n[%s]                 - beamsearch: %.3f sec", __func__, runner_stats[i]->time_beamsearch);
+        // fprintf(stderr, "\n[%s]                 - cleanup: %.3f sec", __func__, runner_stats[i]->time_decode_cleanup);
+        // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
     }
-            fprintf(stderr, "\n[%s]     - Postprocess time: %.3f sec",__func__, core->postproc_time);
-    //}
-    fprintf(stderr, "\n[%s] Data output time: %.3f sec", __func__,core->output_time);
-
+    fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
+    fprintf(stderr, "\n[%s] data output: %.3f sec", __func__, core->time_output);
     fprintf(stderr,"\n");
 
-    //free the core data structure
-    free_core(core,opt);
+    // free the core data structure
+    free_core(core, opt);
 
     if (opt.out != stdout) {
         fclose(opt.out);

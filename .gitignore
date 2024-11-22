@@ -26,6 +26,7 @@
 *.sql
 *.sqlite
 *.txt
+*.tmp
 
 # OS generated files #
 ######################
@@ -44,15 +45,15 @@ Thumbs.db
 # binaries
 /slorado
 /thirdparty/torch
-/thirdparty/koi_lib
 /thirdparty/toml11
 cmake-build-debug/
 build/
 /models/*
 /minimap2
+/zstd
 test/tmp.fastq
 test/tmp.paf
-*.fastq
+reads.fastq
 
 #Allowed files
 !CMakeLists.txt
