@@ -33,7 +33,8 @@ mv slorado-$VERSION/build-hash slorado-$VERSION/build-version  slorado-$VERSION/
 rm -r slorado-$VERSION/include
 rm -r slorado-$VERSION/share/cmake
 rm -r slorado-$VERSION/lib/*.a
-rm slorado-$VERSION/lib/
+rm -f slorado-$VERSION/lib/libtorch_cuda_linalg.so slorado-$VERSION/lib/libnvrtc-builtins-*
+rm -f slorado-$VERSION/lib/libcudnn_cnn_train.so.8 slorado-$VERSION/lib/libcudnn_ops_train.so.8 slorado-$VERSION/lib/libcudnn_adv_train.so.8
 
 ./slorado-$VERSION/bin/slorado --version || die "Test failed"
 tar zcf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.gz slorado-$VERSION || die "Tar failed"
