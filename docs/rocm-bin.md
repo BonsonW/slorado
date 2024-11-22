@@ -20,6 +20,9 @@ Download the test dataset with 20,000 reads and run slorado:
 wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample
 ./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
 ```
+
+Refer to [troubleshoot](troubleshoot.md) for help on resolving common problems.
+
 ## Optional Testing
 
 Test if the output maps and identity scores are good (required  minimap2, the human genome and datamash):
