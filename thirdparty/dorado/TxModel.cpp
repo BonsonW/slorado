@@ -2,7 +2,6 @@
 
 #include "basecall/CRFModelConfig.h"
 #include "basecall/nn/CRFModel.h"
-#include "torch_utils/gpu_profiling.h"
 #include "utils/dev_utils.h"
 #include "utils/math_utils.h"
 
@@ -10,7 +9,6 @@
 #include <ATen/TensorIndexing.h>
 #include <c10/core/ScalarType.h>
 #include <c10/core/TensorOptions.h>
-#include <spdlog/spdlog.h>
 #include <torch/nn.h>
 #include <torch/nn/functional/padding.h>
 #include <torch/nn/options/padding.h>
@@ -37,10 +35,12 @@ void apply_rounding(at::Tensor &t, int remove_bits) {
     t.view(torch::kI16).bitwise_and_(0x10000 - (1 << remove_bits));
 }
 
-torch::Tensor scaled_dot_product_attention_naive(const torch::Tensor &q,
-                                                 const torch::Tensor &k,
-                                                 const torch::Tensor &v,
-                                                 const torch::Tensor &mask) {
+torch::Tensor scaled_dot_product_attention_naive(
+    const torch::Tensor &q,
+    const torch::Tensor &k,
+    const torch::Tensor &v,
+    const torch::Tensor &mas
+) {
     auto matmul_qk = torch::matmul(q, k.transpose(-2, -1));
 
     auto d_k = k.size(-1);
@@ -65,10 +65,8 @@ at::Tensor RMSNormImpl::forward(at::Tensor x) {
     return x;
 }
 
-GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_)
-        : in_features(in_features_), hidden_features(hidden_features_) {
-    fc1 = register_module("fc1",
-                          Linear(LinearOptions(in_features, 2 * hidden_features).bias(false)));
+GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_) : in_features(in_features_), hidden_features(hidden_features_) {
+    fc1 = register_module("fc1", Linear(LinearOptions(in_features, 2 * hidden_features).bias(false)));
     fc2 = register_module("fc2", Linear(LinearOptions(hidden_features, in_features).bias(false)));
 };
 
@@ -83,16 +81,21 @@ at::Tensor GatedMLPImpl::forward(const at::Tensor &x) {
     return fc2(t);
 }
 
-RotaryEmbeddingImpl::RotaryEmbeddingImpl(int dim_,
-                                         float theta_,
-                                         int max_seq_len_,
-                                         const at::TensorOptions &options_)
-        : dim(dim_), max_seq_len(max_seq_len_), theta(theta_), options(options_) {
+RotaryEmbeddingImpl::RotaryEmbeddingImpl(
+    int dim_,
+    float theta_,
+    int max_seq_len_,
+    const at::TensorOptions &options_
+) :
+    dim(dim_),
+    max_seq_len(max_seq_len_),
+    theta(theta_),
+    options(options_)
+{
     const at::Tensor inv_freq = get_inv_freqs();
 
     // freqs.shape := {max_seq_len, 1, 1, dim/2}
-    const at::Tensor freqs =
-            torch::arange(max_seq_len, options).reshape({max_seq_len, 1, 1, 1}) * inv_freq;
+    const at::Tensor freqs = torch::arange(max_seq_len, options).reshape({max_seq_len, 1, 1, 1}) * inv_freq;
 
     register_buffer("cos_freqs", torch::cos(freqs).to(options));
     register_buffer("sin_freqs", torch::sin(freqs).to(options));
@@ -112,10 +115,9 @@ at::Tensor RotaryEmbeddingImpl::get_inv_freqs() const {
     for (float i = 0; i < dim; i += 2) {
         vec.push_back(std::pow(static_cast<double>(theta), static_cast<double>(i / (float)dim)));
     }
-    at::Tensor inv_freq =
-            torch::from_blob(vec.data(), vec.size(), torch::TensorOptions().dtype(torch::kDouble))
-                    .to(options)
-                    .reciprocal();
+    at::Tensor inv_freq = torch::from_blob(vec.data(), vec.size(), torch::TensorOptions().dtype(torch::kDouble))
+        .to(options)
+        .reciprocal();
     return inv_freq;
 }
 
@@ -138,8 +140,7 @@ at::Tensor RotaryEmbeddingImpl::forward(at::Tensor &qkv) {
     auto output = at::empty({3, N, H, T, D}, qkv.options());
     // View as [3 (q|k|v), N, H, T, 2 (even|odd), D/2], narrow first dim to 2 (q|k), then
     // permute as [2 (even|odd), N, T, 2 (q|k), H, D/2] which is compatible with assignment below
-    auto output_kv_even_odd =
-            output.view({3, N, H, T, 2, D / 2}).slice(0, 0, 2).permute({4, 1, 3, 0, 2, 5});
+    auto output_kv_even_odd = output.view({3, N, H, T, 2, D / 2}).slice(0, 0, 2).permute({4, 1, 3, 0, 2, 5});
 
     // Apply rotary embedding to Q and K
     output_kv_even_odd[0] = cos_buf * qk_evens - sin_buf * qk_odds;
@@ -160,43 +161,42 @@ void RotaryEmbeddingImpl::assert_forward_dims(const at::Tensor &qkv) const {
     bool has_error = false;
     if (seq_len > max_seq_len) {
         has_error = true;
-        spdlog::error(
-                "RotE - maximum sequence length exceeded (len:{} > max:{}) - "
-                "Your chunksize may be too large",
-                seq_len, max_seq_len);
+        ERROR("RotE - maximum sequence length exceeded - len:%d max:%d - Your chunksize may be too large", seq_len, max_seq_len);
     }
     if (three != 3) {
         has_error = true;
-        spdlog::error("RotE - expected constant size:3 at dim:2 found:{}", three);
+        ERROR("RotE - expected constant size:3 at dim:2 found:%d", three);
     }
     if (head_dim != dim) {
         has_error = true;
-        spdlog::error("RotE - expected head_dim size:{} at dim:4 found:{}", dim, head_dim);
+        ERROR("RotE - expected head_dim size:%d at dim:4 found:%d", dim, head_dim);
     }
     if (has_error) {
-        throw std::runtime_error("RotE - input dimensions invalid");
+        exit(EXIT_FAILURE);
     }
 }
 
-MultiHeadAttentionImpl::MultiHeadAttentionImpl(int d_model_,
-                                               int nhead_,
-                                               bool qkv_bias_,
-                                               bool out_bias_,
-                                               const std::pair<int, int> &attn_window_,
-                                               const at::TensorOptions &options_)
-        : d_model(d_model_),
-          nhead(nhead_),
-          head_dim(d_model_ / nhead_),
-          // TODO: this may benefit from fine-tuning. 8 gives good performance at chunk size 12k
-          num_splits(utils::get_dev_opt<int>("mha_num_splits", 12)),
-          attn_window(attn_window_),
-          options(options_) {
+MultiHeadAttentionImpl::MultiHeadAttentionImpl(
+    int d_model_,
+    int nhead_,
+    bool qkv_bias_,
+    bool out_bias_,
+    const std::pair<int, int> &attn_window_,
+    const at::TensorOptions &options_
+) :
+    d_model(d_model_),
+    nhead(nhead_),
+    head_dim(d_model_ / nhead_),
+    // TODO: this may benefit from fine-tuning. 8 gives good performance at chunk size 12k
+    num_splits(utils::get_dev_opt<int>("mha_num_splits", 12)),
+    attn_window(attn_window_),
+    options(options_)
+{
     wqkv = register_module("wqkv", Linear(LinearOptions(d_model, 3 * d_model).bias(qkv_bias_)));
     out_proj = register_module("out_proj", Linear(LinearOptions(d_model, d_model).bias(out_bias_)));
     const float theta = 10000.0f;
     const int64_t max_seq_len = 2048;
-    rotary_emb =
-            register_module("rotary_emb", RotaryEmbedding(head_dim, theta, max_seq_len, options));
+    rotary_emb = register_module("rotary_emb", RotaryEmbedding(head_dim, theta, max_seq_len, options));
 };
 
 at::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
@@ -230,8 +230,7 @@ at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
     const auto [win_upper, win_lower] = attn_window;
     // The MPS backend refuses to work on a span of the mask that doesn't have an
     // alignment of 4 elements, so pad the amount we process each loop to that.
-    const auto elems_per_split =
-            utils::pad_to(utils::div_round_up(T, int64_t{num_splits}), int64_t{4});
+    const auto elems_per_split = utils::pad_to(utils::div_round_up(T, int64_t{num_splits}), int64_t{4});
     for (int i = 0; i < num_splits; ++i) {
         const auto qb = i * elems_per_split;
         if (qb >= T) {
@@ -256,10 +255,8 @@ at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const tx::TxEncoderParams &params_, const at::TensorOptions &options)
-        : params(params_) {
-    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false,
-                                                                true, params.attn_window, options));
+TxEncoderImpl::TxEncoderImpl(const tx::TxEncoderParams &params_, const at::TensorOptions &options) : params(params_) {
+    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
@@ -283,8 +280,7 @@ at::Tensor TxEncoderImpl::forward(at::Tensor x) {
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const tx::TxEncoderParams &params,
-                                       const at::TensorOptions &options) {
+TxEncoderStackImpl::TxEncoderStackImpl(const tx::TxEncoderParams &params, const at::TensorOptions &options) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
         TxEncoder encoder(params, options);
@@ -298,11 +294,8 @@ at::Tensor TxEncoderStackImpl::forward(const at::Tensor &x) {
     return stack->forward(x);
 }
 
-LinearUpsampleImpl::LinearUpsampleImpl(const tx::EncoderUpsampleParams &params)
-        : scale_factor(params.scale_factor) {
-    linear = register_module(
-            "linear",
-            Linear(LinearOptions(params.d_model, scale_factor * params.d_model).bias(true)));
+LinearUpsampleImpl::LinearUpsampleImpl(const tx::EncoderUpsampleParams &params) : scale_factor(params.scale_factor) {
+    linear = register_module("linear", Linear(LinearOptions(params.d_model, scale_factor * params.d_model).bias(true)));
 };
 
 at::Tensor LinearUpsampleImpl::forward(const at::Tensor &x) {
@@ -315,8 +308,7 @@ at::Tensor LinearUpsampleImpl::forward(const at::Tensor &x) {
 
 LinearScaledCRFImpl::LinearScaledCRFImpl(const tx::CRFEncoderParams &params) {
     m_params = params;
-    linear = register_module(
-            "linear", Linear(LinearOptions(m_params.insize, m_params.outsize()).bias(false)));
+    linear = register_module("linear", Linear(LinearOptions(m_params.insize, m_params.outsize()).bias(false)));
 };
 
 at::Tensor LinearScaledCRFImpl::forward(const at::Tensor &x) {
@@ -327,8 +319,7 @@ at::Tensor LinearScaledCRFImpl::forward(const at::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const basecall::CRFModelConfig &config, const at::TensorOptions &options)
-        : m_options(options) {
+TxModelImpl::TxModelImpl(const basecall::CRFModelConfig &config, const at::TensorOptions &options) : m_options(options) {
     convs = register_module("convs", basecall::nn::ConvStack(config.convs));
     tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
