@@ -26,3 +26,5 @@ mkdir /tmp/a_unique_name
 export TMPDIR=/tmp/a_unique_name
 ./slorado .....
 ```
+
+** IMPORTANT: Make sure you give an existent directory, we had a typo as  `a_unnique_name` when exporting, and torch was giving a segfault!

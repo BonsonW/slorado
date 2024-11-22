@@ -4,6 +4,25 @@ Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dora
 
 Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and will not be up to date with Dorado. For a feature rich and up-to-date S/BLOW5-based basecaller for routine use, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel).
 
+## Quick start
+
+We provide compiled binaries for NVIDIA (cuda) and AMD (rocm) GPU  accelerators on x86_64 CPUs for Linux. You can download them latest version from [releases](https://github.com/BonsonW/slorado/releases).
+
+```
+VERSION=v0.2.0-beta
+GPU=cuda   # GPU=rocm for AMD GPUs
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/$VERSION-beta-x86_64-$GPU-linux-binaries.tar.gz" && tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.gz && cd slorado-$VERSION
+./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 reads.blow5  -o out.fastq -x cuda:all
+```
+
+See detailed instructions at:
+- [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-bin.md)
+- [AMD GPUs (rocm) on x84_64 systems](docs/rocm-bin.md)
+
+
+Binaries for the CPU only version are not provided as it is impractically slow. Nevertheless, CPU-only version is easier to build compared to GPU version (see [below](#compilation-and-running)).
+
+
 ## Compilation and running
 
 ### Compilation
@@ -11,9 +30,9 @@ Slorado is mainly for our research and educational purposes. Thus, only a minima
 Compilation instructions differs based on the system. Please pick one of the following that matches your system:
 
 - [x84_64 CPU-only (basecalling will be horribly slow)](docs/cpu-build.md)
-- [NVIDIA GPUs (CUDA) on x84_64 systems](docs/cuda-build.md)
-- [AMD GPUs (ROCM) on x84_64 systems](docs/rocm-build.md)
-- [ARM-based NVIDIA Jetson (CUDA) systems](docs/jetson-build.md)
+- [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-build.md)
+- [AMD GPUs (rocm) on x84_64 systems](docs/rocm-build.md)
+- [ARM-based NVIDIA Jetson (cuda) systems](docs/jetson-build.md)
 
 ### Running
 
