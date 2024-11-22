@@ -175,7 +175,7 @@ echo "Memory Check - CPU - FAST model - incomplete batch"
 ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -C6 > test/tmp.fastq  || die "Running the tool failed"
 
 # accuracy check
-make clean && make -j cuda=1 CUDA_ROOT=/data/install/cuda-11.8/
+make clean && make -j cuda=1
 
 echo "GPU - FAST model - 20k reads"
 ex ./slorado basecaller models/$FAST $SUBSAMPLE -xcuda:all -B500M -c10000 -C1000 > test/tmp.fastq || die "Running the tool failed"
