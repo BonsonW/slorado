@@ -1,6 +1,6 @@
 # Basecalling on NVIDIA GPUs
 
-We have some compiled binaries which should work On Linux if you have GLIBC >= 2.17 (invoke `ldd --version` to check).  Note that this is in early development and we have tested them only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
+We have some compiled binaries which should work On Linux if you have GLIBC >= 2.17 (invoke `ldd --version` to check).  We have tested them only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
 
 
 ## Getting Started

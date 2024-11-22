@@ -1,11 +1,11 @@
 # Basecalling on AMD GPUs
 
-With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some compiled binaries which should work On Linux if you have GLIBC >= 2.28 (invoke `ldd --version` to check).  Note that this is in early development and we have tested them only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
+With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some compiled binaries which should work on Linux if you have GLIBC >= 2.28 (invoke `ldd --version` to check). You should also have the GPU driver installed. Currently, we have tested the binaries only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
 
 
 ## Getting Started
 
-First, download and extract the slorado rocm Linux binaries tar ball. Note that this is for testing only and the link will not be persistent!!!!
+First, download and extract the slorado rocm Linux binaries tarball. Note that this is for testing only and the link will not be persistent!!!!
 
 ```
 wget -O slorado-v0.2.0-beta-x86_64-rocm-linux-binaries.tar.gz "https://www.dropbox.com/scl/fi/att02vnbedjr6l91szp68/slorado-v0.2.0-beta-x86_64-rocm-linux-binaries.tar.gz?rlkey=gg8xv2rd68l8287zhlultnm27&st=jlvuzqan&dl=1"
