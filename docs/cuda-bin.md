@@ -21,7 +21,7 @@ wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_
 ./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
 ```
 
-Refer to [troubleshoot](troubleshoot.md) for help on resolving common problems.
+Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems.
 
 ## Optional Testing
 
@@ -37,4 +37,5 @@ It should print the mean identity score, median identity score and the number of
 ### Note 1
 
 Currently, we have tested these binaries on following systems:
-1. O/S: Ubuntu 22, GPU: V100
+1. O/S: Ubuntu 22; GPU: Tesla V100
+2. O/S: Ubuntu 22 through Windows Subsystem for Linux (WSL2); GPU: GeForce RTX 4070 (laptop)

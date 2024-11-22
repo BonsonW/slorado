@@ -23,7 +23,7 @@ Detailed instructions are available at:
 
 Binaries for the CPU-only version are not provided as basecalling on CPU is impractically slow. Nevertheless, CPU-only version is easier to build compared to GPU version (see [below](#compilation-and-running)).
 
-Refer to [troubleshoot](troubleshoot.md) for help on resolving common problems.
+Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems.
 
 ## Compilation and running
 
@@ -52,7 +52,7 @@ Now run on a test dataset:
 ./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5 -o reads.fastq
 ```
 
-Refer to [troubleshoot](troubleshoot.md) for help on resolving common problems. Currently, we are working on to support the newer v5 basecalling models.
+Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems. Currently, we are working on to support the newer v5 basecalling models.
 
 ## Testing
 
