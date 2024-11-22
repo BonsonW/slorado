@@ -40,7 +40,7 @@ SOFTWARE.
 
 #include "dorado/Chunk.h"
 
-#define SLORADO_VERSION "0.1.0"
+#define SLORADO_VERSION "0.2.0-beta"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *
