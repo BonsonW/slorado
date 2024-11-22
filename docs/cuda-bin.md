@@ -8,9 +8,10 @@ We have some compiled binaries which should work On Linux if you have GLIBC >= 2
 First, download and extract the slorado cuda Linux binaries tar ball. Note that this is for testing only and the link will not be persistent!!!!
 
 ```
-wget -O slorado-v0.2.0-beta-x86_64-cuda-linux-binaries.tar.gz "https://www.dropbox.com/scl/fi/wzlkwolfvdmbpjyngh7p1/slorado-v0.2.0-beta-x86_64-cuda-linux-binaries.tar.gz?rlkey=wue0dhnqm48pun6fuojw56p49&st=evgiktw0&dl=1"
-tar xf slorado-v0.2.0-beta-x86_64-cuda-linux-binaries.tar.gz
-cd slorado-v0.2.0-beta
+VERSION=v0.2.0-beta
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-cuda-linux-binaries.tar.gz" && tar xvf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.gz && cd slorado-$VERSION
+tar xvf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.gz
+cd slorado-$VERSION
 bin/slorado --help
 ```
 
@@ -19,6 +20,9 @@ Download the test dataset with 20,000 reads and run slorado:
 wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample
 ./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
 ```
+
+Refer to [troubleshoot](troubleshoot.md) for help on resolving common problems.
+
 ## Optional Testing
 
 Test if the output maps and identity scores are good (required  minimap2, the human genome and datamash):

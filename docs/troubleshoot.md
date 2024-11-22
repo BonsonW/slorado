@@ -28,3 +28,8 @@ export TMPDIR=/tmp/a_unique_name
 ```
 
 ** IMPORTANT: Make sure you give an existent directory, we had a typo as  `a_unnique_name` when exporting, and torch was giving a segfault!
+
+
+## GPU memory out
+
+Currently, slorado does not implement automatic batch size selection based on available memory. If you see an out of GPU memory error, reduce the GPU batch size using -C option.
