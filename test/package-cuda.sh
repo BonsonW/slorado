@@ -5,6 +5,8 @@ die() {
     exit 1
 }
 
+scl enable devtoolset-8 bash
+
 git submodule update || die "Update failed"
 
 VERSION=`git describe --tags`
