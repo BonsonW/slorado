@@ -9,7 +9,7 @@ First, download and extract the slorado rocm Linux binaries tarball. Note that t
 
 ```
 VERSION=v0.2.0-beta
-wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz" && tar xvf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz && cd slorado-$VERSION
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz"
 tar xvf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz
 cd slorado-$VERSION
 bin/slorado --help
