@@ -365,56 +365,6 @@ CRFModelConfig load_lstm_model_config(const std::filesystem::path &path) {
     return config;
 }
 
-CRFModelConfig load_crf_model_config(char *path) {
-    if (toml_key_exists(encoder, "type")) {
-        // v4-type model
-        toml_array_t *sublayers = toml_array_in(encoder, "sublayers");
-        check_toml_array(sublayers);
-
-        for (int i = 0; ; i++) {
-            toml_table_t *segment = toml_table_at(sublayers, i);
-            if (!segment) break;
-
-            toml_datum_t type_dt = toml_string_in(segment, "type");
-            check_toml_datum(type_dt);
-            char *type = type_dt.u.s;
-
-            if (strcmp(type, "convolution") == 0) {
-                // Overall stride is the product of all conv layers' strides.
-                toml_datum_t stride = toml_int_in(segment, "stride");
-                check_toml_datum(stride);
-                config.stride *= stride.u.i;
-            } else if (strcmp(type, "lstm") == 0) {
-                toml_datum_t insize = toml_int_in(segment, "insize");
-                check_toml_datum(insize);
-                config.insize = insize.u.i;
-            } else if (strcmp(type, "linear") == 0) {
-                // Specifying out_features implies a decomposition of the linear layer matrix
-                // multiply with a bottleneck before the final feature size.
-                if (toml_key_exists(segment, "out_features")) {
-                    toml_datum_t out_features = toml_int_in(segment, "out_features");
-                    check_toml_datum(out_features);
-                    config.out_features = out_features.u.i;
-                    config.decomposition = true;
-                } else {
-                    config.decomposition = false;
-                }
-            } else if (strcmp(type, "clamp") == 0) {
-                config.clamp = true;
-            } else if (strcmp(type, "linearcrfencoder") == 0) {
-                toml_datum_t blank_score = toml_double_in(segment, "blank_score");
-                check_toml_datum(blank_score);
-                config.blank_score = (float)blank_score.u.d;
-            }
-
-            free(type);
-        }
-
-        config.conv = 16;
-        config.bias = config.insize > 128;
-    }
-}
-
 TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
     const toml_table_t *enc = toml_table_fallback(cfg, {"model", "encoder", "transformer_encoder"});
     TxEncoderParams params;
