@@ -22,6 +22,11 @@ ifeq ($(zstd),1)
 LDFLAGS		+= -lzstd
 endif
 
+ifeq ($(zstd_local),)
+else
+LDFLAGS		+= zstd/lib/libzstd.a
+endif
+
 # https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
 ifeq ($(cxx11_abi),) #  cxx11_abi not defined
 CXXFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
@@ -108,7 +113,7 @@ $(BUILD_DIR)/writer.o: src/writer.cpp src/error.h
 $(BUILD_DIR)/elephant.o: src/elephant.cpp src/elephant.h src/slorado.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/elephant.h 
+$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/elephant.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # dorado
