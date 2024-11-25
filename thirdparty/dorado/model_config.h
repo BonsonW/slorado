@@ -45,17 +45,17 @@ struct ConvParams {
 
 struct TxEncoderParams {
     // The number of expected features in the encoder/decoder inputs
-    int d_model{-1};
+    int d_model = -1;
     // The number of heads in the multi-head attention (MHA) models
-    int nhead{-1};
+    int nhead = -1;
     // The number of transformer layers
-    int depth{-1};
+    int depth = -1;
     // The dimension of the feedforward model
-    int dim_feedforward{-1};
+    int dim_feedforward = -1;
     // Pair of ints defining (possibly asymmetric) sliding attention window mask
     std::pair<int, int> attn_window{-1, -1};
     // The deepnorm normalisation alpha parameter
-    float deepnorm_alpha{1.0};
+    float deepnorm_alpha = 1.0;
 };
 
 struct EncoderUpsampleParams {
@@ -73,26 +73,12 @@ struct CRFEncoderParams {
     float blank_score;
     bool expand_blanks;
     std::vector<int> permute;
-
-    // compute the outsize
-    int outsize() const {
-        if (expand_blanks) {
-            return static_cast<int>(pow(n_base, state_len + 1));
-        }
-        return (n_base + 1) * static_cast<int>(pow(n_base, state_len));
-    };
-
-    // compute the out_features
-    int out_features() const { return static_cast<int>(pow(n_base, state_len + 1)); };
 };
 
 struct TxParams {
     TxEncoderParams tx;
     EncoderUpsampleParams upsample;
     CRFEncoderParams crf;
-
-    // Self consistency check
-    void check() const;
 };
 
 // Values extracted from config.toml used in construction of the model module.
@@ -127,37 +113,9 @@ struct CRFModelConfig {
     std::vector<ConvParams> convs;
 
     // Tx Model Params
-    std::optional<TxParams> tx = std::nullopt;
+    TxParams *tx = NULL;
 
     BasecallerParams basecaller;
-
-    // True if this model config describes a LSTM model
-    bool is_lstm_model() const { return !is_tx_model(); }
-    // True if this model config describes a transformer model
-    bool is_tx_model() const { return tx.has_value(); };
-
-    // The model upsampling scale factor
-    int scale_factor() const { return is_tx_model() ? tx->upsample.scale_factor : 1; };
-    // The model stride multiplied by the upsampling scale factor
-    int stride_inner() const { return stride * scale_factor(); };
-
-    // Normalise the basecaller parameters `chunk_size` and `overlap` to the `stride_inner`
-    void normalise_basecaller_params() {
-        basecaller.normalise(chunk_size_granularity(), stride_inner());
-    }
-
-    size_t chunk_size_granularity() const { return stride_inner() * (is_tx_model() ? 16 : 1); }
-
-    // True if `chunk_size` and `overlap` is evenly divisible by the `strde_inner`
-    bool has_normalised_basecaller_params() const;
 };
 
-// True if this config at path describes a transformer model
-bool is_tx_model_config(const std::filesystem::path& path);
-
 CRFModelConfig load_crf_model_config(const std::filesystem::path& path);
-
-bool is_rna_model(const CRFModelConfig& model_config);
-bool is_duplex_model(const CRFModelConfig& model_config);
-
-models::Chemistry parse_model_chemistry(const std::filesystem::path& path);

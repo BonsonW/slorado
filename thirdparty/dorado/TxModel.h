@@ -104,8 +104,6 @@ struct TxEncoderImpl : torch::nn::Module {
 
     at::Tensor forward(at::Tensor x);
 
-    void koi_forward(utils::ScaledTensor &scaled_tensor, at::Tensor &x_f16);
-
     tx::TxEncoderParams params;
 
     // Rearranged weights for Koi tiled codepath
@@ -123,8 +121,7 @@ struct TxEncoderStackImpl : torch::nn::Module {
     TxEncoderStackImpl(const tx::TxEncoderParams &params, const at::TensorOptions &options);
 
     at::Tensor forward(const at::Tensor &x);
-
-    bool use_koi_tiled{false};
+    
     bool use_i8{false};
     torch::nn::Sequential stack{nullptr};
     std::vector<TxEncoder> layer_vec;
