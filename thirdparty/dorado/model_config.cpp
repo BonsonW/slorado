@@ -206,6 +206,7 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
 
         if (params.standarisation.stdev <= 0.0f) {
             ERROR("Config error: `standardisation.stdev` must be greater than 0, got: %f", params.standarisation.stdev);
+            exit(EXIT_FAILURE);
         }
     }
 
