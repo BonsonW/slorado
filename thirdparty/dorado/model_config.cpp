@@ -187,7 +187,14 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
         check_toml_table(norm);
 
         toml_datum_t standardise = toml_int_in(norm, "standardise");
+        check_toml_datum(standardise);
+        params.standarisation.standardise = standardise.u.i > 0;
         if (params.standarisation.standardise) {
+            toml_datum_t mean = toml_double_in(norm, "mean");
+            check_toml_datum(mean);
+            toml_datum_t stdev = toml_double_in(norm, "stdev");
+            check_toml_datum(stdev);
+
             params.standarisation.mean = toml_double_in(norm, "mean");
             params.standarisation.stdev = toml_double_in(norm, "stdev");
         }
