@@ -319,7 +319,7 @@ at::Tensor LinearScaledCRFImpl::forward(const at::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const basecall::CRFModelConfig &config, const at::TensorOptions &options) : m_options(options) {
+TxModelImpl::TxModelImpl(const CRFModelConfig &config, const at::TensorOptions &options) : m_options(options) {
     convs = register_module("convs", basecall::nn::ConvStack(config.convs));
     tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
