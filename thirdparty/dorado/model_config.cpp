@@ -117,14 +117,14 @@ ConvParams parse_conv_params(const toml_table_t *segment, bool clamp) {
     params.stride = stride.u.i;
 
     toml_datum_t activation = toml_string_in(segment, "activation");
-    check_toml_datum(stride);
-    if (activation == "swish") {
+    check_toml_datum(activation);
+    if (strcmp(activation.u.s, "swish") == 0) {
         params.activation = clamp ? Activation::SWISH_CLAMP : Activation::SWISH;
-    } else if (activation == "tanh") {
+    } else if (strcmp(activation.u.s, "tanh") == 0) {
         params.activation = Activation::TANH;
     } else {
-        throw std::runtime_error("Unknown activation: `" + activation +
-                                 "` in model config, expected `swish` or `tanh`");
+        ERROR("Unknown activation: `%s` in model config, expected `swish` or `tanh`", activation.u.s);
+        exit(EXIT_FAILURE);
     }
 
     return params;
@@ -325,6 +325,12 @@ TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
     toml_datum_t deepnorm_alpha = toml_double_fallback(enc, {"layer", "deepnorm_alpha"});
     check_toml_datum(deepnorm_alpha);
 
+    params.depth = depth.u.i;
+    params.d_model = d_model.u.i;
+    params.nhead = nhead.u.i;
+    params.dim_feedforward = dim_feedforward.u.i;
+    params.deepnorm_alpha = deepnorm_alpha.u.d;
+
     const toml_array_t *attn_window_ = toml_array_fallback(enc, {"layer", "attn_window"});
     check_toml_array(attn_window_);
     
@@ -347,8 +353,8 @@ EncoderUpsampleParams parse_encoder_upsample_params(const toml_table_t *cfg) {
     toml_datum_t scale_factor = toml_int_in(ups, "scale_factor");
     check_toml_datum(scale_factor);
 
-    params.d_model = d_model;
-    params.scale_factor = scale_factor;
+    params.d_model = d_model.u.i;
+    params.scale_factor = scale_factor.u.i;
 
     return params;
 }
@@ -372,12 +378,12 @@ CRFEncoderParams parse_crf_encoder_params(const toml_table_t *cfg) {
     toml_array_t *permute = toml_array_in(crf, "permute");
     check_toml_array(permute);
 
-    params.insize = insize;
-    params.n_base = n_base;
-    params.state_len = state_len;
-    params.scale = scale;
-    params.blank_score = blank_score;
-    params.expand_blanks = expand_blanks;
+    params.insize = insize.u.i;
+    params.n_base = n_base.u.i;
+    params.state_len = state_len.u.i;
+    params.scale = scale.u.d;
+    params.blank_score = blank_score.u.d;
+    params.expand_blanks = expand_blanks.u.b;
 
     params.permute = {};
     for (int i = 0; ; i++) {
