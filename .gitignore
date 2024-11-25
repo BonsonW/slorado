@@ -50,6 +50,7 @@ cmake-build-debug/
 build/
 /models/*
 /minimap2
+/zstd
 test/tmp.fastq
 test/tmp.paf
 reads.fastq

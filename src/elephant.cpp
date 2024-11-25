@@ -33,6 +33,7 @@ SOFTWARE.
 #include "error.h"
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
+#include "dorado/model_config.h"
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
@@ -154,7 +155,7 @@ void init_runners(core_t* core, opt_t *opt, char *model){
             }
         }
 #else
-        ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
+        ERROR("Invalid device: %s. Please compile again for GPU", opt->device);
         exit(EXIT_FAILURE);
 #endif
     }

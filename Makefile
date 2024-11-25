@@ -22,6 +22,11 @@ ifeq ($(zstd),1)
 LDFLAGS		+= -lzstd
 endif
 
+ifeq ($(zstd_local),)
+else
+LDFLAGS		+= zstd/lib/libzstd.a
+endif
+
 # https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
 ifeq ($(cxx11_abi),) #  cxx11_abi not defined
 CXXFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
@@ -41,6 +46,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/basecall.o \
 	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
 	  $(BUILD_DIR)/CRFModel.o \
+	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
 
 # add more objects here if needed
@@ -107,14 +113,17 @@ $(BUILD_DIR)/writer.o: src/writer.cpp src/error.h
 $(BUILD_DIR)/elephant.o: src/elephant.cpp src/elephant.h src/slorado.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/elephant.h 
+$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/elephant.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # dorado
 $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o: thirdparty/dorado/signal_prep_stitch_tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
+$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFModel.h src/error.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp thirdparty/dorado/model_config.h thirdparty/dorado/CRFModel.h src/error.h thirdparty/tomlc99
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # toml

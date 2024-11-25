@@ -13,7 +13,7 @@ Solution:
 - or else, make a hard link. You can do this by `cd slorado-binary-dir/lib/ && ln libamdhip64.so libamdhip64.so.5`
 
 
-# Getting an error that /tmp/something is unwritable
+## Getting an error that /tmp/something is unwritable
 
 Error example:
 ```
@@ -23,6 +23,13 @@ MIOpen(HIP): Error [FlushUnsafe] File is unwritable: /tmp/gfx90a68.HIP.2_20_0_f1
 Solution:
 ```
 mkdir /tmp/a_unique_name
-export TMPDIR=/tmp/a_unnique_name
+export TMPDIR=/tmp/a_unique_name
 ./slorado .....
 ```
+
+** IMPORTANT: Make sure you give an existent directory, we had a typo as  `a_unnique_name` when exporting, and torch was giving a segfault!
+
+
+## GPU memory out
+
+Currently, slorado does not implement automatic batch size selection based on available memory. If you see an out of GPU memory error, reduce the GPU batch size using -C option.
