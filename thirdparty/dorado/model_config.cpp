@@ -130,47 +130,75 @@ ConvParams parse_conv_params(const toml_table_t *segment, bool clamp) {
     return params;
 }
 
+ScalingStrategy scaling_strategy_from_string(const char *strategy) {
+    if (strcmp(strategy, "med_mad") == 0) {
+        return ScalingStrategy::MED_MAD;
+    }
+    if (strcmp(strategy, "quantile") == 0) {
+        return ScalingStrategy::QUANTILE;
+    }
+    if (strcmp(strategy, "pa") == 0) {
+        return ScalingStrategy::PA;
+    }
+    ERROR("Unknown scaling strategy: `%s`", strategy);
+    exit(EXIT_FAILURE);
+}
+
 // Parse a the config.toml to resolve the scaling parameters.
-SignalNormalisationParams parse_signal_normalisation_params(const toml::value &config_toml) {
+SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *config_toml) {
     SignalNormalisationParams params;
 
     // scaling.strategy introduced with v4.3 models
-    if (config_toml.contains("scaling")) {
-        const auto &scaling = toml::find(config_toml, "scaling");
-        params.strategy =
-                scaling_strategy_from_string(toml::find<std::string>(scaling, "strategy"));
+    if (toml_contains_key(config_toml, "scaling")) {
+        const toml_table_t *scaling = toml_table_in(config_toml, "scaling");
+        check_toml_table(scaling);
+
+        toml_datum_t strategy = toml_string_in(scaling, "strategy");
+        check_toml_datum(strategy);
+
+        params.strategy = scaling_strategy_from_string(strategy.u.s);
     }
 
-    if (config_toml.contains("normalisation")) {
-        const auto &norm = toml::find(config_toml, "normalisation");
-        params.quantile.quantile_a = toml::find<float>(norm, "quantile_a");
-        params.quantile.quantile_b = toml::find<float>(norm, "quantile_b");
-        params.quantile.shift_multiplier = toml::find<float>(norm, "shift_multiplier");
-        params.quantile.scale_multiplier = toml::find<float>(norm, "scale_multiplier");
+    if (toml_contains_key(config_toml, "normalisation")) {
+        const toml_table_t *norm = toml_table_in(config_toml, "normalisation");
+        check_toml_table(norm);
+
+        toml_datum_t quantile_a = toml_double_in(norm, "quantile_a");
+        check_toml_datum(quantile_a);
+        toml_datum_t quantile_b = toml_double_in(norm, "quantile_b");
+        check_toml_datum(quantile_b);
+        toml_datum_t shift_multiplier = toml_double_in(norm, "shift_multiplier");
+        check_toml_datum(shift_multiplier);
+        toml_datum_t scale_multiplier = toml_double_in(norm, "scale_multiplier");
+        check_toml_datum(scale_multiplier);
+        
+        params.quantile.quantile_a       = quantile_a.u.d;
+        params.quantile.quantile_b       = quantile_b.u.d;
+        params.quantile.shift_multiplier = shift_multiplier.u.d;
+        params.quantile.scale_multiplier = scale_multiplier.u.d;
 
         if (params.strategy != ScalingStrategy::QUANTILE) {
-            spdlog::warn(
-                    "Normalisation parameters are only used when `scaling.strategy = quantile`");
+            WARN("%s", "Normalisation parameters are only used when `scaling.strategy = quantile`");
         }
     }
 
-    if (config_toml.contains("standardisation")) {
-        const auto &norm = toml::find(config_toml, "standardisation");
-        params.standarisation.standardise = toml::find<int>(norm, "standardise") > 0;
+    if (toml_contains_key(config_toml, "standardisation")) {
+        const toml_table_t *norm = toml_table_in(config_toml, "standardisation");
+        check_toml_table(norm);
+
+        toml_datum_t standardise = toml_int_in(norm, "standardise");
         if (params.standarisation.standardise) {
-            params.standarisation.mean = toml::find<float>(norm, "mean");
-            params.standarisation.stdev = toml::find<float>(norm, "stdev");
+            params.standarisation.mean = toml_double_in(norm, "mean");
+            params.standarisation.stdev = toml_double_in(norm, "stdev");
         }
 
         if (params.standarisation.standardise && params.strategy != ScalingStrategy::PA) {
-            throw std::runtime_error(
-                    "Signal standardisation is implemented only for `scaling.strategy = pa`");
+            ERROR("%s", "Signal standardisation is implemented only for `scaling.strategy = pa`");
+            exit(EXIT_FAILURE);
         }
 
         if (params.standarisation.stdev <= 0.0f) {
-            throw std::runtime_error(
-                    "Config error: `standardisation.stdev` must be greater than 0, got: " +
-                    std::to_string(params.standarisation.stdev));
+            ERROR("Config error: `standardisation.stdev` must be greater than 0, got: %s", std::to_string(params.standarisation.stdev));
         }
     }
 
