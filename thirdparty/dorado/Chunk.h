@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CHUNK_H
+#define CHUNK_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,3 +20,5 @@ struct Chunk {
     std::string qstring;
     std::vector<uint8_t> moves; // For stitching.
 };
+
+#endif

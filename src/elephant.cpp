@@ -33,6 +33,7 @@ SOFTWARE.
 #include "error.h"
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
+#include "dorado/model_config.h"
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>

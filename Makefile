@@ -41,6 +41,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/basecall.o \
 	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
 	  $(BUILD_DIR)/CRFModel.o \
+	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
 
 # add more objects here if needed
@@ -114,7 +115,10 @@ $(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h 
 $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o: thirdparty/dorado/signal_prep_stitch_tensor_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
+$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFModel.h src/error.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp thirdparty/dorado/model_config.h thirdparty/dorado/CRFModel.h src/error.h thirdparty/tomlc99
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # toml

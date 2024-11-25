@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CRF_MODEL_H
+#define CRF_MODEL_H
 
 #include <torch/torch.h>
 
@@ -25,8 +26,6 @@ struct CRFModelConfig {
     int num_features;
 };
 
-CRFModelConfig load_crf_model_config(char *path);
-
 std::vector<torch::Tensor> load_crf_model_weights(const std::string& dir,  bool decomposition, bool bias);
 
 torch::nn::ModuleHolder<torch::nn::AnyModule> load_crf_model(
@@ -36,3 +35,5 @@ torch::nn::ModuleHolder<torch::nn::AnyModule> load_crf_model(
     int chunk_size,
     const torch::TensorOptions& options
 );
+
+#endif
