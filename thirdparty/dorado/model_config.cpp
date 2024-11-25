@@ -75,6 +75,30 @@ toml_datum_t *toml_double_fallback(const toml_table_t *config_toml, std::vector<
     exit(EXIT_FAILURE);
 }
 
+bool has_clamp(const std::vector<toml_table_t *> &sublayers) {
+    for (const auto &segment : sublayers) {
+        if (sublayer_type(segment) == SublayerType::CLAMP) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Parse sublayers extracting convolution parameters. This is for use on v4+ models only
+std::vector<ConvParams> parse_convs(const std::vector<toml_table_t *> &sublayers) {
+    std::vector<ConvParams> convs;
+    for (size_t i = 0; i < sublayers.size(); ++i) {
+        // If the sublayer after a convolution is a clamp, the activation function may have
+        // a fused implementation
+        if (sublayer_type(sublayers.at(i)) == SublayerType::CONVOLUTION) {
+            const bool has_clamp_next = ((i + 1) < sublayers.size()) &&sublayer_type(sublayers.at(i + 1)) == SublayerType::CLAMP;
+            ConvParams conv = parse_conv_params(sublayers.at(i), has_clamp_next);
+            convs.push_back(conv);
+        }
+    }
+    return convs;
+}
+
 void parse_qscore_params(CRFModelConfig &config, const toml_table_t *config_toml) {
     if (toml_key_exists(config_toml, "qscore")) {
         toml_table_t *qscore = toml_table_in(config_toml, "qscore");
@@ -84,13 +108,13 @@ void parse_qscore_params(CRFModelConfig &config, const toml_table_t *config_toml
         toml_datum_t qscale = toml_double_in(qscore, "scale");
         check_toml_datum(qscale);
 
-        config.qbias = (float)qbias.u.d;
-        config.qscale = (float)qscale.u.d;
+        config.qbias = qbias.u.d;
+        config.qscale = qscale.u.d;
 
         if (toml_key_exists(qscore, "mean_qscore_start_pos")) {
             toml_datum_t mean_qscore_start_pos = toml_int_in(qscore, "mean_qscore_start_pos");
             check_toml_datum(mean_qscore_start_pos);
-            config.mean_qscore_start_pos =  mean_qscore_start_pos;
+            config.mean_qscore_start_pos =  mean_qscore_start_pos.u.i;
         } else {
             ERROR("%s", "mean_qscore_start_pos not found in config toml");
         }
@@ -213,7 +237,8 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
     return params;
 }
 
-CRFModelConfig load_crf_model_config(char *path) {
+
+CRFModelConfig load_lstm_model_config(const std::filesystem::path &path) {
     FILE* fp;
     char errbuf[200];
 
@@ -232,21 +257,8 @@ CRFModelConfig load_crf_model_config(char *path) {
     check_toml_table(config_toml);
 
     CRFModelConfig config;
-    config.qscale = 1.0f;
-    config.qbias = 0.0f;
 
-    parse_qscore_params(&config, config_toml);
-
-    config.conv = 4;
-    config.insize = 0;
-    config.stride = 1;
-    config.bias = true;
-    config.clamp = false;
-    config.decomposition = false;
-
-    // The encoder scale only appears in pre-v4 models.  In v4 models
-    // the value of 1 is used.
-    config.scale = 1.0f;
+    parse_qscore_params(config, config_toml);
 
     toml_table_t *input = toml_table_in(config_toml, "input");
     check_toml_table(input);
@@ -256,6 +268,104 @@ CRFModelConfig load_crf_model_config(char *path) {
 
     toml_table_t *encoder = toml_table_in(config_toml, "encoder");
     check_toml_table(encoder);
+
+    if (toml_key_exists(encoder, "type")) {
+        // v4-type model
+        toml_array_t *_sublayers = toml_array_in(encoder, "sublayers");
+        check_toml_array(_sublayers);
+        config.bias = false;
+
+        std::vector<toml_table_t *> sublayers = {};
+        for (int i = 0; ; i++) {
+            toml_table_t *segment = toml_table_at(_sublayers, i);
+            if (!segment) break;
+            sublayers.push_back(segment);
+        }
+        
+        // todo:
+        // warn_unrecognised_sublayers(sublayers);
+        
+        // v4-type model
+        config.clamp = has_clamp(sublayers);
+        config.convs = parse_convs(sublayers);
+        // Overall stride is the product of all conv layers' strides.
+        for (const auto &cv : config.convs) {
+            config.stride *= cv.stride;
+        }
+        config.lstm_size = config.convs.back().size;
+
+        for (const auto &segment : sublayers) {
+            const auto type = sublayer_type(segment);
+            if (type == SublayerType::LINEAR) {
+                // Specifying out_features implies a decomposition of the linear layer matrix
+                // multiply with a bottleneck before the final feature size.
+                config.out_features = toml::find<int>(segment, "out_features");
+                config.bias = config.lstm_size > 128;
+            } else if (type == SublayerType::LINEAR_CRF_ENCODER) {
+                config.blank_score = toml::find<float>(segment, "blank_score");
+            }
+        }
+        
+    } else {
+        // pre-v4 model
+        toml_datum_t stride = toml_int_in(encoder, "stride");
+        check_toml_datum(stride);
+        toml_datum_t features = toml_int_in(encoder, "features");
+        check_toml_datum(features);
+        toml_datum_t blank_score = toml_double_in(encoder, "blank_score");
+        check_toml_datum(blank_score);
+        toml_datum_t scale = toml_double_in(encoder, "scale");
+        check_toml_datum(scale);
+        
+        config.stride = stride.u.i;
+        config.insize = features.u.i;
+        config.blank_score = blank_score.u.d;
+        config.scale = scale.u.d;
+
+        if (toml_key_exists(encoder, "first_conv_size")) {
+            toml_datum_t conv = toml_int_in(encoder, "first_conv_size");
+            check_toml_datum(conv);
+            config.conv = conv.u.i;
+        } else {
+            config.conv = 4;
+        }
+
+        config.convs.push_back(ConvParams{config.num_features, first_conv, 5, 1, Activation::SWISH});
+        config.convs.push_back(ConvParams{first_conv, 16, 5, 1, Activation::SWISH});
+        config.convs.push_back(ConvParams{16, config.lstm_size, 19, config.stride, Activation::SWISH});
+    }
+
+    toml_table_t *global_norm = toml_table_in(config_toml, "global_norm");
+    check_toml_table(global_norm);
+
+    // Note that in v4 files state_len appears twice: under global_norm and under
+    // linearcrfencoder.  We are ignoring the latter.
+    toml_datum_t state_len = toml_int_in(global_norm, "state_len");
+    check_toml_datum(state_len);
+    config.state_len = state_len.u.i;
+
+    // CUDA and CPU paths do not output explicit stay scores from the NN.
+    config.outsize = pow(4, config.state_len) * 4;
+
+    config.signal_norm_params = parse_signal_normalisation_params(config_toml);
+
+    if (config.convs.size() != 3) {
+        ERROR("Expected 3 convolution layers but found: %zu", config.convs.size()));
+        exit(EXIT_FAILURE);
+    }
+    if (config.convs[0].size != 4 && config.convs[0].size != 16) {
+        ERROR("Invalid CRF model configuration - first convolution layer must be size 4 or 16. Got: %zu", config.convs[0].size);
+        exit(EXIT_FAILURE);
+    }
+
+    toml_free(config_toml);
+
+    free(cpath);
+
+    return config;
+}
+
+CRFModelConfig load_crf_model_config(char *path) {
     if (toml_key_exists(encoder, "type")) {
         // v4-type model
         toml_array_t *sublayers = toml_array_in(encoder, "sublayers");
@@ -302,48 +412,7 @@ CRFModelConfig load_crf_model_config(char *path) {
 
         config.conv = 16;
         config.bias = config.insize > 128;
-    } else {
-        // pre-v4 model
-        toml_datum_t stride = toml_int_in(encoder, "stride");
-        check_toml_datum(stride);
-        config.stride = stride.u.i;
-
-        toml_datum_t features = toml_int_in(encoder, "features");
-        check_toml_datum(features);
-        config.insize = features.u.i;
-
-        toml_datum_t blank_score = toml_double_in(encoder, "blank_score");
-        check_toml_datum(blank_score);
-        config.blank_score = (float)blank_score.u.d;
-
-        toml_datum_t scale = toml_double_in(encoder, "scale");
-        check_toml_datum(scale);
-        config.scale = (float)scale.u.d;
-
-        if (toml_key_exists(encoder, "first_conv_size")) {
-            toml_datum_t conv = toml_int_in(encoder, "first_conv_size");
-            check_toml_datum(conv);
-            config.conv = conv.u.i;
-        }
     }
-
-    toml_table_t *global_norm = toml_table_in(config_toml, "global_norm");
-    check_toml_table(global_norm);
-
-    // Note that in v4 files state_len appears twice: under global_norm and under
-    // linearcrfencoder.  We are ignoring the latter.
-    toml_datum_t state_len = toml_int_in(global_norm, "state_len");
-    check_toml_datum(state_len);
-    config.state_len = state_len.u.i;
-
-    // CUDA and CPU paths do not output explicit stay scores from the NN.
-    config.outsize = pow(4, config.state_len) * 4;
-
-    toml_free(config_toml);
-
-    free(cpath);
-
-    return config;
 }
 
 TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
@@ -494,6 +563,10 @@ CRFModelConfig load_tx_model_config(char *path) {
     // Force downstream issue (negative lstm size) if a tx model config is incorrectly
     // used to define an LSTM model. Incorrect use should be guarded against by using is_tx_model()
     config.lstm_size = -1;
+
+    toml_free(config_toml);
+
+    free(cpath);
 
     return config;
 }
