@@ -7,7 +7,9 @@
 
 #include "model_config.h"
 
-std::vector<torch::Tensor> load_crf_model_weights(const std::string& dir,  bool decomposition, bool bias);
+using namespace torch::nn;
+
+ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const at::TensorOptions &options);
 
 struct ConvStackImpl : torch::nn::Module {
     explicit ConvStackImpl(const std::vector<ConvParams> &layer_params);

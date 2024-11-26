@@ -34,6 +34,7 @@ SOFTWARE.
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
 #include "dorado/model_config.h"
+#include "dorado/CRFModel.h"
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
@@ -80,7 +81,8 @@ void init_runner(
 ) {
     LOG_TRACE("initializing model runner for device %s", device.c_str());
 
-    const auto model_config = load_crf_model_config(model_path);
+    CRFModelConfig model_config = load_lstm_model_config(model_path);
+    model_config.model_path = std::string(model_path);
     LOG_TRACE("%s", "model config loaded");
 
     runner->model_stride = static_cast<size_t>(model_config.stride);
@@ -93,7 +95,7 @@ void init_runner(
     runner->model_config = model_config;
 
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
-    runner->module = load_crf_model(model_path, model_config, batch_size, chunk_size, runner->tensor_opts);
+    runner->module = load_lstm_model(model_config, runner->tensor_opts);
     LOG_TRACE("%s", "model loaded");
 
     chunk_size -= chunk_size % runner->model_stride;

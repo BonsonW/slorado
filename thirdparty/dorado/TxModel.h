@@ -15,10 +15,16 @@
 #include <utility>
 #include <vector>
 
-torch::Tensor scaled_dot_product_attention_naive(const torch::Tensor &q,
-                                                 const torch::Tensor &k,
-                                                 const torch::Tensor &v,
-                                                 const torch::Tensor &mask);
+using namespace torch::nn;
+
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const at::TensorOptions &options);
+
+torch::Tensor scaled_dot_product_attention_naive(
+    const torch::Tensor &q,
+    const torch::Tensor &k,
+    const torch::Tensor &v,
+    const torch::Tensor &mask
+);
 
 struct RMSNormImpl : torch::nn::Module {
     RMSNormImpl(int hidden_size_);
@@ -74,12 +80,14 @@ struct MaskKeyHash {
 };
 
 struct MultiHeadAttentionImpl : torch::nn::Module {
-    MultiHeadAttentionImpl(int d_model_,
-                           int nhead_,
-                           bool qkv_bias_,
-                           bool out_bias_,
-                           const std::pair<int, int> &attn_window_,
-                           const at::TensorOptions &options_);
+    MultiHeadAttentionImpl(
+        int d_model_,
+        int nhead_,
+        bool qkv_bias_,
+        bool out_bias_,
+        const std::pair<int, int> &attn_window_,
+        const at::TensorOptions &options_
+    );
 
     at::Tensor forward(at::Tensor x);
 

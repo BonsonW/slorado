@@ -562,7 +562,3 @@ CRFModelConfig load_tx_model_config(char *path) {
 
     return config;
 }
-
-CRFModelConfig load_crf_model_config(const char *path) {
-    return load_lstm_model_config(path);
-}

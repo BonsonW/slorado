@@ -106,6 +106,9 @@ struct CRFModelConfig {
 
     // Tx Model Params
     TxParams *tx = NULL;
+
+    std::string model_path;
 };
 
-CRFModelConfig load_crf_model_config(const char *path);
+CRFModelConfig load_lstm_model_config(const char *path);
+CRFModelConfig load_tx_model_config(const char *path);

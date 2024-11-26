@@ -97,8 +97,7 @@ CRFModelImpl::CRFModelImpl(const CRFModelConfig &config) {
         // The linear layer is decomposed into 2 matmuls.
         const int decomposition = config.out_features.value();
         linear1 = register_module("linear1", LinearCRF(lstm_size, decomposition, true, false));
-        linear2 =
-                register_module("linear2", LinearCRF(decomposition, config.outsize, false, false));
+        linear2 = register_module("linear2", LinearCRF(decomposition, config.outsize, false, false));
         clamp1 = Clamp(-5.0, 5.0, config.clamp);
         encoder = Sequential(convs, rnns, linear1, linear2, clamp1);
     } else if ((config.convs[0].size > 4) && (config.num_features == 1)) {
@@ -120,4 +119,56 @@ void CRFModelImpl::load_state_dict(const std::vector<at::Tensor> &weights) {
 at::Tensor CRFModelImpl::forward(const at::Tensor &x) {
     // Output is [N, T, C]
     return encoder->forward(x);
+}
+
+std::vector<torch::Tensor> load_lstm_model_weights(const std::string &dir,
+                                                  bool decomposition,
+                                                  bool bias) {
+    auto tensors = std::vector<std::string>{
+        "0.conv.weight.tensor",      "0.conv.bias.tensor",
+
+        "1.conv.weight.tensor",      "1.conv.bias.tensor",
+
+        "2.conv.weight.tensor",      "2.conv.bias.tensor",
+
+        "4.rnn.weight_ih_l0.tensor", "4.rnn.weight_hh_l0.tensor",
+        "4.rnn.bias_ih_l0.tensor",   "4.rnn.bias_hh_l0.tensor",
+
+        "5.rnn.weight_ih_l0.tensor", "5.rnn.weight_hh_l0.tensor",
+        "5.rnn.bias_ih_l0.tensor",   "5.rnn.bias_hh_l0.tensor",
+
+        "6.rnn.weight_ih_l0.tensor", "6.rnn.weight_hh_l0.tensor",
+        "6.rnn.bias_ih_l0.tensor",   "6.rnn.bias_hh_l0.tensor",
+
+        "7.rnn.weight_ih_l0.tensor", "7.rnn.weight_hh_l0.tensor",
+        "7.rnn.bias_ih_l0.tensor",   "7.rnn.bias_hh_l0.tensor",
+
+        "8.rnn.weight_ih_l0.tensor", "8.rnn.weight_hh_l0.tensor",
+        "8.rnn.bias_ih_l0.tensor",   "8.rnn.bias_hh_l0.tensor",
+
+        "9.linear.weight.tensor"
+    };
+
+    if (bias) {
+        tensors.push_back("9.linear.bias.tensor");
+    }
+
+    if (decomposition) {
+        tensors.push_back("10.linear.weight.tensor");
+    }
+
+    return load_tensors(dir, tensors);
+}
+
+ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const at::TensorOptions &options) {
+    auto model = CRFModel(model_config);
+    auto state_dict = load_lstm_model_weights(model_config.model_path, model_config.out_features.has_value(), model_config.bias);
+    model->load_state_dict(state_dict);
+    model->to(options.dtype().toScalarType());
+    model->to(options.device());
+    model->eval();
+
+    auto module = AnyModule(model);
+    auto holder = ModuleHolder<AnyModule>(module);
+    return holder;
 }
