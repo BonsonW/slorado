@@ -165,9 +165,11 @@ void parse_qscore_params(CRFModelConfig &config, const toml_table_t *config_toml
         if (toml_key_exists(qscore, "mean_qscore_start_pos")) {
             toml_datum_t mean_qscore_start_pos = toml_int_in(qscore, "mean_qscore_start_pos");
             check_toml_datum(mean_qscore_start_pos);
-            config.mean_qscore_start_pos =  mean_qscore_start_pos.u.i;
+            config.mean_qscore_start_pos = mean_qscore_start_pos.u.i;
         } else {
-            ERROR("%s", "mean_qscore_start_pos not found in config toml");
+            int fallback = 60;
+            INFO("mean_qscore_start_pos not found in config toml, setting default to %d", fallback);
+            config.mean_qscore_start_pos = 60;
         }
     } else {
         // no qscore calibration found
