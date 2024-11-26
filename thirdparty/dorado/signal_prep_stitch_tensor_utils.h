@@ -39,19 +39,10 @@ torch::Tensor quantile(const torch::Tensor t, const torch::Tensor q);
 torch::Tensor quantile_counting(const torch::Tensor t, const torch::Tensor q);
 
 // temporary
-inline void module_load_state_dict(
-    torch::nn::Module& module,
-    const std::vector<torch::Tensor>& weights,
-    const std::vector<torch::Tensor>& buffers = {}
-) {
+inline void module_load_state_dict(torch::nn::Module& module, const std::vector<at::Tensor>& weights) {
     assert(weights.size() == module.parameters().size());
     for (size_t idx = 0; idx < weights.size(); idx++) {
         module.parameters()[idx].data() = weights[idx].data();
-    }
-
-    assert(buffers.size() == module.buffers().size());
-    for (size_t idx = 0; idx < buffers.size(); idx++) {
-        module.buffers()[idx].data() = buffers[idx].data();
     }
 }
 #endif
