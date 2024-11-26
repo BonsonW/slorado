@@ -23,7 +23,6 @@ ConvStackImpl::ConvStackImpl(const std::vector<ConvParams> &layer_params) {
 at::Tensor ConvStackImpl::forward(at::Tensor x) {
     // Input x is [N, C_in, T_in], contiguity optional
     for (auto &layer : layers) {
-        utils::ScopedProfileRange spr("conv", 2);
         x = layer.conv(x);
         if (layer.params.activation == Activation::SWISH) {
             torch::silu_(x);
@@ -83,7 +82,6 @@ ClampImpl::ClampImpl(float _min, float _max, bool _active)
 
 at::Tensor ClampImpl::forward(at::Tensor x) {
     if (active) {
-        utils::ScopedProfileRange spr("clamp", 2);
         x.clamp_(min, max);
     }
     return x;

@@ -15,6 +15,8 @@
 #define DEFAULT_TRIM_WINDOW_SIZE (40)
 #define DEFAULT_TRIM_MIN_ELEMENTS (3)
 
+using Slice = torch::indexing::Slice;
+
 int trim(const at::Tensor& signal, float threshold, int window_size, int min_elements) {
     const int min_trim = 10;
     const int num_samples = static_cast<int>(signal.size(0)) - min_trim;
@@ -55,7 +57,7 @@ std::pair<float, float> normalisation(QuantileScalingParams& params, torch::Tens
     float q20 = quantiles[0].item<float>();
     float q90 = quantiles[1].item<float>();
     float shift = std::max(10.0f, params.shift_multiplier * (q20 + q90));
-    float scale = std::max(1.0f, params.scale_multiplie * (q90 - q20));
+    float scale = std::max(1.0f, params.scale_multiplier * (q90 - q20));
     return std::make_pair(shift, scale);
 }
 
@@ -73,7 +75,7 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNorm
     int trim_start = 0;
 
     if (strategy == ScalingStrategy::PA) {
-        auto stdn = scaling_params.strategy;
+        auto stdn = scaling_params.standarisation;
         if (stdn.standardise) {
             scale = stdn.stdev / scaling;
             shift = (stdn.mean / scaling) - offset;
@@ -104,7 +106,7 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNorm
         );
     }
 
-    if ((size_t)(trim_start) < signal.size(0)) {
+    if ((size_t)(trim_start) < (size_t)(signal.size(0))) {
         signal = signal.index({Slice(trim_start, at::indexing::None)});
     }
 }

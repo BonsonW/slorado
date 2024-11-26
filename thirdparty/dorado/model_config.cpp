@@ -257,6 +257,102 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
     return params;
 }
 
+TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
+    const toml_table_t *enc = toml_table_fallback(cfg, {"model", "encoder", "transformer_encoder"});
+    TxEncoderParams params;
+
+    toml_datum_t depth = toml_int_in(enc, "depth");
+    check_toml_datum(depth);
+    toml_datum_t d_model = toml_int_fallback(enc, {"layer", "d_model"});
+    check_toml_datum(d_model);
+    toml_datum_t nhead = toml_int_fallback(enc, {"layer", "nhead"});
+    check_toml_datum(nhead);
+    toml_datum_t dim_feedforward = toml_int_fallback(enc, {"layer", "dim_feedforward"});
+    check_toml_datum(dim_feedforward);
+    toml_datum_t deepnorm_alpha = toml_double_fallback(enc, {"layer", "deepnorm_alpha"});
+    check_toml_datum(deepnorm_alpha);
+
+    params.depth = depth.u.i;
+    params.d_model = d_model.u.i;
+    params.nhead = nhead.u.i;
+    params.dim_feedforward = dim_feedforward.u.i;
+    params.deepnorm_alpha = deepnorm_alpha.u.d;
+
+    const toml_array_t *attn_window_ = toml_array_fallback(enc, {"layer", "attn_window"});
+    check_toml_array(attn_window_);
+    
+    params.attn_window = {};
+    {
+        toml_datum_t e = toml_int_at(attn_window_, 0);
+        if (!e.ok)  {
+            ERROR("%s", "error loading window");
+            exit(EXIT_FAILURE);
+        }
+        params.attn_window.first = e.u.i;
+    }
+    {
+        toml_datum_t e = toml_int_at(attn_window_, 1);
+        if (!e.ok)  {
+            ERROR("%s", "error loading window");
+            exit(EXIT_FAILURE);
+        };
+        params.attn_window.second = e.u.i;
+    }
+
+    return params;
+}
+
+EncoderUpsampleParams parse_encoder_upsample_params(const toml_table_t *cfg) {
+    const toml_table_t *ups = toml_table_fallback(cfg, {"model", "encoder", "upsample"});
+    EncoderUpsampleParams params;
+
+    toml_datum_t d_model = toml_int_in(ups, "d_model");
+    check_toml_datum(d_model);
+    toml_datum_t scale_factor = toml_int_in(ups, "scale_factor");
+    check_toml_datum(scale_factor);
+
+    params.d_model = d_model.u.i;
+    params.scale_factor = scale_factor.u.i;
+
+    return params;
+}
+
+CRFEncoderParams parse_crf_encoder_params(const toml_table_t *cfg) {
+    const toml_table_t *crf = toml_table_fallback(cfg, {"model", "encoder", "crf"});
+    CRFEncoderParams params;
+
+    toml_datum_t insize = toml_int_in(crf, "insize");
+    check_toml_datum(insize);
+    toml_datum_t n_base = toml_int_in(crf, "n_base");
+    check_toml_datum(n_base);
+    toml_datum_t state_len = toml_int_in(crf, "state_len");
+    check_toml_datum(state_len);
+    toml_datum_t scale = toml_double_in(crf, "scale");
+    check_toml_datum(scale);
+    toml_datum_t blank_score = toml_double_in(crf, "blank_score");
+    check_toml_datum(blank_score);
+    toml_datum_t expand_blanks = toml_bool_in(crf, "expand_blanks");
+    check_toml_datum(expand_blanks);
+    toml_array_t *permute = toml_array_in(crf, "permute");
+    check_toml_array(permute);
+
+    params.insize = insize.u.i;
+    params.n_base = n_base.u.i;
+    params.state_len = state_len.u.i;
+    params.scale = scale.u.d;
+    params.blank_score = blank_score.u.d;
+    params.expand_blanks = expand_blanks.u.b;
+
+    params.permute = {};
+    for (int i = 0; ; i++) {
+        toml_datum_t e = toml_int_at(permute, i);
+        if (!e.ok) break;
+        params.permute.push_back(e.u.i);
+    }
+
+    return params;
+}
+
 CRFModelConfig load_lstm_model_config(const char *path) {
     FILE* fp;
     char errbuf[200];
@@ -387,102 +483,6 @@ CRFModelConfig load_lstm_model_config(const char *path) {
     return config;
 }
 
-TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
-    const toml_table_t *enc = toml_table_fallback(cfg, {"model", "encoder", "transformer_encoder"});
-    TxEncoderParams params;
-
-    toml_datum_t depth = toml_int_in(enc, "depth");
-    check_toml_datum(depth);
-    toml_datum_t d_model = toml_int_fallback(enc, {"layer", "d_model"});
-    check_toml_datum(d_model);
-    toml_datum_t nhead = toml_int_fallback(enc, {"layer", "nhead"});
-    check_toml_datum(nhead);
-    toml_datum_t dim_feedforward = toml_int_fallback(enc, {"layer", "dim_feedforward"});
-    check_toml_datum(dim_feedforward);
-    toml_datum_t deepnorm_alpha = toml_double_fallback(enc, {"layer", "deepnorm_alpha"});
-    check_toml_datum(deepnorm_alpha);
-
-    params.depth = depth.u.i;
-    params.d_model = d_model.u.i;
-    params.nhead = nhead.u.i;
-    params.dim_feedforward = dim_feedforward.u.i;
-    params.deepnorm_alpha = deepnorm_alpha.u.d;
-
-    const toml_array_t *attn_window_ = toml_array_fallback(enc, {"layer", "attn_window"});
-    check_toml_array(attn_window_);
-    
-    params.attn_window = {};
-    {
-        toml_datum_t e = toml_int_at(attn_window_, 0);
-        if (!e.ok)  {
-            ERROR("%s", "error loading window");
-            exit(EXIT_FAILURE);
-        }
-        params.attn_window.first = e.u.i;
-    }
-    {
-        toml_datum_t e = toml_int_at(attn_window_, 1);
-        if (!e.ok)  {
-            ERROR("%s", "error loading window");
-            exit(EXIT_FAILURE);
-        };
-        params.attn_window.second = e.u.i;
-    }
-
-    return params;
-}
-
-EncoderUpsampleParams parse_encoder_upsample_params(const toml_table_t *cfg) {
-    const toml_table_t *ups = toml_table_fallback(cfg, {"model", "encoder", "upsample"});
-    EncoderUpsampleParams params;
-
-    toml_datum_t d_model = toml_int_in(ups, "d_model");
-    check_toml_datum(d_model);
-    toml_datum_t scale_factor = toml_int_in(ups, "scale_factor");
-    check_toml_datum(scale_factor);
-
-    params.d_model = d_model.u.i;
-    params.scale_factor = scale_factor.u.i;
-
-    return params;
-}
-
-CRFEncoderParams parse_crf_encoder_params(const toml_table_t *cfg) {
-    const toml_table_t *crf = toml_table_fallback(cfg, {"model", "encoder", "crf"});
-    CRFEncoderParams params;
-
-    toml_datum_t insize = toml_int_in(crf, "insize");
-    check_toml_datum(insize);
-    toml_datum_t n_base = toml_int_in(crf, "n_base");
-    check_toml_datum(n_base);
-    toml_datum_t state_len = toml_int_in(crf, "state_len");
-    check_toml_datum(state_len);
-    toml_datum_t scale = toml_double_in(crf, "scale");
-    check_toml_datum(scale);
-    toml_datum_t blank_score = toml_double_in(crf, "blank_score");
-    check_toml_datum(blank_score);
-    toml_datum_t expand_blanks = toml_bool_in(crf, "expand_blanks");
-    check_toml_datum(expand_blanks);
-    toml_array_t *permute = toml_array_in(crf, "permute");
-    check_toml_array(permute);
-
-    params.insize = insize.u.i;
-    params.n_base = n_base.u.i;
-    params.state_len = state_len.u.i;
-    params.scale = scale.u.d;
-    params.blank_score = blank_score.u.d;
-    params.expand_blanks = expand_blanks.u.b;
-
-    params.permute = {};
-    for (int i = 0; ; i++) {
-        toml_datum_t e = toml_int_at(permute, i);
-        if (!e.ok) break;
-        params.permute.push_back(e.u.i);
-    }
-
-    return params;
-}
-
 CRFModelConfig load_tx_model_config(char *path) {
     FILE* fp;
     char errbuf[200];
@@ -561,4 +561,8 @@ CRFModelConfig load_tx_model_config(char *path) {
     free(cpath);
 
     return config;
+}
+
+CRFModelConfig load_crf_model_config(const char *path) {
+    return load_lstm_model_config(path);
 }
