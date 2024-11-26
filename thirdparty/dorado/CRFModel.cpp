@@ -1,6 +1,5 @@
 #include <math.h>
 #include <string>
-#include <torch/torch.h>
 
 #include "CRFModel.h"
 #include "error.h"

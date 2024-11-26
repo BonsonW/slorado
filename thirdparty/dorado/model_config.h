@@ -67,6 +67,15 @@ struct CRFEncoderParams {
     float blank_score;
     bool expand_blanks;
     std::vector<int> permute;
+
+    int outsize() const {
+        if (expand_blanks) {
+            return static_cast<int>(pow(n_base, state_len + 1));
+        }
+        return (n_base + 1) * static_cast<int>(pow(n_base, state_len));
+    };
+
+    int out_features() const { return static_cast<int>(pow(n_base, state_len + 1)); };
 };
 
 struct TxParams {

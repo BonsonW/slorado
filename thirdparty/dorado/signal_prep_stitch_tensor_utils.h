@@ -17,6 +17,15 @@
 #include "Chunk.h"
 #include "model_config.h"
 
+template <typename T>
+T div_round_up(const T a, const T b) {
+    return (a + b - 1) / b;
+}
+template <typename T>
+T pad_to(const T a, const T b) {
+    return div_round_up(a, b) * b;
+}
+
 torch::Tensor tensor_from_record(slow5_rec_t *rec);
 void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams scaling_params);
 std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap);

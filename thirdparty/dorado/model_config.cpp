@@ -543,11 +543,7 @@ CRFModelConfig load_tx_model_config(char *path) {
     // Recalculate the stride by accounting for upsampling / downsampling
     config.stride /= upsample.scale_factor;
     config.out_features = pow(crf_encoder.n_base, crf_encoder.state_len + 1);
-    if (crf_encoder.expand_blanks) {
-        config.outsize = static_cast<int>(std::pow(crf_encoder.n_base, crf_encoder.state_len + 1));
-    } else {
-        config.outsize = (crf_encoder.n_base + 1) * static_cast<int>(std::pow(crf_encoder.n_base, crf_encoder.state_len));
-    }
+    config.outsize = crf_encoder.outsize();
 
     config.state_len = config.tx->crf.state_len;
     config.num_features = config.convs.front().insize;

@@ -1,9 +1,4 @@
-#include "basecall/nn/TxModel.h"
-
-#include "basecall/CRFModelConfig.h"
-#include "basecall/nn/CRFModel.h"
-#include "utils/dev_utils.h"
-#include "utils/math_utils.h"
+#include "TxModel.h"
 
 #include <ATen/Functions.h>
 #include <ATen/TensorIndexing.h>
@@ -39,7 +34,7 @@ torch::Tensor scaled_dot_product_attention_naive(
     const torch::Tensor &q,
     const torch::Tensor &k,
     const torch::Tensor &v,
-    const torch::Tensor &mas
+    const torch::Tensor &mask
 ) {
     auto matmul_qk = torch::matmul(q, k.transpose(-2, -1));
 
@@ -161,15 +156,15 @@ void RotaryEmbeddingImpl::assert_forward_dims(const at::Tensor &qkv) const {
     bool has_error = false;
     if (seq_len > max_seq_len) {
         has_error = true;
-        ERROR("RotE - maximum sequence length exceeded - len:%d max:%d - Your chunksize may be too large", seq_len, max_seq_len);
+        ERROR("RotE - maximum sequence length exceeded - len:%ld max:%ld - Your chunksize may be too large", seq_len, max_seq_len);
     }
     if (three != 3) {
         has_error = true;
-        ERROR("RotE - expected constant size:3 at dim:2 found:%d", three);
+        ERROR("RotE - expected constant size:3 at dim:2 found:%ld", three);
     }
     if (head_dim != dim) {
         has_error = true;
-        ERROR("RotE - expected head_dim size:%d at dim:4 found:%d", dim, head_dim);
+        ERROR("RotE - expected head_dim size:%ld at dim:4 found:%ld", dim, head_dim);
     }
     if (has_error) {
         exit(EXIT_FAILURE);
@@ -188,7 +183,7 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     nhead(nhead_),
     head_dim(d_model_ / nhead_),
     // TODO: this may benefit from fine-tuning. 8 gives good performance at chunk size 12k
-    num_splits(utils::get_dev_opt<int>("mha_num_splits", 12)),
+    num_splits(12),
     attn_window(attn_window_),
     options(options_)
 {
@@ -230,7 +225,7 @@ at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
     const auto [win_upper, win_lower] = attn_window;
     // The MPS backend refuses to work on a span of the mask that doesn't have an
     // alignment of 4 elements, so pad the amount we process each loop to that.
-    const auto elems_per_split = utils::pad_to(utils::div_round_up(T, int64_t{num_splits}), int64_t{4});
+    const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
     for (int i = 0; i < num_splits; ++i) {
         const auto qb = i * elems_per_split;
         if (qb >= T) {
@@ -246,16 +241,14 @@ at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
         c10::optional<at::Tensor> opt_mask;
         // Not using the mask gets us significantly better performance, at the cost of some
         // accuracy. Accuracy loss is minimised by larger num_splits.
-        if (utils::get_dev_opt<bool>("mha_use_mask", true)) {
-            opt_mask = mask;
-        }
+        opt_mask = mask;
         attn_output.slice(-2, qb, qe) = at::scaled_dot_product_attention(q, k, v, opt_mask);
     }
     x = out_proj(attn_output_ntc);
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const tx::TxEncoderParams &params_, const at::TensorOptions &options) : params(params_) {
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const at::TensorOptions &options) : params(params_) {
     self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
@@ -280,21 +273,21 @@ at::Tensor TxEncoderImpl::forward(at::Tensor x) {
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const tx::TxEncoderParams &params, const at::TensorOptions &options) {
+TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const at::TensorOptions &options) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
         TxEncoder encoder(params, options);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
         layer_vec.push_back(encoder);
     }
-    use_i8 = utils::get_dev_opt<bool>("koi_use_i8", true);
+    use_i8 = false;
 };
 
 at::Tensor TxEncoderStackImpl::forward(const at::Tensor &x) {
     return stack->forward(x);
 }
 
-LinearUpsampleImpl::LinearUpsampleImpl(const tx::EncoderUpsampleParams &params) : scale_factor(params.scale_factor) {
+LinearUpsampleImpl::LinearUpsampleImpl(const EncoderUpsampleParams &params) : scale_factor(params.scale_factor) {
     linear = register_module("linear", Linear(LinearOptions(params.d_model, scale_factor * params.d_model).bias(true)));
 };
 
@@ -306,7 +299,7 @@ at::Tensor LinearUpsampleImpl::forward(const at::Tensor &x) {
     return out;
 };
 
-LinearScaledCRFImpl::LinearScaledCRFImpl(const tx::CRFEncoderParams &params) {
+LinearScaledCRFImpl::LinearScaledCRFImpl(const CRFEncoderParams &params) {
     m_params = params;
     linear = register_module("linear", Linear(LinearOptions(m_params.insize, m_params.outsize()).bias(false)));
 };
@@ -320,7 +313,7 @@ at::Tensor LinearScaledCRFImpl::forward(const at::Tensor &x) {
 }
 
 TxModelImpl::TxModelImpl(const CRFModelConfig &config, const at::TensorOptions &options) : m_options(options) {
-    convs = register_module("convs", basecall::nn::ConvStack(config.convs));
+    convs = register_module("convs", ::ConvStack(config.convs));
     tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
@@ -520,12 +513,12 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
             "crf.linear.weight.tensor",
     };
 
-    return utils::load_tensors(dir, tensors);
+    return load_tensors(dir, tensors);
 }
 
 ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const at::TensorOptions &options) {
     auto model = TxModel(model_config, options);
-    auto state_dict = load_tx_model_weights(model_config.model_path, model_config.out_features.has_value(), model_config.bias);
+    auto state_dict = load_tx_model_weights(model_config.model_path);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());
     model->to(options.device());
