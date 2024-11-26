@@ -6,75 +6,40 @@
 #include <string>
 #include <utility>
 
-#include <torch/torch.h>
-
-#include "dorado/Chunk.h"
 #include "slorado.h"
 #include "error.h"
 #include "signal_prep_stitch_tensor_utils.h"
 
-#define EPS 1e-9f;
+#define EPS (1e-9f)
+#define DEFAULT_TRIM_THRESHOLD (2.4f)
+#define DEFAULT_TRIM_WINDOW_SIZE (40)
+#define DEFAULT_TRIM_MIN_ELEMENTS (3)
 
-std::pair<float, float> normalisation(torch::Tensor& x) {
-    //Calculate shift and scale factors for normalisation.
-    auto quantiles = quantile_counting(x, torch::tensor({0.2, 0.9}));
-    float q20 = quantiles[0].item<float>();
-    float q90 = quantiles[1].item<float>();
-    float shift = std::max(10.0f, 0.51f * (q20 + q90));
-    float scale = std::max(1.0f, 0.53f * (q90 - q20));
-    return std::make_pair(shift, scale);
-}
+int trim(const at::Tensor& signal, float threshold, int window_size, int min_elements) {
+    const int min_trim = 10;
+    const int num_samples = static_cast<int>(signal.size(0)) - min_trim;
+    const int num_windows = num_samples / window_size;
 
-std::pair<float, float> calculate_med_mad(torch::Tensor &x, float factor=1.4826){
-    torch::Tensor med = x.median();
-    torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
+    // Access via raw pointers because of torch indexing overhead.
+    const auto signal_f32 = signal.to(at::ScalarType::Float);
+    assert(signal_f32.is_contiguous());
+    const float* const signal_f32_ptr = signal_f32.data_ptr<float>();
 
-    return {med.item<float>(), mad.item<float>()};
-}
-
-void scale_signal(torch::Tensor &signal, float scaling, float offset) {
-    auto t1 = normalisation(signal);
-    auto shift = std::get<0>(t1);
-    auto scale = std::get<1>(t1);
-
-    signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
-
-    scale = scaling * scale;
-    shift = scaling * (shift + offset);
-
-    float threshold = shift + scale * 2.4;
-
-    // 8000 value may be changed in future. Currently this is found to work well.
-    int trim_start = trim(signal.index({torch::indexing::Slice(torch::indexing::None, 8000)}), threshold);
-    signal = signal.index({torch::indexing::Slice(trim_start, torch::indexing::None)});
-}
-
-int trim(
-    torch::Tensor signal,
-    int window_size,
-    float threshold,
-    int min_elements,
-    int max_samples,
-    float max_trim
-) {
-    int min_trim = 10;
     bool seen_peak = false;
-    int num_samples = std::min(max_samples, static_cast<int>(signal.size(0)) - min_trim);
-    int num_windows = num_samples / window_size;
+    for (int pos = 0; pos < num_windows; ++pos) {
+        const int start = pos * window_size + min_trim;
+        const int end = start + window_size;
+        assert(start < signal.size(0));
+        assert(end <= signal.size(0));  // end is exclusive
 
-    for (int pos = 0; pos < num_windows; pos++) {
-        int start = pos * window_size + min_trim;
-        int end = start + window_size;
+        const auto num_large_enough = std::count_if(&signal_f32_ptr[start], &signal_f32_ptr[end], [threshold](float elem) { return elem > threshold; });
 
-        auto window = signal.index({torch::indexing::Slice(start, end)});
-        auto elements = window > threshold;
-
-        if ((elements.sum().item<int>() > min_elements) || seen_peak) {
+        if (num_large_enough > min_elements || seen_peak) {
             seen_peak = true;
-            if (window[-1].item<float>() > threshold) {
+            if (signal_f32_ptr[end - 1] > threshold) {
                 continue;
             }
-            if (end >= num_samples || end >= (max_trim * signal.size(0))) {
+            if (end >= num_samples) {
                 return min_trim;
             } else {
                 return end;
@@ -83,6 +48,65 @@ int trim(
     }
 
     return min_trim;
+}
+
+std::pair<float, float> normalisation(QuantileScalingParams& params, torch::Tensor& x) {
+    auto quantiles = quantile_counting(x, torch::tensor({params.quantile_a, params.quantile_b}));
+    float q20 = quantiles[0].item<float>();
+    float q90 = quantiles[1].item<float>();
+    float shift = std::max(10.0f, params.shift_multiplier * (q20 + q90));
+    float scale = std::max(1.0f, params.scale_multiplie * (q90 - q20));
+    return std::make_pair(shift, scale);
+}
+
+std::pair<float, float> med_mad(torch::Tensor &x, float factor=1.4826){
+    torch::Tensor med = x.median();
+    torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
+
+    return {med.item<float>(), mad.item<float>()};
+}
+
+void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams scaling_params) {
+    auto strategy = scaling_params.strategy;
+    float scale = 1.0f;
+    float shift = 0.0f;
+    int trim_start = 0;
+
+    if (strategy == ScalingStrategy::PA) {
+        auto stdn = scaling_params.strategy;
+        if (stdn.standardise) {
+            scale = stdn.stdev / scaling;
+            shift = (stdn.mean / scaling) - offset;
+        } else {
+            scale = 1.f / scaling;
+            shift = -1.f * offset;
+        }
+        signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
+
+    } else {
+        auto t1 = strategy == ScalingStrategy::QUANTILE ? normalisation(scaling_params.quantile, signal) : med_mad(signal);
+        shift = std::get<0>(t1);
+        scale = std::get<1>(t1);
+
+        signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
+    }
+
+    if (trim_start == 0 && scaling_params.standarisation.standardise) {
+        trim_start = 10;
+    } else if (trim_start == 0) {
+        // 8000 value may be changed in future. Currently this is found to work well.
+        int max_samples = std::min(8000, (int)(signal.size(0) / 2));
+        trim_start = trim(
+            signal.index({Slice(at::indexing::None, max_samples)}),
+            DEFAULT_TRIM_THRESHOLD,
+            DEFAULT_TRIM_WINDOW_SIZE,
+            DEFAULT_TRIM_MIN_ELEMENTS
+        );
+    }
+
+    if ((size_t)(trim_start) < signal.size(0)) {
+        signal = signal.index({Slice(trim_start, at::indexing::None)});
+    }
 }
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {

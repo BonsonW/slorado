@@ -2,6 +2,15 @@
 #include "error.h"
 #include "model_config.h"
 
+#include <unordered_map>
+
+enum SublayerType { CLAMP, CONVOLUTION, LINEAR, LINEAR_CRF_ENCODER, LSTM, PERMUTE, UNRECOGNISED };
+static const std::unordered_map<std::string, SublayerType> sublayer_map = {
+    {"clamp", SublayerType::CLAMP},   {"convolution", SublayerType::CONVOLUTION},
+    {"linear", SublayerType::LINEAR}, {"linearcrfencoder", SublayerType::LINEAR_CRF_ENCODER},
+    {"lstm", SublayerType::LSTM},     {"permute", SublayerType::PERMUTE},
+};
+
 void check_toml_table(const toml_table_t *table) {
     if (!table) {
         ERROR("%s", "missing table in toml, please make sure your model version is supported");
@@ -25,7 +34,7 @@ void check_toml_datum(const toml_datum_t datum) {
 
 toml_table_t *toml_table_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
     for (size_t i = 0; i < fallbacks.size(); ++i) {
-        char *fallback = fallbacks[i].c_str();
+        const char *fallback = fallbacks[i].c_str();
         if (toml_key_exists(config_toml, fallback)) {
             toml_table_t *ret = toml_table_in(config_toml, fallback);
             check_toml_table(ret);
@@ -38,7 +47,7 @@ toml_table_t *toml_table_fallback(const toml_table_t *config_toml, std::vector<s
 
 toml_array_t *toml_array_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
     for (size_t i = 0; i < fallbacks.size(); ++i) {
-        char *fallback = fallbacks[i].c_str();
+        const char *fallback = fallbacks[i].c_str();
         if (toml_key_exists(config_toml, fallback)) {
             toml_array_t *ret = toml_array_in(config_toml, fallback);
             check_toml_array(ret);
@@ -49,11 +58,11 @@ toml_array_t *toml_array_fallback(const toml_table_t *config_toml, std::vector<s
     exit(EXIT_FAILURE);
 }
 
-toml_datum_t *toml_int_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+toml_datum_t toml_int_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
     for (size_t i = 0; i < fallbacks.size(); ++i) {
-        char *fallback = fallbacks[i].c_str();
+        const char *fallback = fallbacks[i].c_str();
         if (toml_key_exists(config_toml, fallback)) {
-            toml_datum_t *ret = toml_int_in(config_toml, fallback);
+            toml_datum_t ret = toml_int_in(config_toml, fallback);
             check_toml_datum(ret);
             return ret;
         }
@@ -62,17 +71,59 @@ toml_datum_t *toml_int_fallback(const toml_table_t *config_toml, std::vector<std
     exit(EXIT_FAILURE);
 }
 
-toml_datum_t *toml_double_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+toml_datum_t toml_double_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
     for (size_t i = 0; i < fallbacks.size(); ++i) {
-        char *fallback = fallbacks[i].c_str();
+        const char *fallback = fallbacks[i].c_str();
         if (toml_key_exists(config_toml, fallback)) {
-            toml_datum_t *ret = toml_double_in(config_toml, fallback);
+            toml_datum_t ret = toml_double_in(config_toml, fallback);
             check_toml_datum(ret);
             return ret;
         }
     }
     ERROR("%s", "could not find double from list of fallbacks in config toml");
     exit(EXIT_FAILURE);
+}
+
+// Parse sublayer extracting convolution parameters. This is for use on v4+ models only
+ConvParams parse_conv_params(const toml_table_t *segment, bool clamp) {
+    ConvParams params;
+    toml_datum_t insize = toml_int_in(segment, "insize");
+    check_toml_datum(insize);
+    toml_datum_t size   = toml_int_in(segment, "size");
+    check_toml_datum(size);
+    toml_datum_t winlen = toml_int_in(segment, "winlen");
+    check_toml_datum(winlen);
+    toml_datum_t stride = toml_int_in(segment, "stride");
+    check_toml_datum(stride);
+
+    params.insize = insize.u.i;
+    params.size   = size.u.i;
+    params.winlen = winlen.u.i;
+    params.stride = stride.u.i;
+
+    toml_datum_t activation = toml_string_in(segment, "activation");
+    check_toml_datum(activation);
+    if (strcmp(activation.u.s, "swish") == 0) {
+        params.activation = clamp ? Activation::SWISH_CLAMP : Activation::SWISH;
+    } else if (strcmp(activation.u.s, "tanh") == 0) {
+        params.activation = Activation::TANH;
+    } else {
+        ERROR("Unknown activation: `%s` in model config, expected `swish` or `tanh`", activation.u.s);
+        exit(EXIT_FAILURE);
+    }
+
+    return params;
+}
+
+SublayerType sublayer_type(const toml_table_t *segment) {
+    toml_datum_t _type = toml_string_in(segment, "type");
+    check_toml_datum(_type);
+    char *type = _type.u.s; // todo: free this and any other one
+    auto mapping_iter = sublayer_map.find(type);
+    if (mapping_iter == sublayer_map.end()) {
+        return SublayerType::UNRECOGNISED;
+    }
+    return mapping_iter->second;
 }
 
 bool has_clamp(const std::vector<toml_table_t *> &sublayers) {
@@ -123,37 +174,6 @@ void parse_qscore_params(CRFModelConfig &config, const toml_table_t *config_toml
     }
 }
 
-// Parse sublayer extracting convolution parameters. This is for use on v4+ models only
-ConvParams parse_conv_params(const toml_table_t *segment, bool clamp) {
-    ConvParams params;
-    toml_datum_t insize = toml_int_in(segment, "insize");
-    check_toml_datum(insize);
-    toml_datum_t size   = toml_int_in(segment, "size");
-    check_toml_datum(size);
-    toml_datum_t winlen = toml_int_in(segment, "winlen");
-    check_toml_datum(winlen);
-    toml_datum_t stride = toml_int_in(segment, "stride");
-    check_toml_datum(stride);
-
-    params.insize = insize.u.i;
-    params.size   = size.u.i;
-    params.winlen = winlen.u.i;
-    params.stride = stride.u.i;
-
-    toml_datum_t activation = toml_string_in(segment, "activation");
-    check_toml_datum(activation);
-    if (strcmp(activation.u.s, "swish") == 0) {
-        params.activation = clamp ? Activation::SWISH_CLAMP : Activation::SWISH;
-    } else if (strcmp(activation.u.s, "tanh") == 0) {
-        params.activation = Activation::TANH;
-    } else {
-        ERROR("Unknown activation: `%s` in model config, expected `swish` or `tanh`", activation.u.s);
-        exit(EXIT_FAILURE);
-    }
-
-    return params;
-}
-
 ScalingStrategy scaling_strategy_from_string(const char *strategy) {
     if (strcmp(strategy, "med_mad") == 0) {
         return ScalingStrategy::MED_MAD;
@@ -173,7 +193,7 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
     SignalNormalisationParams params;
 
     // scaling.strategy introduced with v4.3 models
-    if (toml_contains_key(config_toml, "scaling")) {
+    if (toml_key_exists(config_toml, "scaling")) {
         const toml_table_t *scaling = toml_table_in(config_toml, "scaling");
         check_toml_table(scaling);
 
@@ -183,7 +203,7 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
         params.strategy = scaling_strategy_from_string(strategy.u.s);
     }
 
-    if (toml_contains_key(config_toml, "normalisation")) {
+    if (toml_key_exists(config_toml, "normalisation")) {
         const toml_table_t *norm = toml_table_in(config_toml, "normalisation");
         check_toml_table(norm);
 
@@ -202,11 +222,11 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
         params.quantile.scale_multiplier = scale_multiplier.u.d;
 
         if (params.strategy != ScalingStrategy::QUANTILE) {
-            WARN("%s", "Normalisation parameters are only used when `scaling.strategy = quantile`");
+            WARNING("%s", "Normalisation parameters are only used when `scaling.strategy = quantile`");
         }
     }
 
-    if (toml_contains_key(config_toml, "standardisation")) {
+    if (toml_key_exists(config_toml, "standardisation")) {
         const toml_table_t *norm = toml_table_in(config_toml, "standardisation");
         check_toml_table(norm);
 
@@ -219,8 +239,8 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
             toml_datum_t stdev = toml_double_in(norm, "stdev");
             check_toml_datum(stdev);
 
-            params.standarisation.mean = toml_double_in(norm, "mean");
-            params.standarisation.stdev = toml_double_in(norm, "stdev");
+            params.standarisation.mean = mean.u.d;
+            params.standarisation.stdev = stdev.u.d;
         }
 
         if (params.standarisation.standardise && params.strategy != ScalingStrategy::PA) {
@@ -237,8 +257,7 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
     return params;
 }
 
-
-CRFModelConfig load_lstm_model_config(const std::filesystem::path &path) {
+CRFModelConfig load_lstm_model_config(const char *path) {
     FILE* fp;
     char errbuf[200];
 
@@ -299,10 +318,14 @@ CRFModelConfig load_lstm_model_config(const std::filesystem::path &path) {
             if (type == SublayerType::LINEAR) {
                 // Specifying out_features implies a decomposition of the linear layer matrix
                 // multiply with a bottleneck before the final feature size.
-                config.out_features = toml::find<int>(segment, "out_features");
+                toml_datum_t out_features = toml_int_in(segment, "out_features");
+                check_toml_datum(out_features);
+                config.out_features = out_features.u.i;
                 config.bias = config.lstm_size > 128;
             } else if (type == SublayerType::LINEAR_CRF_ENCODER) {
-                config.blank_score = toml::find<float>(segment, "blank_score");
+                toml_datum_t blank_score = toml_double_in(segment, "blank_score");
+                check_toml_datum(blank_score);
+                config.blank_score = blank_score.u.d;
             }
         }
         
@@ -318,16 +341,15 @@ CRFModelConfig load_lstm_model_config(const std::filesystem::path &path) {
         check_toml_datum(scale);
         
         config.stride = stride.u.i;
-        config.insize = features.u.i;
+        config.lstm_size = features.u.i;
         config.blank_score = blank_score.u.d;
         config.scale = scale.u.d;
 
+        int first_conv = 4;
         if (toml_key_exists(encoder, "first_conv_size")) {
             toml_datum_t conv = toml_int_in(encoder, "first_conv_size");
             check_toml_datum(conv);
-            config.conv = conv.u.i;
-        } else {
-            config.conv = 4;
+            first_conv = conv.u.i;
         }
 
         config.convs.push_back(ConvParams{config.num_features, first_conv, 5, 1, Activation::SWISH});
@@ -350,11 +372,11 @@ CRFModelConfig load_lstm_model_config(const std::filesystem::path &path) {
     config.signal_norm_params = parse_signal_normalisation_params(config_toml);
 
     if (config.convs.size() != 3) {
-        ERROR("Expected 3 convolution layers but found: %zu", config.convs.size()));
+        ERROR("Expected 3 convolution layers but found: %lu", config.convs.size());
         exit(EXIT_FAILURE);
     }
     if (config.convs[0].size != 4 && config.convs[0].size != 16) {
-        ERROR("Invalid CRF model configuration - first convolution layer must be size 4 or 16. Got: %zu", config.convs[0].size);
+        ERROR("Invalid CRF model configuration - first convolution layer must be size 4 or 16. Got: %u", config.convs[0].size);
         exit(EXIT_FAILURE);
     }
 
@@ -390,10 +412,21 @@ TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
     check_toml_array(attn_window_);
     
     params.attn_window = {};
-    for (int i = 0; ; i++; i < 2) {
-        toml_datum_t *e = toml_int_at(attn_window, i);
-        if (!e.ok) break;
-        params.attn_window.push_back(e);
+    {
+        toml_datum_t e = toml_int_at(attn_window_, 0);
+        if (!e.ok)  {
+            ERROR("%s", "error loading window");
+            exit(EXIT_FAILURE);
+        }
+        params.attn_window.first = e.u.i;
+    }
+    {
+        toml_datum_t e = toml_int_at(attn_window_, 1);
+        if (!e.ok)  {
+            ERROR("%s", "error loading window");
+            exit(EXIT_FAILURE);
+        };
+        params.attn_window.second = e.u.i;
     }
 
     return params;
@@ -442,9 +475,9 @@ CRFEncoderParams parse_crf_encoder_params(const toml_table_t *cfg) {
 
     params.permute = {};
     for (int i = 0; ; i++) {
-        toml_datum_t *e = toml_int_at(permute, i);
+        toml_datum_t e = toml_int_at(permute, i);
         if (!e.ok) break;
-        params.permute.push_back(e);
+        params.permute.push_back(e.u.i);
     }
 
     return params;
@@ -470,18 +503,23 @@ CRFModelConfig load_tx_model_config(char *path) {
 
     CRFModelConfig config;
 
-    parse_qscore_params(&config, config_toml);
+    parse_qscore_params(config, config_toml);
 
     const TxEncoderParams tx_encoder = parse_tx_encoder_params(config_toml);
     const EncoderUpsampleParams upsample = parse_encoder_upsample_params(config_toml);
     const CRFEncoderParams crf_encoder = parse_crf_encoder_params(config_toml);
 
-    config.tx = TxParams{tx_encoder, upsample, crf_encoder};
-    config.tx->check();
+    config.tx = new TxParams{tx_encoder, upsample, crf_encoder}; // todo: should delete this at some point
+    if (crf_encoder.insize != tx_encoder.d_model) {
+        WARNING("crf_encoder.insize: %d !=tx_encoder.d_model: %d", crf_encoder.insize, tx_encoder.d_model);
+    }
+    if (upsample.d_model != tx_encoder.d_model) {
+        WARNING("upsample.d_model: %d !=tx_encoder.d_model: %d", upsample.d_model, tx_encoder.d_model);
+    }
 
-    toml_table_t *convs = toml_table_fallback(model_toml, {"encoder", "conv"});
+    toml_table_t *convs = toml_table_fallback(config_toml, {"encoder", "conv"});
 
-    toml_array_t *sublayers = toml_array_in(encoder, "sublayers");
+    toml_array_t *sublayers = toml_array_in(convs, "sublayers");
     check_toml_array(sublayers);
 
     for (int i = 0; ; i++) {
@@ -502,13 +540,17 @@ CRFModelConfig load_tx_model_config(char *path) {
     }
     // Recalculate the stride by accounting for upsampling / downsampling
     config.stride /= upsample.scale_factor;
-    config.out_features = crf_encoder.out_features();
-    config.outsize = crf_encoder.outsize();
+    config.out_features = pow(crf_encoder.n_base, crf_encoder.state_len + 1);
+    if (crf_encoder.expand_blanks) {
+        config.outsize = static_cast<int>(std::pow(crf_encoder.n_base, crf_encoder.state_len + 1));
+    } else {
+        config.outsize = (crf_encoder.n_base + 1) * static_cast<int>(std::pow(crf_encoder.n_base, crf_encoder.state_len));
+    }
 
     config.state_len = config.tx->crf.state_len;
     config.num_features = config.convs.front().insize;
 
-    config.signal_norm_params = parse_signal_normalisation_params(config_toml, model_name);
+    config.signal_norm_params = parse_signal_normalisation_params(config_toml);
 
     // Force downstream issue (negative lstm size) if a tx model config is incorrectly
     // used to define an LSTM model. Incorrect use should be guarded against by using is_tx_model()

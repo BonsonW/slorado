@@ -207,9 +207,13 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
     opt_t opt = core->opt;
 
     if (len_raw_signal > 0) {
+        // quick and dirty model config, todo: should move this to core
+        runner_t* runner = (*core->runners)[0];
+        auto signal_norm_params = runner->model_config.signal_norm_params;
+
         torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
 
-        scale_signal(signal, rec->range / rec->digitisation, rec->offset);
+        scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         (*db->chunks)[i] = chunks;

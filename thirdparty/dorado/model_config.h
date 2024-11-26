@@ -1,13 +1,8 @@
 #pragma once
 
-#include "BasecallerParams.h"
-#include "models/kits.h"
-
 #include <cmath>
-#include <filesystem>
 #include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
 enum class Activation { SWISH, SWISH_CLAMP, TANH };
@@ -30,7 +25,6 @@ struct QuantileScalingParams {
 
 struct SignalNormalisationParams {
     ScalingStrategy strategy = ScalingStrategy::QUANTILE;
-
     QuantileScalingParams quantile;
     StandardisationScalingParams standarisation;
 };
@@ -107,15 +101,11 @@ struct CRFModelConfig {
     // short reads.
     int32_t mean_qscore_start_pos = -1;
 
-    models::SampleType sample_type{models::SampleType::UNKNOWN};
-
     // convolution layer params
     std::vector<ConvParams> convs;
 
     // Tx Model Params
     TxParams *tx = NULL;
-
-    BasecallerParams basecaller;
 };
 
-CRFModelConfig load_crf_model_config(const std::filesystem::path& path);
+CRFModelConfig load_crf_model_config(const char *path);
