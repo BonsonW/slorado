@@ -32,56 +32,46 @@ void check_toml_datum(const toml_datum_t datum) {
     }
 }
 
-toml_table_t *toml_table_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
-    for (size_t i = 0; i < fallbacks.size(); ++i) {
+toml_table_t *toml_table_fallback_prereq(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+    toml_table_t *ret = config_toml;
+    for (size_t i = 0; i < fallbacks.size()-1; ++i) {
         const char *fallback = fallbacks[i].c_str();
-        if (toml_key_exists(config_toml, fallback)) {
-            toml_table_t *ret = toml_table_in(config_toml, fallback);
-            check_toml_table(ret);
-            return ret;
-        }
+        ret = toml_table_in(ret, fallback);
+        check_toml_table(ret);
     }
-    ERROR("%s", "could not find table from list of fallbacks in config toml");
-    exit(EXIT_FAILURE);
+    return ret;
 }
 
-toml_array_t *toml_array_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
-    for (size_t i = 0; i < fallbacks.size(); ++i) {
-        const char *fallback = fallbacks[i].c_str();
-        if (toml_key_exists(config_toml, fallback)) {
-            toml_array_t *ret = toml_array_in(config_toml, fallback);
-            check_toml_array(ret);
-            return ret;
-        }
-    }
-    ERROR("%s", "could not find array from list of fallbacks in config toml");
-    exit(EXIT_FAILURE);
+toml_table_t *toml_table_fallback(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+    toml_table_t *prereq = toml_table_fallback_prereq(config_toml, fallbacks);
+    const char *fallback = fallbacks.back().c_str();
+    toml_table_t *ret = toml_table_in(prereq, fallback);
+    check_toml_table(ret);
+    return ret;
 }
 
-toml_datum_t toml_int_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
-    for (size_t i = 0; i < fallbacks.size(); ++i) {
-        const char *fallback = fallbacks[i].c_str();
-        if (toml_key_exists(config_toml, fallback)) {
-            toml_datum_t ret = toml_int_in(config_toml, fallback);
-            check_toml_datum(ret);
-            return ret;
-        }
-    }
-    ERROR("%s", "could not find int from list of fallbacks in config toml");
-    exit(EXIT_FAILURE);
+toml_array_t *toml_array_fallback(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+    toml_table_t *prereq = toml_table_fallback_prereq(config_toml, fallbacks);
+    const char *fallback = fallbacks.back().c_str();
+    toml_array_t *ret = toml_array_in(prereq, fallback);
+    check_toml_array(ret);
+    return ret;
 }
 
-toml_datum_t toml_double_fallback(const toml_table_t *config_toml, std::vector<std::string> fallbacks) {
-    for (size_t i = 0; i < fallbacks.size(); ++i) {
-        const char *fallback = fallbacks[i].c_str();
-        if (toml_key_exists(config_toml, fallback)) {
-            toml_datum_t ret = toml_double_in(config_toml, fallback);
-            check_toml_datum(ret);
-            return ret;
-        }
-    }
-    ERROR("%s", "could not find double from list of fallbacks in config toml");
-    exit(EXIT_FAILURE);
+toml_datum_t toml_int_fallback(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+    toml_table_t *prereq = toml_table_fallback_prereq(config_toml, fallbacks);
+    const char *fallback = fallbacks.back().c_str();
+    toml_datum_t ret = toml_int_in(prereq, fallback);
+    check_toml_datum(ret);
+    return ret;
+}
+
+toml_datum_t toml_double_fallback(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+    toml_table_t *prereq = toml_table_fallback_prereq(config_toml, fallbacks);
+    const char *fallback = fallbacks.back().c_str();
+    toml_datum_t ret = toml_double_in(prereq, fallback);
+    check_toml_datum(ret);
+    return ret;
 }
 
 // Parse sublayer extracting convolution parameters. This is for use on v4+ models only
@@ -259,8 +249,8 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
     return params;
 }
 
-TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
-    const toml_table_t *enc = toml_table_fallback(cfg, {"model", "encoder", "transformer_encoder"});
+TxEncoderParams parse_tx_encoder_params(toml_table_t *cfg) {
+    toml_table_t *enc = toml_table_fallback(cfg, {"model", "encoder", "transformer_encoder"});
     TxEncoderParams params;
 
     toml_datum_t depth = toml_int_in(enc, "depth");
@@ -304,8 +294,8 @@ TxEncoderParams parse_tx_encoder_params(const toml_table_t *cfg) {
     return params;
 }
 
-EncoderUpsampleParams parse_encoder_upsample_params(const toml_table_t *cfg) {
-    const toml_table_t *ups = toml_table_fallback(cfg, {"model", "encoder", "upsample"});
+EncoderUpsampleParams parse_encoder_upsample_params(toml_table_t *cfg) {
+    toml_table_t *ups = toml_table_fallback(cfg, {"model", "encoder", "upsample"});
     EncoderUpsampleParams params;
 
     toml_datum_t d_model = toml_int_in(ups, "d_model");
@@ -319,8 +309,8 @@ EncoderUpsampleParams parse_encoder_upsample_params(const toml_table_t *cfg) {
     return params;
 }
 
-CRFEncoderParams parse_crf_encoder_params(const toml_table_t *cfg) {
-    const toml_table_t *crf = toml_table_fallback(cfg, {"model", "encoder", "crf"});
+CRFEncoderParams parse_crf_encoder_params(toml_table_t *cfg) {
+    toml_table_t *crf = toml_table_fallback(cfg, {"model", "encoder", "crf"});
     CRFEncoderParams params;
 
     toml_datum_t insize = toml_int_in(crf, "insize");
@@ -480,12 +470,10 @@ CRFModelConfig load_lstm_model_config(const char *path) {
 
     toml_free(config_toml);
 
-    free(cpath);
-
     return config;
 }
 
-CRFModelConfig load_tx_model_config(char *path) {
+CRFModelConfig load_tx_model_config(const char *path) {
     FILE* fp;
     char errbuf[200];
 
@@ -502,6 +490,8 @@ CRFModelConfig load_tx_model_config(char *path) {
     toml_table_t *config_toml = toml_parse_file(fp, errbuf, sizeof(errbuf));
     fclose(fp);
     check_toml_table(config_toml);
+    toml_table_t *model_toml = toml_table_in(config_toml, "model");
+    check_toml_table(model_toml);
 
     CRFModelConfig config;
 
@@ -519,7 +509,7 @@ CRFModelConfig load_tx_model_config(char *path) {
         WARNING("upsample.d_model: %d !=tx_encoder.d_model: %d", upsample.d_model, tx_encoder.d_model);
     }
 
-    toml_table_t *convs = toml_table_fallback(config_toml, {"encoder", "conv"});
+    toml_table_t *convs = toml_table_fallback(model_toml, {"encoder", "conv"});
 
     toml_array_t *sublayers = toml_array_in(convs, "sublayers");
     check_toml_array(sublayers);
@@ -540,6 +530,7 @@ CRFModelConfig load_tx_model_config(char *path) {
         config.convs.push_back(conv);
         config.stride *= conv.stride;
     }
+
     // Recalculate the stride by accounting for upsampling / downsampling
     config.stride /= upsample.scale_factor;
     config.out_features = pow(crf_encoder.n_base, crf_encoder.state_len + 1);
@@ -555,8 +546,6 @@ CRFModelConfig load_tx_model_config(char *path) {
     config.lstm_size = -1;
 
     toml_free(config_toml);
-
-    free(cpath);
 
     return config;
 }
