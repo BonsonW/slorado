@@ -124,6 +124,9 @@ void init_runner_stat(runner_stat_t *time_stamps) {
 }
 
 void init_runners(core_t* core, opt_t *opt, char *model){
+    // todo: this should be in its own function
+    torch::set_num_threads(opt->num_thread);
+
     core->runners = new std::vector<runner_t *>();
     core->runner_stats = new std::vector<runner_stat_t *>();
 
