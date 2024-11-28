@@ -77,7 +77,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     ts->time_infer -= realtime();
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
 #ifdef USE_GPU
-    torch::cuda::synchronize(runner->device_idx);
+    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
     ts->time_infer += realtime();
 
@@ -85,7 +85,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
     scores_TNC = scores_TNC.transpose(0, 1).contiguous();
 #ifdef USE_GPU
-    torch::cuda::synchronize(runner->device_idx);
+    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
 
     const int T = scores_TNC.size(0);
