@@ -74,6 +74,20 @@ toml_datum_t toml_double_fallback(toml_table_t *config_toml, std::vector<std::st
     return ret;
 }
 
+bool toml_key_fallback(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
+    toml_table_t *ret = config_toml;
+    for (size_t i = 0; i < fallbacks.size(); ++i) {
+        const char *fallback = fallbacks[i].c_str();
+        if (toml_key_exists(ret, fallback)) {
+            ret = toml_table_in(ret, fallback);
+            check_toml_table(ret);
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Parse sublayer extracting convolution parameters. This is for use on v4+ models only
 ConvParams parse_conv_params(const toml_table_t *segment, bool clamp) {
     ConvParams params;
@@ -558,4 +572,32 @@ CRFModelConfig load_tx_model_config(const char *path) {
     free(cpath);
 
     return config;
+}
+
+bool is_tx_model_config(const char *path) {
+    FILE* fp;
+    char errbuf[200];
+
+    char *cpath = (char *)malloc(strlen(path) + 100);
+    MALLOC_CHK(cpath);
+    sprintf(cpath, "%s/config.toml", path);
+
+    fp = fopen(cpath, "r");
+    if (!fp) {
+        ERROR("cannot open toml - %s: %s", cpath, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    toml_table_t *config_toml = toml_parse_file(fp, errbuf, sizeof(errbuf));
+    fclose(fp);
+    check_toml_table(config_toml);
+
+    bool is_tx_model = toml_key_fallback(config_toml, {"model", "encoder", "transformer_encoder"});
+    if (is_tx_model) {
+        INFO("transformer model detected for config at: %s", cpath);
+    }
+
+    toml_free(config_toml);
+    free(cpath);
+
+    return is_tx_model;
 }

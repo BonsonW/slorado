@@ -121,3 +121,5 @@ struct CRFModelConfig {
 
 CRFModelConfig load_lstm_model_config(const char *path);
 CRFModelConfig load_tx_model_config(const char *path);
+
+bool is_tx_model_config(const char *path);

@@ -81,7 +81,7 @@ void init_runner(
     torch::ScalarType dtype
 ) {
     LOG_TRACE("initializing model runner for device %s", device.c_str());
-    bool use_tx = true;
+    bool use_tx = is_tx_model_config(model_path);
 
     CRFModelConfig model_config;
 
