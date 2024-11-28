@@ -102,17 +102,21 @@ ConvParams parse_conv_params(const toml_table_t *segment, bool clamp) {
         exit(EXIT_FAILURE);
     }
 
+    free(activation.u.s);
+
     return params;
 }
 
 SublayerType sublayer_type(const toml_table_t *segment) {
-    toml_datum_t _type = toml_string_in(segment, "type");
-    check_toml_datum(_type);
-    char *type = _type.u.s; // todo: free this and any other one
-    auto mapping_iter = sublayer_map.find(type);
+    toml_datum_t type = toml_string_in(segment, "type");
+    check_toml_datum(type);
+    auto mapping_iter = sublayer_map.find(type.u.s);
     if (mapping_iter == sublayer_map.end()) {
         return SublayerType::UNRECOGNISED;
     }
+
+    free(type.u.s);
+
     return mapping_iter->second;
 }
 
@@ -193,6 +197,7 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
         check_toml_datum(strategy);
 
         params.strategy = scaling_strategy_from_string(strategy.u.s);
+        free(strategy.u.s);
     }
 
     if (toml_key_exists(config_toml, "normalisation")) {
@@ -470,6 +475,8 @@ CRFModelConfig load_lstm_model_config(const char *path) {
 
     toml_free(config_toml);
 
+    free(cpath);
+
     return config;
 }
 
@@ -520,11 +527,12 @@ CRFModelConfig load_tx_model_config(const char *path) {
 
         toml_datum_t type_dt = toml_string_in(segment, "type");
         check_toml_datum(type_dt);
-        char *type = type_dt.u.s;
 
-        if (strcmp(type, "convolution") != 0) {
+        if (strcmp(type_dt.u.s, "convolution") != 0) {
             continue;
         }
+
+        free(type_dt.u.s);
 
         const ConvParams conv = parse_conv_params(segment, false /* Tx models do not have swish clamp */);
         config.convs.push_back(conv);
@@ -546,6 +554,8 @@ CRFModelConfig load_tx_model_config(const char *path) {
     config.lstm_size = -1;
 
     toml_free(config_toml);
+
+    free(cpath);
 
     return config;
 }
