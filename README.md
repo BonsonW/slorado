@@ -1,8 +1,8 @@
 # Slorado
 
-Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4). Slorado has lesser external dependencies and thus relatively easier to compile compared to Dorado.  slorado is developed using C/C++ and depends on [torchlib](https://pytorch.org/cppdocs/). Currently, slorado only supports Linux operating system (works on Windows through WSL). slorado can **utilise NVIDIA or AMD GPU accelerators** on x86_64 CPUs. Slorado also works on ARM64-based NVIDIA Jetson devices.
+Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4). Slorado has fewer external dependencies and is thus relatively easier to compile compared to Dorado.  Slorado is developed using C/C++ and depends on [torchlib](https://pytorch.org/cppdocs/). Currently, slorado only supports the Linux operating system (works on Windows through WSL). slorado can **utilise NVIDIA or AMD GPU accelerators** on x86_64 CPUs. Slorado also works on ARM64-based NVIDIA Jetson devices.
 
-Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and may not be up to date with Dorado. For a feature rich and up-to-date S/BLOW5-based basecaller for routine use, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel).
+Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and may not be up to date with Dorado. For a feature-rich and up-to-date S/BLOW5-based basecaller for routine use, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel).
 
 ## Quick start
 
@@ -21,7 +21,7 @@ Detailed instructions are available at:
 - [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-bin.md)
 - [AMD GPUs (rocm) on x84_64 systems](docs/rocm-bin.md)
 
-Binaries for the CPU-only version are not provided as basecalling on CPU is impractically slow. Nevertheless, CPU-only version is easier to build compared to GPU version (see [below](#compilation-and-running)).
+Binaries for the CPU-only version are not provided as basecalling on the CPU is impractically slow. Nevertheless, the CPU-only version is easier to build compared to the GPU version (see [below](#compilation-and-running)).
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems.
 
@@ -52,7 +52,7 @@ Now run on a test dataset:
 ./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5 -o reads.fastq
 ```
 
-Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems. Currently, we are working on to support the newer v5 basecalling models.
+Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems. Currently, we are working on supporting the newer v5 basecalling models.
 
 ## Testing
 
