@@ -6,20 +6,23 @@ on:
   pull_request:
     branches: [ '*' ]
 
-env:
-  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
 jobs:
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-20.04
-    container: ubuntu:16.04
+    container:
+      image: ubuntu:16.04
+      volumes:
+        - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
-    - name: install node
-      run: apt-get update && apt-get install -y curl && curl -sL https://deb.nodesource.com/setup_16.x | bash - && apt-get install -y nodejs
+    - name: nodejs
+      run: |
+        apt-get install wget apt install xz-utils
+        wget https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+        tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
     - uses: actions/checkout@v2
       with:
         submodules: recursive
