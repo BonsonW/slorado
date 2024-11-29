@@ -18,6 +18,8 @@ jobs:
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - name: install node
+      run: apt-get update && apt-get install -y curl && curl -sL https://deb.nodesource.com/setup_16.x | bash - && apt-get install -y nodejs
     - uses: actions/checkout@v2
       with:
         submodules: recursive
