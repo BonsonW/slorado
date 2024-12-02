@@ -101,18 +101,8 @@ void init_runner(
     runner->chunk_size = runner->input_tensor.size(2);
 
     if (device != "cpu") {
-#ifdef USE_GPU
         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
-        runner->device_idx = device_idx;
-
-#ifdef HAVE_CUDA
-        c10::cuda::CUDAGuard device_guard(device_idx);
-#endif
-#ifdef HAVE_ROCM
-        c10::hip::HIPGuard device_guard(device_idx);
-#endif
-        runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
-#endif        
+        runner->device_idx = device_idx;   
     }
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
@@ -177,17 +167,6 @@ void free_runners(core_t *core) {
 
     for (size_t i = 0; i < core->runners->size(); ++i) {
         runner_t *runner = (*core->runners)[i];
-        if (runner->device != "cpu") {
-#ifdef USE_GPU
-#ifdef HAVE_CUDA
-            c10::cuda::CUDAGuard device_guard(runner->device_idx);
-#endif
-#ifdef HAVE_ROCM
-            c10::hip::HIPGuard device_guard(runner->device_idx);
-#endif
-            openfish_gpubuf_free(runner->gpubuf);
-#endif
-        }
         delete runner;
     }
 

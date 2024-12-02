@@ -19,9 +19,15 @@ struct runner_s {
     size_t model_stride;
     size_t chunk_size;
     CRFModelConfig model_config;
+    torch::Tensor chunks;
+    torch::Tensor chunk_results;
+    torch::Tensor aux;
+    torch::Tensor path;
+    torch::Tensor moves_sequence_qstring;
+    bool initialized{false};
+
 #ifdef USE_GPU
     int64_t device_idx;
-    openfish_gpubuf_t *gpubuf;
 #endif
 };
 

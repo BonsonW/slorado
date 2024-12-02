@@ -42,7 +42,11 @@ SOFTWARE.
 #include "error.h"
 
 #ifdef HAVE_CUDA
+#include <cuda_runtime.h>
 #include <c10/cuda/CUDAGuard.h>
+extern "C" {
+#include "koi.h"
+}
 #endif
 
 #ifdef HAVE_ROCM
@@ -68,10 +72,17 @@ void accept_chunk(const int num_chunks, at::Tensor slice, const core_t* core, co
     runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
 
-void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const core_t* core, const int runner_idx) {
+void call_chunks(std::vector<DecodedChunk> &called_chunks, const int num_chunks, const core_t* core, const int runner_idx) {
     torch::InferenceMode guard;
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    auto chunks = runner->chunks;
+    auto chunk_results = runner->chunk_results;
+    auto aux = runner->aux;
+    auto path = runner->path;
+    auto moves_sequence_qstring = runner->moves_sequence_qstring;
+    auto initialized = runner->initialized;
+    auto options = runner->decoder_opts;
 
     LOG_DEBUG("%s", "basecalling chunks");
     ts->time_infer -= realtime();
@@ -81,73 +92,100 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 #endif
     ts->time_infer += realtime();
 
-    auto scores_TNC = scores;
-    // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
-    scores_TNC = scores_TNC.transpose(0, 1).contiguous();
-#ifdef USE_GPU
-    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
+#ifdef HAVE_CUDA
+        c10::cuda::CUDAGuard device_guard(runner->device_idx);
 #endif
-
-    const int T = scores_TNC.size(0);
-    const int N = scores_TNC.size(1);
-    const int C = scores_TNC.size(2);
-    const int state_len = runner->model_config.state_len;
-    int nthreads = core->opt.num_thread / core->runners->size();
-
-    uint8_t *moves;
-    char *sequence;
-    char *qstring;
 
     LOG_DEBUG("%s", "decoding scores");
-
     ts->time_beamsearch -= realtime();
-    if (runner->device == "cpu") {
-        openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
-    } else {
-#ifdef USE_GPU
-#ifdef HAVE_CUDA
-    c10::cuda::CUDAGuard device_guard(runner->device_idx);
-#endif
-#ifdef HAVE_ROCM
-    c10::hip::HIPGuard device_guard(runner->device_idx);
-#endif
-        openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
-#else
-        ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
-        exit(EXIT_FAILURE);
-#endif
+    long int N = scores.sizes()[0];
+    long int T = scores.sizes()[1];
+    long int C = scores.sizes()[2];
+
+    auto tensor_options_int32 = torch::TensorOptions()
+        .dtype(torch::kInt32)
+        .device(scores.device())
+        .requires_grad(false);
+
+    auto tensor_options_int8 = torch::TensorOptions().dtype(torch::kInt8).device(scores.device()).requires_grad(false);
+    
+    if (!initialized) {
+        chunks = torch::empty({N, 4}, tensor_options_int32);
+        chunks.index({torch::indexing::Slice(), 0}) = torch::arange(0, int(T * N), int(T));
+        chunks.index({torch::indexing::Slice(), 2}) = torch::arange(0, int(T * N), int(T));
+        chunks.index({torch::indexing::Slice(), 1}) = int(T);
+        chunks.index({torch::indexing::Slice(), 3}) = 0;
+
+        chunk_results = torch::empty({N, 8}, tensor_options_int32);
+
+        chunk_results = chunk_results.contiguous();
+
+        aux = torch::empty(N * (T + 1) * (C + 4 * options.beam_width), tensor_options_int8);
+        path = torch::zeros(N * (T + 1), tensor_options_int32);
+
+        moves_sequence_qstring = torch::zeros({3, N * T}, tensor_options_int8);
+
+        initialized = true;
     }
 
-    for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
-        size_t idx = chunk * T;
-        chunks[chunk] = {
-            std::string(sequence + idx),
-            std::string(qstring + idx),
-            std::vector<uint8_t>(moves + idx, moves + idx + T),
-        };
+    moves_sequence_qstring.index({torch::indexing::Slice()}) = 0.0;
+    auto moves = moves_sequence_qstring[0];
+    auto sequence = moves_sequence_qstring[1];
+    auto qstring = moves_sequence_qstring[2];
 
-        if (chunks[chunk].sequence.size() == 0) {
+    host_back_guide_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                         aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
+                         sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
+                         options.beam_width, options.beam_cut, options.blank_score);
+
+    host_beam_search_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                          aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
+                          sequence.data_ptr(), qstring.data_ptr(), options.q_scale, options.q_shift,
+                          options.beam_width, options.beam_cut, options.blank_score);
+
+    host_compute_posts_step(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                            aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL,
+                            sequence.data_ptr(), qstring.data_ptr(), options.q_scale,
+                            options.q_shift, options.beam_width, options.beam_cut,
+                            options.blank_score);
+
+    host_run_decode(chunks.data_ptr(), chunk_results.data_ptr(), N, scores.data_ptr(), C,
+                    aux.data_ptr(), path.data_ptr(), moves.data_ptr(), NULL, sequence.data_ptr(),
+                    qstring.data_ptr(), options.q_scale, options.q_shift, options.beam_width,
+                    options.beam_cut, options.blank_score, options.move_pad);
+
+    auto res = moves_sequence_qstring.reshape({3, N, -1}).to(torch::kCPU);
+
+    assert(res.device() == torch::kCPU);
+    auto moves_cpu = res[0];
+    auto sequence_cpu = res[1];
+    auto qstring_cpu = res[2];
+    for (size_t chunk = 0; chunk < called_chunks.size() ; ++chunk) {
+        std::vector<uint8_t> mov((uint8_t *)moves_cpu[chunk].data_ptr(), (uint8_t *)moves_cpu[chunk].data_ptr() + T);
+        auto num_bases = moves_cpu[chunk].sum().item<int>();
+        std::string seq((char *)sequence_cpu[chunk].data_ptr(), (char *)sequence_cpu[chunk].data_ptr() + num_bases);
+        std::string qstr((char *)qstring_cpu[chunk].data_ptr(), (char *)qstring_cpu[chunk].data_ptr() + num_bases);
+
+        called_chunks[chunk] = {std::move(seq), std::move(qstr), std::move(mov)};
+
+        if (called_chunks[chunk].sequence.size() == 0) {
             ERROR("%s", "empty sequence returned by decoder");
             exit(EXIT_FAILURE);
         }
 
-        if (chunks[chunk].qstring.size() == 0) {
+        if (called_chunks[chunk].qstring.size() == 0) {
             ERROR("%s", "empty qstring returned by decoder");
             exit(EXIT_FAILURE);
         }
 
-        size_t seq_size = chunks[chunk].sequence.size();
-        size_t qstr_size = chunks[chunk].qstring.size();
+        size_t seq_size = called_chunks[chunk].sequence.size();
+        size_t qstr_size = called_chunks[chunk].qstring.size();
         if (seq_size != qstr_size) {
             ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
             exit(EXIT_FAILURE);
         }
     }
     ts->time_beamsearch += realtime();
-
-    free(moves);
-    free(sequence);
-    free(qstring);
 }
 
 void basecall_chunks(
