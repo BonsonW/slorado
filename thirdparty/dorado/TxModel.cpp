@@ -200,7 +200,7 @@ at::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
 
 at::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size) const {
     const auto win_upper = std::get<0>(attn_window);
-    const auto win_lower = std::get<0>(attn_window);
+    const auto win_lower = std::get<1>(attn_window);
     at::Tensor mask = at::ones({size, size}, options.device());
     mask.triu_(-win_upper).tril_(win_lower);
     mask = mask.to(at::kBool);
@@ -220,7 +220,7 @@ at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
     auto attn_window_mask = get_attn_window_mask(T);
     auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
     const auto win_upper = std::get<0>(attn_window);
-    const auto win_lower = std::get<0>(attn_window);
+    const auto win_lower = std::get<>(attn_window);
     // The MPS backend refuses to work on a span of the mask that doesn't have an
     // alignment of 4 elements, so pad the amount we process each loop to that.
     const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
