@@ -3,8 +3,9 @@
 
 #include <torch/torch.h>
 #include <openfish/openfish.h>
+
 #include "slorado.h"
-#include "dorado/CRFModel.h"
+#include "dorado/model_config.h"
 
 struct elephant_s {
     std::vector<std::vector<torch::Tensor>> *tensors;

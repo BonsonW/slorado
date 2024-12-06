@@ -29,11 +29,9 @@ SOFTWARE.
 
 
 ******************************************************************************/
-#include "slorado.h"
 #include "error.h"
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
-#include "dorado/model_config.h"
 #include "dorado/CRFModel.h"
 #include "dorado/TxModel.h"
 

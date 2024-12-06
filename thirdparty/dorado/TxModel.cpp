@@ -3,8 +3,6 @@
 #include <ATen/Functions.h>
 #include <ATen/TensorIndexing.h>
 #include <c10/core/ScalarType.h>
-#include <c10/core/TensorOptions.h>
-#include <torch/nn.h>
 #include <torch/nn/functional/padding.h>
 #include <torch/nn/options/padding.h>
 #include <torch/serialize.h>
@@ -16,7 +14,6 @@
 
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 using namespace torch::nn;
 namespace Idx = torch::indexing;
