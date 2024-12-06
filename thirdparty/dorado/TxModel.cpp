@@ -14,7 +14,6 @@
 #include <cmath>
 #include <ATen/ops/scaled_dot_product_attention.h>
 
-#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cmath>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -93,7 +92,8 @@ struct CRFModelConfig {
     bool bias = true;
     bool clamp = false;
     // If there is a decomposition of the linear layer, this is the bottleneck feature size.
-    std::optional<int> out_features;
+    bool has_out_features;
+    int out_features;
     int state_len;
     // Output feature size of the linear layer.  Dictated by state_len and whether
     // blank scores are explicitly stored in the linear layer output.

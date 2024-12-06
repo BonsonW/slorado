@@ -92,9 +92,9 @@ CRFModelImpl::CRFModelImpl(const CRFModelConfig &config) {
     convs = register_module("convs", ConvStack(cv));
     rnns = register_module("rnns", LSTMStack(5, lstm_size));
 
-    if (config.out_features.has_value()) {
+    if (config.has_out_features) {
         // The linear layer is decomposed into 2 matmuls.
-        const int decomposition = config.out_features.value();
+        const int decomposition = config.out_features;
         linear1 = register_module("linear1", LinearCRF(lstm_size, decomposition, true, false));
         linear2 = register_module("linear2", LinearCRF(decomposition, config.outsize, false, false));
         clamp1 = Clamp(-5.0, 5.0, config.clamp);
@@ -161,7 +161,7 @@ std::vector<torch::Tensor> load_lstm_model_weights(const std::string &dir,
 
 ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const at::TensorOptions &options) {
     auto model = CRFModel(model_config);
-    auto state_dict = load_lstm_model_weights(model_config.model_path, model_config.out_features.has_value(), model_config.bias);
+    auto state_dict = load_lstm_model_weights(model_config.model_path, model_config.has_out_features, model_config.bias);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());
     model->to(options.device());

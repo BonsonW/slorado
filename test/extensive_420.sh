@@ -28,14 +28,14 @@ ex() {
 check_accuracy () {
     case $1 in
     $FAST )
-        if (( $(echo "$2 >= 0.90" | bc -l) ));
+        if (( $(echo "$2 >= 0.93" | bc -l) ));
         then
             return 0
         fi
         ;;
 
     $HAC )
-        if (( $(echo "$2 >= 0.96" | bc -l) ));
+        if (( $(echo "$2 >= 0.97" | bc -l) ));
         then
             return 0
         fi

@@ -383,6 +383,7 @@ CRFModelConfig load_lstm_model_config(const char *path) {
     check_toml_table(config_toml);
 
     CRFModelConfig config;
+    config.has_out_features = false;
 
     parse_qscore_params(config, config_toml);
 
@@ -428,6 +429,7 @@ CRFModelConfig load_lstm_model_config(const char *path) {
                 toml_datum_t out_features = toml_int_in(segment, "out_features");
                 check_toml_datum(out_features);
                 config.out_features = out_features.u.i;
+                config.has_out_features = true;
                 config.bias = config.lstm_size > 128;
             } else if (type == SublayerType::LINEAR_CRF_ENCODER) {
                 toml_datum_t blank_score = toml_double_in(segment, "blank_score");
