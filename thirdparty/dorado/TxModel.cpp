@@ -5,7 +5,6 @@
 #include <c10/core/ScalarType.h>
 #include <torch/nn/functional/padding.h>
 #include <torch/nn/options/padding.h>
-#include <torch/serialize.h>
 #include <torch/types.h>
 #include <torch/version.h>
 
