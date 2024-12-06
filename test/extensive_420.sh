@@ -179,7 +179,7 @@ ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -C
 make clean && make -j cuda=1
 
 echo "GPU - HAC model - 500k reads"
-ex ./slorado basecaller models/$HAC $SUBSAMPLE -xcuda:all -B500M -c10000 -C400 > test/tmp.fastq || die "Running the tool failed"
+ex ./slorado basecaller models/$HAC $SUBSAMPLE -xcuda:all -B500M -c10000 -C900 > test/tmp.fastq || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")
 check_accuracy $HAC $MEDIAN
@@ -196,7 +196,7 @@ echo ""
 echo "********************************************************************"
 
 echo "GPU - HAC model - 20k reads"
-ex ./slorado basecaller models/$HAC $SUBSUBSAMPLE -xcuda:all -B500M -c10000 -C400 > test/tmp.fastq || die "Running the tool failed"
+ex ./slorado basecaller models/$HAC $SUBSUBSAMPLE -xcuda:all -B500M -c10000 -C900 > test/tmp.fastq || die "Running the tool failed"
 minimap2/minimap2 -cx map-ont $REFERENC_GENOME test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
 MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1 || die "datamash failed")
 check_accuracy $HAC $MEDIAN

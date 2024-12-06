@@ -6,17 +6,25 @@ on:
   pull_request:
     branches: [ '*' ]
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+# thanks https://github.com/dixyes/ghactionsplay/blob/main/.github/workflows/glibc217node20.yml
 
 jobs:
   ubuntu_16:
     name: Ubuntu 16
     runs-on: ubuntu-20.04
-    container: ubuntu:16.04
+    container:
+      image: ubuntu:16.04
+      volumes:
+        - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - name: nodejs
+      run: |
+        apt-get install -y wget xz-utils
+        wget https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+        tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
     - uses: actions/checkout@v2
       with:
         submodules: recursive
@@ -31,10 +39,19 @@ jobs:
   ubuntu_16_cuda:
     name: Ubuntu 16 CUDA
     runs-on: ubuntu-20.04
-    container: ubuntu:16.04
+    container:
+      image: ubuntu:16.04
+      volumes:
+        - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - name: nodejs
+      run: |
+        apt-get install -y wget xz-utils
+        wget https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+        tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
     - uses: actions/checkout@v2
       with:
         submodules: recursive
@@ -56,10 +73,19 @@ jobs:
   ubuntu_18:
     name: Ubuntu 18
     runs-on: ubuntu-20.04
-    container: ubuntu:18.04
+    container:
+      image: ubuntu:18.04
+      volumes:
+        - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - name: nodejs
+      run: |
+        apt-get install -y wget xz-utils
+        wget https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+        tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
     - uses: actions/checkout@v2
       with:
         submodules: recursive
