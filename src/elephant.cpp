@@ -34,6 +34,8 @@ SOFTWARE.
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
 #include "dorado/model_config.h"
+#include "dorado/CRFModel.h"
+#include "dorado/TxModel.h"
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
@@ -79,8 +81,17 @@ void init_runner(
     torch::ScalarType dtype
 ) {
     LOG_TRACE("initializing model runner for device %s", device.c_str());
+    bool use_tx = is_tx_model_config(model_path);
 
-    const auto model_config = load_crf_model_config(model_path);
+    CRFModelConfig model_config;
+
+    if (use_tx) {
+        model_config = load_tx_model_config(model_path);
+    } else {
+        model_config = load_lstm_model_config(model_path);
+    }
+    model_config.model_path = std::string(model_path);
+    
     LOG_TRACE("%s", "model config loaded");
 
     runner->model_stride = static_cast<size_t>(model_config.stride);
@@ -93,8 +104,13 @@ void init_runner(
     runner->model_config = model_config;
 
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
-    runner->module = load_crf_model(model_path, model_config, batch_size, chunk_size, runner->tensor_opts);
-    LOG_TRACE("%s", "model loaded");
+    if (use_tx) {
+        runner->module = load_tx_model(model_config, runner->tensor_opts);
+    } else {
+        runner->module = load_lstm_model(model_config, runner->tensor_opts);
+    }
+
+    LOG_TRACE("%s", "model populated");
 
     chunk_size -= chunk_size % runner->model_stride;
     runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
@@ -210,9 +226,13 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
     opt_t opt = core->opt;
 
     if (len_raw_signal > 0) {
+        // quick and dirty model config, todo: should move this to core
+        runner_t* runner = (*core->runners)[0];
+        auto signal_norm_params = runner->model_config.signal_norm_params;
+
         torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
 
-        scale_signal(signal, rec->range / rec->digitisation, rec->offset);
+        scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
         std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         (*db->chunks)[i] = chunks;

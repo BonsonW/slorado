@@ -46,6 +46,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/basecall.o \
 	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
 	  $(BUILD_DIR)/CRFModel.o \
+	  $(BUILD_DIR)/TxModel.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
 
@@ -121,6 +122,9 @@ $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o: thirdparty/dorado/signal_prep_st
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFModel.h src/error.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp thirdparty/dorado/TxModel.h src/error.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp thirdparty/dorado/model_config.h thirdparty/dorado/CRFModel.h src/error.h thirdparty/tomlc99
