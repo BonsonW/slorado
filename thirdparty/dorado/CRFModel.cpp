@@ -11,7 +11,8 @@ using Slice = torch::indexing::Slice;
 
 ConvStackImpl::ConvStackImpl(const std::vector<ConvParams> &layer_params) {
     for (size_t i = 0; i < layer_params.size(); ++i) {
-        auto &layer = layers.emplace_back(layer_params[i]);
+        layers.emplace_back(layer_params[i]);
+        auto &layer = layers.back();
         auto opts = Conv1dOptions(layer.params.insize, layer.params.size, layer.params.winlen)
             .stride(layer.params.stride)
             .padding(layer.params.winlen / 2);
