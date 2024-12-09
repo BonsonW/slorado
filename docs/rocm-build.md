@@ -40,7 +40,7 @@
 
 - By default it is assumed that you have ROCM on the standard location (`/opt/rocm`). You should have `hipcc` at `/opt/rocm/bin/hipcc` and the library files (.so files) at `/opt/rocm/lib`. If your ROCM is installed elsewhere,  you can specify the path manually as:
    ```
-   make rocm=1 ROCM_LIB=/path/to/rocm/
+   make rocm=1 ROCM_ROOT=/path/to/rocm/
    ```
    Make sure you have `hipcc` at `/path/to/rocm/bin/hipcc` and the library files at `/path/to/rocm/lib`.
 
