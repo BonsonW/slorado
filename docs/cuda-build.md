@@ -40,7 +40,7 @@
 
 - By default it is assumed that you have CUDA on the standard system location (`/usr/local/cuda/`). There should be the `nvcc` compiler at `/usr/local/cuda/bin/nvcc`. The library files (.a files) should be present under `/usr/local/cuda/lib64/`. If the CUDA location is different, you can specify the path manually as:
    ```
-   make cuda=1 CUDA_LIB=/path/to/cuda/
+   make cuda=1 CUDA_ROOT=/path/to/cuda/
    ```
    Make sure you have `nvcc` at `/path/to/cuda/bin/nvcc` and library files at `/path/to/cuda/lib64`.
 
