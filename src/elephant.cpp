@@ -37,6 +37,8 @@ SOFTWARE.
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
+#include "NvInfer.h"
+// #include "IEngine.h"
 #endif
 
 #ifdef HAVE_ROCM
@@ -78,6 +80,8 @@ void init_runner(
     int batch_size,
     torch::ScalarType dtype
 ) {
+
+    exit(1);
     LOG_TRACE("initializing model runner for device %s", device.c_str());
     bool use_tx = is_tx_model_config(model_path);
 
