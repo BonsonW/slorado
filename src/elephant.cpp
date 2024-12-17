@@ -243,3 +243,106 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         (*db->elephant->tensors)[i] = tensors;
     }
 }
+
+bool load_network(std::string trtModelPath) {
+    std::ifstream file(trtModelPath, std::ios::binary | std::ios::ate);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(size);
+    if (!file.read(buffer.data(), size)) {
+        auto msg = "Error, unable to read engine file";
+        ERROR(msg);
+        exit(EXIT_FAILURE)
+    }
+
+    // Create a runtime to deserialize the engine file.
+    runtime = std::unique_ptr<nvinfer1::IRuntime>{nvinfer1::createInferRuntime(logger)};
+    if (!runtime) {
+        return false;
+    }
+
+    // Set the device index
+    cudaSetDevice(m_options.deviceIndex);
+    checkCudaError();
+
+    // Create an engine, a representation of the optimized model.
+    m_engine = std::unique_ptr<nvinfer1::ICudaEngine>(runtime->deserializeCudaEngine(buffer.data(), buffer.size()));
+    if (!m_engine) {
+        return false;
+    }
+
+    // The execution context contains all of the state associated with a
+    // particular invocation
+    context = std::unique_ptr<nvinfer1::IExecutionContext>(m_engine->createExecutionContext());
+    if (!context) {
+        return false;
+    }
+
+    // Storage for holding the input and output buffers
+    // This will be passed to TensorRT for inference
+    clearGpuBuffers();
+    m_buffers.resize(m_engine->getNbIOTensors());
+
+    m_output_lens.clear();
+    m_input_dims.clear();
+    m_output_dims.clear();
+    m_io_tensor_names.clear();
+
+    // Create a cuda stream
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    checkCudaError();
+
+    // Allocate GPU memory for input and output buffers
+    m_output_lens.clear();
+    for (int i = 0; i < m_engine->getNbIOTensors(); ++i) {
+        const auto tensor_name = m_engine->getIOTensorName(i);
+        m_io_tensor_names.emplace_back(tensor_name);
+        const auto tensor_type = m_engine->getTensorIOMode(tensor_name);
+        const auto tensor_shape = m_engine->getTensorShape(tensor_name);
+        const auto tensor_dtype = m_engine->getTensorDataType(tensor_name);
+
+        if (tensor_type == nvinfer1::TensorIOMode::kINPUT) {
+            // The implementation currently only supports inputs of type float
+            if (m_engine->getTensorDataType(tensor_name) != nvinfer1::DataType::kHALF) {
+                ERROR("%s", "the implementation currently only supports half float inputs");
+                exit(EXIT_FAILURE)
+            }
+
+            // Don't need to allocate memory for inputs as we will be using the OpenCV
+            // GpuMat buffer directly.
+
+            // Store the input dims for later use
+            m_input_dims.emplace_back(tensor_shape.d[1], tensor_shape.d[2], tensor_shape.d[3]);
+            input_batch_size = tensor_shape.d[0];
+        } else if (tensor_type == nvinfer1::TensorIOMode::kOUTPUT) {
+            // The binding is an output
+            uint32_t output_len = 1;
+            m_output_dims.push_back(tensor_shape);
+
+            for (int j = 1; j < tensor_shape.nbDims; ++j) {
+                // We ignore j = 0 because that is the batch size, and we will take that
+                // into account when sizing the buffer
+                output_len *= tensor_shape.d[j];
+            }
+
+            m_output_lens.push_back(output_len);
+            // Now size the output buffer appropriately, taking into account the max
+            // possible batch size (although we could actually end up using less memory)
+            cudaMallocAsync(&m_buffers[i], output_len * m_options.maxBatchSize * sizeof(T), stream);
+            checkCudaError();
+        } else {=
+            ERROR("%s", "IO Tensor is neither an input or output");
+            exit(EXIT_FAILURE)
+        }
+    }
+
+    // Synchronize and destroy the cuda stream
+    cudaStreamSynchronize(stream);
+    checkCudaError();
+    cudaStreamDestroy(stream);
+    checkCudaError();
+
+    return true;
+}

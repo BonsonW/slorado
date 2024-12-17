@@ -217,8 +217,6 @@ void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::str
     qstring = std::accumulate(qstrings.begin(), qstrings.end(), std::string(""));
 }
 
-
-
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors) {
     auto weights = std::vector<torch::Tensor>();
     for (auto tensor : tensors) {
