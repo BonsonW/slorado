@@ -112,7 +112,7 @@ void init_runner(
 
     chunk_size -= chunk_size % runner->model_stride;
     runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
-    runner->chunk_size = runner->input_tensor.size(2);
+    runner->chunk_size = chunk_size;
 
     if (device != "cpu") {
 #ifdef USE_GPU
