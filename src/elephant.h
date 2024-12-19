@@ -33,7 +33,8 @@ struct runner_s {
     std::unique_ptr<nvinfer1::ICudaEngine> engine; //!< The TensorRT engine used to run the network
 
     std::map<std::string, std::string> io; //!< Input and output mapping of the network
-    std::unordered_map<std::string, float> tens_drange_map; //!< Mapping from tensor name to max absolute dynamic range values
+    std::unordered_map<std::string, void *> device_buffers; //!< Mapping from tensor name to buffer
+    std::unordered_map<std::string, void *> host_buffers; //!< Mapping from tensor name to buffer
 #endif
 #endif
 };

@@ -30,6 +30,7 @@ SOFTWARE.
 
 ******************************************************************************/
 #include "error.h"
+#include "buffers.h"
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
 #include "dorado/CRFModel.h"

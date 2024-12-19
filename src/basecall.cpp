@@ -75,13 +75,25 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 
     LOG_DEBUG("%s", "basecalling chunks");
     ts->time_infer -= realtime();
-    auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
-#ifdef USE_GPU
-    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
-#endif
+//     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
+// #ifdef USE_GPU
+//     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
+// #endif
     ts->time_infer += realtime();
 
     auto scores_TNC = scores;
+
+    FILE *fp;
+
+    fp = fopen("scores_dev.blob", "w");
+    F_CHK(fp, "scores_dev.blob");
+    if (fwrite(scores_TNC.data_ptr(), sizeof(float) / 2, scores_TNC.numel(), fp) != (size_t)scores_TNC.numel()) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
+    exit(0);
+
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
     scores_TNC = scores_TNC.transpose(0, 1).contiguous();
 #ifdef USE_GPU
