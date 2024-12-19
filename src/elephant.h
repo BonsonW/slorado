@@ -26,11 +26,14 @@ struct runner_s {
     openfish_gpubuf_t *gpubuf;
 
 #ifdef HAVE_CUDA
-    nvinfer1::Dims mInputDims;  //!< The dimensions of the input to the network.
-    nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
+    nvinfer1::Dims input_dims;  //!< The dimensions of the input to the network.
+    nvinfer1::Dims output_dims; //!< The dimensions of the output to the network.
 
-    nvinfer1::IRuntime mRuntime;   //!< The TensorRT runtime used to deserialize the engine
-    nvinfer1::ICudaEngine mEngine; //!< The TensorRT engine used to run the network
+    std::unique_ptr<nvinfer1::IRuntime> runtime;   //!< The TensorRT runtime used to deserialize the engine
+    std::unique_ptr<nvinfer1::ICudaEngine> engine; //!< The TensorRT engine used to run the network
+
+    std::map<std::string, std::string> io; //!< Input and output mapping of the network
+    std::unordered_map<std::string, float> tens_drange_map; //!< Mapping from tensor name to max absolute dynamic range values
 #endif
 #endif
 };

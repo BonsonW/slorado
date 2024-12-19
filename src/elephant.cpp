@@ -45,6 +45,54 @@ SOFTWARE.
 #include <c10/hip/HIPGuard.h>
 #endif
 
+bool trt_infer(runner_t* runner) {
+    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(runner->engine->createExecutionContext());
+    if (!context) {
+        return false;
+    }
+
+    for (int32_t i = 0, e = runner->engine->getNbIOTensors(); i < e; i++) {
+        auto const name = runner->engine->getIOTensorName(i);
+        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
+    }
+
+    // Read the input data into the managed buffers
+    // There should be just 1 input tensor
+    float *host_input_buffer = static_cast<float *>(buffers.getHostBuffer(m_io["input"]));
+    // todo: copy tensors into this
+
+    // Create CUDA stream for the execution of this inference
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    checkCudaError();
+
+    // Asynchronously copy data from host input buffers to device input buffers
+    buffers.copyInputToDeviceAsync(stream);
+
+    // Asynchronously enqueue the inference work
+    if (!context->enqueueV3(stream)) {
+        return false;
+    }
+
+    // Asynchronously copy data from device output buffers to host output buffers
+    buffers.copyOutputToHostAsync(stream);
+
+    // Wait for the work in the stream to complete
+    cudaStreamSynchronize(stream);
+    checkCudaError();
+
+    // Release stream
+    cudaStreamDestroy(stream);
+    checkCudaError();
+
+    // get scores
+    const float *scores = static_cast<const float *>(buffers.getHostBuffer(runner->io.at("output")));
+    // todo: dump into file
+
+    // Check and print the output of the inference
+    return true;
+}
+
 std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     std::vector<std::string> devices;
 
@@ -69,6 +117,66 @@ std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     devices.push_back(device_name + device_arg.substr(0, pos));
 
     return devices;
+}
+
+static void get_io_names(runner_t* runner) {
+    int32_t nbindings = runner->engine.get()->getNbIOTensors();
+    ASSERT(nbindings == 2);
+
+    for (int32_t b = 0; b < nbindings; ++b) {
+        auto const binding_name = runner->engine.get()->getIOTensorName(b);
+        nvinfer1::Dims dims = runner->engine.get()->getTensorShape(binding_name);
+        if (runner->engine.get()->getTensorIOMode(binding_name) == TensorIOMode::kINPUT) {
+            LOG_DEBUG("%s", "found input");
+            // sample::gLogInfo << "Found input: " << binding_name << " shape=" << dims
+            //                  << " dtype=" << static_cast<int32_t>(runner->engine.get()->getTensorDataType(binding_name))
+            //                  << std::endl;
+            runner->io["input"] = binding_name;
+        } else {
+            LOG_DEBUG("%s", "found output");
+            // sample::gLogInfo << "Found output: " << binding_name << " shape=" << dims
+            //                  << " dtype=" << static_cast<int32_t>(runner->engine.get()->getTensorDataType(binding_name))
+            //                  << std::endl;
+            runner->io["output"] = binding_name;
+        }
+    }
+}
+
+static bool load_trt_network(runner_t* runner, char *trt_model_path) {
+    std::ifstream file(trt_model_path, std::ios::binary | std::ios::ate);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(size);
+    if (!file.read(buffer.data(), size)) {
+        ERROR("%s", "unable to read engine file");
+        return false;
+    }
+
+    // create a runtime to deserialize the engine file.
+    runner->runtime = std::unique_ptr<nvinfer1::IRuntime>(
+        nvinfer1::createInferRuntime(logger)
+    );
+    if (!runner->runtime) {
+        ERROR("%s", "unable to initialise nvinfer runtime");
+        return false;
+    }
+
+    // create an engine, a representation of the optimized model.
+    runner->engine = std::unique_ptr<nvinfer1::ICudaEngine>(
+        runner->runtime->deserializeCudaEngine(buffer.data(), buffer.size())
+    );
+    if (!runner->engine) {
+        ERROR("%s", "unable to initialise nvinfer cuda engine");
+        return false;
+    }
+
+    get_io_names(runner);
+
+    runner->input_dims = runner->engine.get()->getTensorShape(m_io["input"].c_str());
+    runner->output_dims = runner->engine.get()->getTensorShape(m_io["output"].c_str());
+
+    return true;
 }
 
 /* initialise runners */
@@ -106,16 +214,16 @@ void init_runner(
     runner->model_config = model_config;
 
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
-    if (use_tx) {
-        runner->module = load_tx_model(model_config, runner->tensor_opts);
-    } else {
-        runner->module = load_lstm_model(model_config, runner->tensor_opts);
-    }
+    // if (use_tx) {
+    //     runner->module = load_tx_model(model_config, runner->tensor_opts);
+    // } else {
+    //     runner->module = load_lstm_model(model_config, runner->tensor_opts);
+    // }
 
     LOG_TRACE("%s", "model populated");
 
     chunk_size -= chunk_size % runner->model_stride;
-    runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
+    // runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     runner->chunk_size = runner->input_tensor.size(2);
 
     if (device != "cpu") {
@@ -130,6 +238,7 @@ void init_runner(
         c10::hip::HIPGuard device_guard(device_idx);
 #endif
         runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
+        load_trt_network(runner, model_path);
 #endif        
     }
 
@@ -242,107 +351,4 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
         (*db->elephant->tensors)[i] = tensors;
     }
-}
-
-bool load_network(std::string trtModelPath) {
-    std::ifstream file(trtModelPath, std::ios::binary | std::ios::ate);
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    std::vector<char> buffer(size);
-    if (!file.read(buffer.data(), size)) {
-        auto msg = "Error, unable to read engine file";
-        ERROR(msg);
-        exit(EXIT_FAILURE)
-    }
-
-    // Create a runtime to deserialize the engine file.
-    runtime = std::unique_ptr<nvinfer1::IRuntime>{nvinfer1::createInferRuntime(logger)};
-    if (!runtime) {
-        return false;
-    }
-
-    // Set the device index
-    cudaSetDevice(m_options.deviceIndex);
-    checkCudaError();
-
-    // Create an engine, a representation of the optimized model.
-    m_engine = std::unique_ptr<nvinfer1::ICudaEngine>(runtime->deserializeCudaEngine(buffer.data(), buffer.size()));
-    if (!m_engine) {
-        return false;
-    }
-
-    // The execution context contains all of the state associated with a
-    // particular invocation
-    context = std::unique_ptr<nvinfer1::IExecutionContext>(m_engine->createExecutionContext());
-    if (!context) {
-        return false;
-    }
-
-    // Storage for holding the input and output buffers
-    // This will be passed to TensorRT for inference
-    clearGpuBuffers();
-    m_buffers.resize(m_engine->getNbIOTensors());
-
-    m_output_lens.clear();
-    m_input_dims.clear();
-    m_output_dims.clear();
-    m_io_tensor_names.clear();
-
-    // Create a cuda stream
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-    checkCudaError();
-
-    // Allocate GPU memory for input and output buffers
-    m_output_lens.clear();
-    for (int i = 0; i < m_engine->getNbIOTensors(); ++i) {
-        const auto tensor_name = m_engine->getIOTensorName(i);
-        m_io_tensor_names.emplace_back(tensor_name);
-        const auto tensor_type = m_engine->getTensorIOMode(tensor_name);
-        const auto tensor_shape = m_engine->getTensorShape(tensor_name);
-        const auto tensor_dtype = m_engine->getTensorDataType(tensor_name);
-
-        if (tensor_type == nvinfer1::TensorIOMode::kINPUT) {
-            // The implementation currently only supports inputs of type float
-            if (m_engine->getTensorDataType(tensor_name) != nvinfer1::DataType::kHALF) {
-                ERROR("%s", "the implementation currently only supports half float inputs");
-                exit(EXIT_FAILURE)
-            }
-
-            // Don't need to allocate memory for inputs as we will be using the OpenCV
-            // GpuMat buffer directly.
-
-            // Store the input dims for later use
-            m_input_dims.emplace_back(tensor_shape.d[1], tensor_shape.d[2], tensor_shape.d[3]);
-            input_batch_size = tensor_shape.d[0];
-        } else if (tensor_type == nvinfer1::TensorIOMode::kOUTPUT) {
-            // The binding is an output
-            uint32_t output_len = 1;
-            m_output_dims.push_back(tensor_shape);
-
-            for (int j = 1; j < tensor_shape.nbDims; ++j) {
-                // We ignore j = 0 because that is the batch size, and we will take that
-                // into account when sizing the buffer
-                output_len *= tensor_shape.d[j];
-            }
-
-            m_output_lens.push_back(output_len);
-            // Now size the output buffer appropriately, taking into account the max
-            // possible batch size (although we could actually end up using less memory)
-            cudaMallocAsync(&m_buffers[i], output_len * m_options.maxBatchSize * sizeof(T), stream);
-            checkCudaError();
-        } else {=
-            ERROR("%s", "IO Tensor is neither an input or output");
-            exit(EXIT_FAILURE)
-        }
-    }
-
-    // Synchronize and destroy the cuda stream
-    cudaStreamSynchronize(stream);
-    checkCudaError();
-    cudaStreamDestroy(stream);
-    checkCudaError();
-
-    return true;
 }
