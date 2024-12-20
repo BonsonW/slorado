@@ -73,6 +73,16 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
 
+    FILE *fp;
+
+    fp = fopen("input_dev_C1.blob", "w");
+    F_CHK(fp, "input_dev_C1.blob");
+    if (fwrite(runner->input_tensor.data_ptr(), sizeof(float) / 2, runner->input_tensor.numel(), fp) != (size_t)runner->input_tensor.numel()) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
+
     LOG_DEBUG("%s", "basecalling chunks");
     ts->time_infer -= realtime();
     auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
@@ -83,10 +93,8 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 
     auto scores_TNC = scores.contiguous().to("cpu");
 
-    FILE *fp;
-
-    fp = fopen("scores_dev.blob", "w");
-    F_CHK(fp, "scores_dev.blob");
+    fp = fopen("scores_dev_C1.blob", "w");
+    F_CHK(fp, "scores_dev_C1.blob");
     if (fwrite(scores_TNC.data_ptr(), sizeof(float) / 2, scores_TNC.numel(), fp) != (size_t)scores_TNC.numel()) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
