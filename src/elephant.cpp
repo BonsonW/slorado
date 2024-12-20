@@ -76,8 +76,8 @@ bool trt_infer(
     }
     auto d = runner->input_dims.d[0] * runner->input_dims.d[1] * runner->input_dims.d[2];
 
-    fp = fopen("input_trt.blob", "w");
-    F_CHK(fp, "input_trt.blob");
+    fp = fopen("input_trt_C1.blob", "w");
+    F_CHK(fp, "input_trt_C1.blob");
     if (fwrite(host_input_buffer, sizeof(float) / 2, d, fp) != d) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -114,8 +114,8 @@ bool trt_infer(
     fprintf(stderr, "output sizes: %ld, %ld, %ld\n", runner->output_dims.d[0], runner->output_dims.d[1], runner->output_dims.d[2]);
     auto k = runner->output_dims.d[0] * runner->output_dims.d[1] * runner->output_dims.d[2];
 
-    fp = fopen("scores_trt.blob", "w");
-    F_CHK(fp, "scores_trt.blob");
+    fp = fopen("scores_trt_C1.blob", "w");
+    F_CHK(fp, "scores_trt_C1.blob");
     if (fwrite(scores, sizeof(float) / 2, k, fp) != k) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
