@@ -54,6 +54,7 @@ bool trt_infer(
     const core_t* core,
     const int runner_idx
 ) {
+    FILE *fp;
     runner_t* runner = (*core->runners)[runner_idx];
 
     auto context = std::unique_ptr<nvinfer1::IExecutionContext>(runner->engine->createExecutionContext());
@@ -69,10 +70,19 @@ bool trt_infer(
     }
 
     // read the input data into the managed buffers
-    float *host_input_buffer = static_cast<float *>(buffers.getHostBuffer(runner->io["input"]));
+    void *host_input_buffer = static_cast<float *>(buffers.getHostBuffer(runner->io["input"]));
     for (size_t i = 0; i < tensors.size(); ++i) {
         memcpy((void *)(host_input_buffer + (i * runner->chunk_size)), (void *)tensors[i].data_ptr(), tensors[i].numel() * (sizeof(float) / 2));
     }
+    auto d = runner->input_dims.d[0] * runner->input_dims.d[1] * runner->input_dims.d[2];
+
+    fp = fopen("input_trt.blob", "w");
+    F_CHK(fp, "input_trt.blob");
+    if (fwrite(host_input_buffer, sizeof(float) / 2, d, fp) != d) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
 
     // Create CUDA stream for the execution of this inference
     cudaStream_t stream;
@@ -101,15 +111,12 @@ bool trt_infer(
     // get scores
     const void *scores = buffers.getHostBuffer(runner->io.at("output"));
 
-    FILE *fp;
-
-    const int T = 1666;
-    const int N = 1;
-    const int C = runner->chunk_size;
+    fprintf(stderr, "output sizes: %ld, %ld, %ld\n", runner->output_dims.d[0], runner->output_dims.d[1], runner->output_dims.d[2]);
+    auto k = runner->output_dims.d[0] * runner->output_dims.d[1] * runner->output_dims.d[2];
 
     fp = fopen("scores_trt.blob", "w");
     F_CHK(fp, "scores_trt.blob");
-    if (fwrite(scores, sizeof(float) / 2, T * N * C, fp) != T * N * C) {
+    if (fwrite(scores, sizeof(float) / 2, k, fp) != k) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
