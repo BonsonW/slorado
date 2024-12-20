@@ -30,7 +30,6 @@ SOFTWARE.
 
 ******************************************************************************/
 #include "error.h"
-#include "buffers.h"
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
 #include "dorado/CRFModel.h"
@@ -39,6 +38,8 @@ SOFTWARE.
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
 #include "NvInfer.h"
+#include "logger.h"
+#include "buffers.h"
 // #include "IEngine.h"
 #endif
 
@@ -46,21 +47,32 @@ SOFTWARE.
 #include <c10/hip/HIPGuard.h>
 #endif
 
-bool trt_infer(runner_t* runner) {
+bool trt_infer(
+    std::vector<torch::Tensor> tensors,
+    std::vector<Chunk *> chunks,
+    const int chunk_size,
+    const core_t* core,
+    const int runner_idx
+) {
+    runner_t* runner = (*core->runners)[runner_idx];
+
     auto context = std::unique_ptr<nvinfer1::IExecutionContext>(runner->engine->createExecutionContext());
     if (!context) {
         return false;
     }
+
+    BufferManager buffers(runner->engine);
 
     for (int32_t i = 0, e = runner->engine->getNbIOTensors(); i < e; i++) {
         auto const name = runner->engine->getIOTensorName(i);
         context->setTensorAddress(name, buffers.getDeviceBuffer(name));
     }
 
-    // Read the input data into the managed buffers
-    // There should be just 1 input tensor
-    float *host_input_buffer = static_cast<float *>(buffers.getHostBuffer(m_io["input"]));
-    // todo: copy tensors into this
+    // read the input data into the managed buffers
+    float *host_input_buffer = static_cast<float *>(buffers.getHostBuffer(runner->io["input"]));
+    for (size_t i = 0; i < tensors.size(); ++i) {
+        memcpy((void *)(host_input_buffer + (i * runner->chunk_size)), (void *)tensors[i].data_ptr(), tensors[i].numel() * (sizeof(float) / 2));
+    }
 
     // Create CUDA stream for the execution of this inference
     cudaStream_t stream;
@@ -87,8 +99,22 @@ bool trt_infer(runner_t* runner) {
     checkCudaError();
 
     // get scores
-    const float *scores = static_cast<const float *>(buffers.getHostBuffer(runner->io.at("output")));
-    // todo: dump into file
+    const void *scores = buffers.getHostBuffer(runner->io.at("output"));
+
+    FILE *fp;
+
+    const int T = 1666;
+    const int N = 1;
+    const int C = runner->chunk_size;
+
+    fp = fopen("scores_trt.blob", "w");
+    F_CHK(fp, "scores_trt.blob");
+    if (fwrite(scores, sizeof(float) / 2, T * N * C, fp) != T * N * C) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
+    exit(0);
 
     // Check and print the output of the inference
     return true;
@@ -127,7 +153,7 @@ static void get_io_names(runner_t* runner) {
     for (int32_t b = 0; b < nbindings; ++b) {
         auto const binding_name = runner->engine.get()->getIOTensorName(b);
         nvinfer1::Dims dims = runner->engine.get()->getTensorShape(binding_name);
-        if (runner->engine.get()->getTensorIOMode(binding_name) == TensorIOMode::kINPUT) {
+        if (runner->engine.get()->getTensorIOMode(binding_name) == nvinfer1::TensorIOMode::kINPUT) {
             LOG_DEBUG("%s", "found input");
             // sample::gLogInfo << "Found input: " << binding_name << " shape=" << dims
             //                  << " dtype=" << static_cast<int32_t>(runner->engine.get()->getTensorDataType(binding_name))
@@ -154,9 +180,11 @@ static bool load_trt_network(runner_t* runner, char *trt_model_path) {
         return false;
     }
 
+    runner->logger = std::make_unique<Logger>(Severity::kINFO);
+
     // create a runtime to deserialize the engine file.
     runner->runtime = std::unique_ptr<nvinfer1::IRuntime>(
-        nvinfer1::createInferRuntime(logger)
+        nvinfer1::createInferRuntime(*runner->logger)
     );
     if (!runner->runtime) {
         ERROR("%s", "unable to initialise nvinfer runtime");
@@ -164,7 +192,7 @@ static bool load_trt_network(runner_t* runner, char *trt_model_path) {
     }
 
     // create an engine, a representation of the optimized model.
-    runner->engine = std::unique_ptr<nvinfer1::ICudaEngine>(
+    runner->engine = std::shared_ptr<nvinfer1::ICudaEngine>(
         runner->runtime->deserializeCudaEngine(buffer.data(), buffer.size())
     );
     if (!runner->engine) {
@@ -174,8 +202,8 @@ static bool load_trt_network(runner_t* runner, char *trt_model_path) {
 
     get_io_names(runner);
 
-    runner->input_dims = runner->engine.get()->getTensorShape(m_io["input"].c_str());
-    runner->output_dims = runner->engine.get()->getTensorShape(m_io["output"].c_str());
+    runner->input_dims = runner->engine.get()->getTensorShape(runner->io["input"].c_str());
+    runner->output_dims = runner->engine.get()->getTensorShape(runner->io["output"].c_str());
 
     return true;
 }
@@ -189,8 +217,6 @@ void init_runner(
     int batch_size,
     torch::ScalarType dtype
 ) {
-
-    exit(1);
     LOG_TRACE("initializing model runner for device %s", device.c_str());
     bool use_tx = is_tx_model_config(model_path);
 
@@ -227,6 +253,8 @@ void init_runner(
     // runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     runner->chunk_size = chunk_size;
 
+    char *trt_model_path = "/data/bonwon/models_trt/420_sup.trt";
+
     if (device != "cpu") {
 #ifdef USE_GPU
         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
@@ -239,7 +267,7 @@ void init_runner(
         c10::hip::HIPGuard device_guard(device_idx);
 #endif
         runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
-        load_trt_network(runner, model_path);
+        load_trt_network(runner, trt_model_path);
 #endif        
     }
 

@@ -72,11 +72,12 @@ ifdef cuda
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
 
-	TRT_ROOT ?= /data/bonwon/onnx_convert/TensorRT-10.7.0.23
+	TRT_ROOT ?= /data/bonwon/TensorRT-10.7.0.23
 	TRT_LIB ?= $(TRT_ROOT)/lib
 	TRT_INC ?= $(TRT_ROOT)/include
 	CPPFLAGS += -I $(TRT_INC)
-	LDFLAGS += -L$(TRT_LIB)
+	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(TRT_LIB)/libnvinfer.so"
+	LDFLAGS += -L$(TRT_LIB) -lrt -ldl
 else ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1 -DHAVE_ROCM=1 -D__HIP_PLATFORM_AMD__
 	ROCM_ROOT ?= /opt/rocm

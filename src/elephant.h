@@ -7,6 +7,19 @@
 #include "slorado.h"
 #include "dorado/model_config.h"
 
+#ifdef HAVE_CUDA
+#include "NvInfer.h"
+#include "logger.h"
+#endif
+
+bool trt_infer(
+    std::vector<torch::Tensor> tensors,
+    std::vector<Chunk *> chunks,
+    const int chunk_size,
+    const core_t* core,
+    const int runner_idx
+);
+
 struct elephant_s {
     std::vector<std::vector<torch::Tensor>> *tensors;
 };
@@ -30,11 +43,11 @@ struct runner_s {
     nvinfer1::Dims output_dims; //!< The dimensions of the output to the network.
 
     std::unique_ptr<nvinfer1::IRuntime> runtime;   //!< The TensorRT runtime used to deserialize the engine
-    std::unique_ptr<nvinfer1::ICudaEngine> engine; //!< The TensorRT engine used to run the network
+    std::shared_ptr<nvinfer1::ICudaEngine> engine; //!< The TensorRT engine used to run the network
 
     std::map<std::string, std::string> io; //!< Input and output mapping of the network
-    std::unordered_map<std::string, void *> device_buffers; //!< Mapping from tensor name to buffer
-    std::unordered_map<std::string, void *> host_buffers; //!< Mapping from tensor name to buffer
+
+    std::unique_ptr<Logger> logger;
 #endif
 #endif
 };

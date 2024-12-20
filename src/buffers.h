@@ -19,6 +19,7 @@
 
 #include "NvInfer.h"
 #include "half.h"
+#include "cuda_utils.h"
 #include <cassert>
 #include <cuda_runtime_api.h>
 #include <iostream>
@@ -29,13 +30,13 @@
 #include <string>
 #include <vector>
 
-inline int64_t volume(nvinfer1::Dims const& dims, int32_t start, int32_t stop)
-{
-    ASSERT(start >= 0);
-    ASSERT(start <= stop);
-    ASSERT(stop <= dims.nbDims);
-    ASSERT(std::all_of(dims.d + start, dims.d + stop, [](int32_t x) { return x >= 0; }));
-    return std::accumulate(dims.d + start, dims.d + stop, int64_t{1}, std::multiplies<int64_t>{});
+template <typename A, typename B>
+inline A divUp(A x, B n) {
+    return (x + n - 1) / n;
+}
+
+inline int64_t volume(nvinfer1::Dims const& d) {
+    return std::accumulate(d.d, d.d + d.nbDims, int64_t{1}, std::multiplies<int64_t>{});
 }
 
 inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
@@ -459,10 +460,13 @@ private:
             const cudaMemcpyKind memcpyType = deviceToHost ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice;
             if ((copyInput && tenosrIsInput(n.first)) || (!copyInput && !tenosrIsInput(n.first)))
             {
-                if (async)
-                    CHECK(cudaMemcpyAsync(dstPtr, srcPtr, byteSize, memcpyType, stream));
-                else
-                    CHECK(cudaMemcpy(dstPtr, srcPtr, byteSize, memcpyType));
+                if (async) {
+                    cudaMemcpyAsync(dstPtr, srcPtr, byteSize, memcpyType, stream);
+                    checkCudaError();
+                } else {
+                    cudaMemcpy(dstPtr, srcPtr, byteSize, memcpyType);
+                    checkCudaError();
+                }
             }
         }
     }
