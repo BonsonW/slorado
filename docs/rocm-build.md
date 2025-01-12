@@ -27,7 +27,7 @@
 5. Call make
 
     ```
-    make cuda=1 -j
+    make rocm=1 -j
     ```
 
 6. See the slorado version
