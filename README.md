@@ -47,9 +47,9 @@ scripts/download-models.sh
 Now run on a test dataset:
 ```
 # for CPU
-./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5 -o reads.fastq
+./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
 # for GPU
-./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/oneread_r10.blow5 -o reads.fastq
+./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
 ```
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems. We are currently working on supporting the newer v5 basecalling models.
