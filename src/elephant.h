@@ -48,6 +48,8 @@ struct runner_s {
     std::map<std::string, std::string> io; //!< Input and output mapping of the network
 
     std::unique_ptr<Logger> logger;
+
+    std::unique_ptr<nvinfer1::IExecutionContext> context;
 #endif
 #endif
 };

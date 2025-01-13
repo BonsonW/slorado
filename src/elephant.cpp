@@ -34,11 +34,10 @@ SOFTWARE.
 #include "dorado/signal_prep_stitch_tensor_utils.h"
 #include "dorado/CRFModel.h"
 #include "dorado/TxModel.h"
+#include <openfish/openfish.h>
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
-#include "NvInfer.h"
-#include "logger.h"
 #include "buffers.h"
 // #include "IEngine.h"
 #endif
@@ -46,6 +45,12 @@ SOFTWARE.
 #ifdef HAVE_ROCM
 #include <c10/hip/HIPGuard.h>
 #endif
+
+struct DecodedChunk {
+    std::string sequence;
+    std::string qstring;
+    std::vector<uint8_t> moves;
+};
 
 bool trt_infer(
     std::vector<torch::Tensor> tensors,
@@ -57,32 +62,39 @@ bool trt_infer(
     FILE *fp;
     runner_t* runner = (*core->runners)[runner_idx];
 
-    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(runner->engine->createExecutionContext());
-    if (!context) {
-        return false;
-    }
-
+#ifdef USE_GPU
+#ifdef HAVE_CUDA
+    c10::cuda::CUDAGuard device_guard(runner->device_idx);
+#endif
+#ifdef HAVE_ROCM
+    c10::hip::HIPGuard device_guard(runner->device_idx);
+#endif
+#endif
     BufferManager buffers(runner->engine);
 
     for (int32_t i = 0, e = runner->engine->getNbIOTensors(); i < e; i++) {
         auto const name = runner->engine->getIOTensorName(i);
-        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
+        runner->context->setTensorAddress(name, buffers.getDeviceBuffer(name));
     }
-
+    
+    LOG_DEBUG("%s", "copying input");
+    fprintf(stderr, "input sizes: %ld, %ld, %ld\n", runner->input_dims.d[0], runner->input_dims.d[1], runner->input_dims.d[2]);
     // read the input data into the managed buffers
     void *host_input_buffer = static_cast<float *>(buffers.getHostBuffer(runner->io["input"]));
     for (size_t i = 0; i < tensors.size(); ++i) {
         memcpy((void *)(host_input_buffer + (i * runner->chunk_size)), (void *)tensors[i].data_ptr(), tensors[i].numel() * (sizeof(float) / 2));
     }
-    auto d = runner->input_dims.d[0] * runner->input_dims.d[1] * runner->input_dims.d[2];
+    // auto d = runner->input_dims.d[0] * runner->input_dims.d[1] * runner->input_dims.d[2];
 
-    fp = fopen("input_trt_C1.blob", "w");
-    F_CHK(fp, "input_trt_C1.blob");
-    if (fwrite(host_input_buffer, sizeof(float) / 2, d, fp) != d) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
+    // fp = fopen("input_trt_C1.blob", "w");
+    // F_CHK(fp, "input_trt_C1.blob");
+    // if (fwrite(host_input_buffer, sizeof(float) / 2, d, fp) != d) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    LOG_DEBUG("%s", "moving buffers");
 
     // Create CUDA stream for the execution of this inference
     cudaStream_t stream;
@@ -93,12 +105,12 @@ bool trt_infer(
     buffers.copyInputToDeviceAsync(stream);
 
     // Asynchronously enqueue the inference work
-    if (!context->enqueueV3(stream)) {
+    if (!runner->context->enqueueV3(stream)) {
         return false;
     }
 
     // Asynchronously copy data from device output buffers to host output buffers
-    buffers.copyOutputToHostAsync(stream);
+    // buffers.copyOutputToHostAsync(stream);
 
     // Wait for the work in the stream to complete
     cudaStreamSynchronize(stream);
@@ -108,20 +120,82 @@ bool trt_infer(
     cudaStreamDestroy(stream);
     checkCudaError();
 
+    LOG_DEBUG("%s", "inference done");
+
     // get scores
-    const void *scores = buffers.getHostBuffer(runner->io.at("output"));
+    void *scores_TNC = buffers.getDeviceBuffer(runner->io.at("output"));
 
     fprintf(stderr, "output sizes: %ld, %ld, %ld\n", runner->output_dims.d[0], runner->output_dims.d[1], runner->output_dims.d[2]);
-    auto k = runner->output_dims.d[0] * runner->output_dims.d[1] * runner->output_dims.d[2];
+    // auto k = runner->output_dims.d[0] * runner->output_dims.d[1] * runner->output_dims.d[2];
 
-    fp = fopen("scores_trt_C1.blob", "w");
-    F_CHK(fp, "scores_trt_C1.blob");
-    if (fwrite(scores, sizeof(float) / 2, k, fp) != k) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    // fp = fopen("scores_trt_C1.blob", "w");
+    // F_CHK(fp, "scores_trt_C1.blob");
+    // if (fwrite(scores_TNC, sizeof(float) / 2, k, fp) != k) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+    // exit(0);
+
+    const int T = runner->output_dims.d[0];
+    const int N = runner->output_dims.d[1];
+    const int C = runner->output_dims.d[2];
+    const int state_len = runner->model_config.state_len;
+    int nthreads = core->opt.num_thread / core->runners->size();
+
+    uint8_t *moves;
+    char *sequence;
+    char *qstring;
+
+    LOG_DEBUG("%s", "decoding scores");
+
+    if (runner->device == "cpu") {
+        openfish_decode_cpu(T, N, C, nthreads, scores_TNC, state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+    } else {
+#ifdef USE_GPU
+        openfish_decode_gpu(T, N, C, scores_TNC, state_len, &runner->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+#else
+        ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
         exit(EXIT_FAILURE);
+#endif
     }
-    fclose(fp);
-    exit(0);
+
+    std::vector<DecodedChunk> decoded_chunks(chunks.size());
+    for (size_t chunk = 0; chunk < decoded_chunks.size(); ++chunk) {
+        size_t idx = chunk * T;
+        decoded_chunks[chunk] = {
+            std::string(sequence + idx),
+            std::string(qstring + idx),
+            std::vector<uint8_t>(moves + idx, moves + idx + T),
+        };
+
+        if (decoded_chunks[chunk].sequence.size() == 0) {
+            ERROR("%s", "empty sequence returned by decoder");
+            exit(EXIT_FAILURE);
+        }
+
+        if (decoded_chunks[chunk].qstring.size() == 0) {
+            ERROR("%s", "empty qstring returned by decoder");
+            exit(EXIT_FAILURE);
+        }
+
+        size_t seq_size = decoded_chunks[chunk].sequence.size();
+        size_t qstr_size = decoded_chunks[chunk].qstring.size();
+        if (seq_size != qstr_size) {
+            ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        chunks[i]->seq = decoded_chunks[i].sequence;
+        chunks[i]->qstring = decoded_chunks[i].qstring;
+        chunks[i]->moves = decoded_chunks[i].moves;
+    }
+
+    free(moves);
+    free(sequence);
+    free(qstring);
 
     // Check and print the output of the inference
     return true;
@@ -211,6 +285,11 @@ static bool load_trt_network(runner_t* runner, char *trt_model_path) {
 
     runner->input_dims = runner->engine.get()->getTensorShape(runner->io["input"].c_str());
     runner->output_dims = runner->engine.get()->getTensorShape(runner->io["output"].c_str());
+
+    runner->context = std::unique_ptr<nvinfer1::IExecutionContext>(runner->engine->createExecutionContext());
+    if (!runner->context) {
+        return false;
+    }
 
     return true;
 }
