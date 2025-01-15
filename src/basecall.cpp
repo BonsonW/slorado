@@ -49,12 +49,6 @@ SOFTWARE.
 #include <c10/hip/HIPGuard.h>
 #endif
 
-struct DecodedChunk {
-    std::string sequence;
-    std::string qstring;
-    std::vector<uint8_t> moves;
-};
-
 typedef struct {
     core_t* core;
     db_t* db;
@@ -63,12 +57,12 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-void accept_chunk(const int num_chunks, at::Tensor slice, const core_t* core, const int runner_idx) {
+static void accept_chunk(const int num_chunks, at::Tensor slice, const core_t* core, const int runner_idx) {
     runner_t* runner = (*core->runners)[runner_idx];
     runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
 
-void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const core_t* core, const int runner_idx) {
+static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const int runner_idx) {
     torch::InferenceMode guard;
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
@@ -120,24 +114,22 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
-        chunks[chunk] = {
-            std::string(sequence + idx),
-            std::string(qstring + idx),
-            std::vector<uint8_t>(moves + idx, moves + idx + T),
-        };
+        chunks[chunk]->seq = std::string(sequence + idx);
+        chunks[chunk]->qstring = std::string(qstring + idx);
+        chunks[chunk]->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
 
-        if (chunks[chunk].sequence.size() == 0) {
+        if (chunks[chunk]->seq.size() == 0) {
             ERROR("%s", "empty sequence returned by decoder");
             exit(EXIT_FAILURE);
         }
 
-        if (chunks[chunk].qstring.size() == 0) {
+        if (chunks[chunk]->qstring.size() == 0) {
             ERROR("%s", "empty qstring returned by decoder");
             exit(EXIT_FAILURE);
         }
 
-        size_t seq_size = chunks[chunk].sequence.size();
-        size_t qstr_size = chunks[chunk].qstring.size();
+        size_t seq_size = chunks[chunk]->seq.size();
+        size_t qstr_size = chunks[chunk]->qstring.size();
         if (seq_size != qstr_size) {
             ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
             exit(EXIT_FAILURE);
@@ -150,7 +142,7 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
     free(qstring);
 }
 
-void basecall_chunks(
+static void basecall_chunks(
     std::vector<torch::Tensor> tensors,
     std::vector<Chunk *> chunks,
     const int chunk_size,
@@ -164,19 +156,12 @@ void basecall_chunks(
         ts->time_accept += realtime();
     }
 
-    std::vector<DecodedChunk> decoded_chunks(chunks.size());
     ts->time_decode -= realtime();
-    call_chunks(decoded_chunks, chunks.size(), core, runner_idx);
+    call_chunks(chunks, core, runner_idx);
     ts->time_decode += realtime();
-
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        chunks[i]->seq = decoded_chunks[i].sequence;
-        chunks[i]->qstring = decoded_chunks[i].qstring;
-        chunks[i]->moves = decoded_chunks[i].moves;
-    }
 }
 
-void* pthread_single_basecall(void* voidargs) {
+static void* pthread_single_basecall(void* voidargs) {
     model_thread_arg_t* args = (model_thread_arg_t*)voidargs;
     db_t* db = args->db;
     core_t* core = args->core;
