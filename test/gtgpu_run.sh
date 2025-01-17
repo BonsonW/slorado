@@ -10,7 +10,7 @@ if [ "$MODEL" = "fast" ]; then
     BATCH_SIZE=1000
 fi
 if [ "$MODEL" = "hac" ]; then
-    BATCH_SIZE=400
+    BATCH_SIZE=1000
 fi
 if [ "$MODEL" = "sup" ]; then
     BATCH_SIZE=300
