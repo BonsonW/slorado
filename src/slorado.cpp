@@ -56,24 +56,15 @@ void free_runners(core_t *core);
 void init_elephant(db_t *db);
 void free_elephant(db_t *db);
 void preprocess_signal(core_t* core, db_t* db, int32_t i);
-void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::string &qstring);
+void stitch_chunks(std::vector<Chunk> &chunks, std::string &sequence, std::string &qstring);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)malloc(sizeof(core_t));
     MALLOC_CHK(core);
+    memset(core, 0, sizeof(core_t));
 
     core->realtime0 = realtime0;
-
-    core->time_init_runners = 0;
-    core->time_sync = 0;
-    core->time_load_db = 0;
-    core->time_process_db = 0;
-    core->time_preproc = 0;
-    core->time_basecall = 0;
-    core->time_postproc = 0;
-    core->time_output = 0;
-    core->time_parse = 0;
 
     core->sp = slow5_open(slow5file, "r");
     if (core->sp == NULL) {
@@ -83,9 +74,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
-    LOG_DEBUG("%s", "successfully initialized runners");
-
     core->time_init_runners += realtime();
+    LOG_DEBUG("%s", "successfully initialized runners");
 
     core->sum_bytes=0;
     core->total_reads=0; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
@@ -126,7 +116,7 @@ db_t* init_db(core_t* core) {
     MALLOC_CHK(db->means);
 
 
-    db->chunks = new std::vector<std::vector<Chunk *>>(db->capacity_rec, std::vector<Chunk *>());
+    db->chunks = new std::vector<std::vector<Chunk>>(db->capacity_rec, std::vector<Chunk>());
 
     init_elephant(db);
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
@@ -190,7 +180,7 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     uint64_t len_raw_signal = rec->len_raw_signal;
 
     if (len_raw_signal > 0) {
-        std::vector<Chunk *> chunks = (*db->chunks)[i];
+        std::vector<Chunk> &chunks = (*db->chunks)[i];
 
         std::string sequence;
         std::string qstring;
@@ -261,7 +251,6 @@ void free_db_tmp(db_t* db) {
         free(db->mem_records[i]);
         free((*db->sequence)[i]);
         free((*db->qstring)[i]);
-        for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
         (*db->chunks)[i].clear();
     }
 }

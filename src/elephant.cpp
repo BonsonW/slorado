@@ -30,6 +30,7 @@ SOFTWARE.
 
 ******************************************************************************/
 #include "error.h"
+#include "misc.h"
 #include "elephant.h"
 #include "dorado/signal_prep_stitch_tensor_utils.h"
 #include "dorado/CRFModel.h"
@@ -219,6 +220,8 @@ void free_elephant(db_t *db) {
 }
 
 void preprocess_signal(core_t *core, db_t *db, int32_t i) {
+    torch::InferenceMode inference_mode_guard;
+
     slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
@@ -228,11 +231,11 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         runner_t* runner = (*core->runners)[0];
         auto signal_norm_params = runner->model_config.signal_norm_params;
 
-        torch::Tensor signal = tensor_from_record(rec).to(torch::kCPU);
+        torch::Tensor signal = tensor_from_record(rec);
 
         scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
-        std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        std::vector<Chunk> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
         (*db->chunks)[i] = chunks;
 
         std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);

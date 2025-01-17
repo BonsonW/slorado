@@ -87,7 +87,7 @@ typedef struct {
     double *means;
 
     // each slow5 record has a vec of chunks and tensors assigned to it
-    std::vector<std::vector<Chunk *>> *chunks;
+    std::vector<std::vector<Chunk>> *chunks;
 
     elephant_t *elephant;
 
@@ -102,11 +102,6 @@ typedef struct {
 /* time stamps */
 typedef struct {
     double time_read;
-    double time_tens;
-    double time_trim;
-    double time_scale;
-    double time_chunk;
-    double time_copy;
     double time_pad;
     double time_assign;
     double time_accept;
@@ -152,6 +147,11 @@ typedef struct {
     double time_basecall;
     double time_postproc;
     double time_output;
+    double time_tens;
+    double time_trim;
+    double time_scale;
+    double time_chunk;
+    double time_chunk_tens;
 
     // stats for each runner
     std::vector<runner_stat_t *> *runner_stats;

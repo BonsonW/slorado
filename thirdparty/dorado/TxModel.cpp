@@ -18,7 +18,7 @@ using namespace torch::nn;
 namespace Idx = torch::indexing;
 using Slice = torch::indexing::Slice;
 
-void apply_rounding(at::Tensor &t, int remove_bits) {
+void apply_rounding(torch::Tensor &t, int remove_bits) {
     // Round Float16 tensor elements such that the last `remove_bits` of the mantissa are 0s.
     // TODO: this is slightly dangerous as it will turn numbers close to +/-65304 into +/-inf
     t.view(torch::kI16).add_(1 << (remove_bits - 1));
@@ -45,12 +45,12 @@ torch::Tensor scaled_dot_product_attention_naive(
 }
 
 RMSNormImpl::RMSNormImpl(int hidden_size_) : hidden_size(hidden_size_) {
-    weight = at::ones({hidden_size});
+    weight = torch::ones({hidden_size});
     register_parameter("weight", weight, false);
 }
 
-at::Tensor RMSNormImpl::forward(at::Tensor x) {
-    at::Tensor rstd = torch::rsqrt(x.square().mean(-1, true).add_(eps));
+torch::Tensor RMSNormImpl::forward(torch::Tensor x) {
+    torch::Tensor rstd = torch::rsqrt(x.square().mean(-1, true).add_(eps));
     x.mul_(rstd).mul_(weight);
     return x;
 }
@@ -60,8 +60,8 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_) : in_features
     fc2 = register_module("fc2", Linear(LinearOptions(hidden_features, in_features).bias(false)));
 };
 
-at::Tensor GatedMLPImpl::forward(const at::Tensor &x) {
-    at::Tensor t;
+torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
+    torch::Tensor t;
     t = fc1(x);
     const auto chunks = t.chunk(2, -1);
     const auto &y = chunks[0];
@@ -75,28 +75,28 @@ RotaryEmbeddingImpl::RotaryEmbeddingImpl(
     int dim_,
     float theta_,
     int max_seq_len_,
-    const at::TensorOptions &options_
+    const torch::TensorOptions &options_
 ) :
     dim(dim_),
     max_seq_len(max_seq_len_),
     theta(theta_),
     options(options_)
 {
-    const at::Tensor inv_freq = get_inv_freqs();
+    const torch::Tensor inv_freq = get_inv_freqs();
 
     // freqs.shape := {max_seq_len, 1, 1, dim/2}
-    const at::Tensor freqs = torch::arange(max_seq_len, options).reshape({max_seq_len, 1, 1, 1}) * inv_freq;
+    const torch::Tensor freqs = torch::arange(max_seq_len, options).reshape({max_seq_len, 1, 1, 1}) * inv_freq;
 
     register_buffer("cos_freqs", torch::cos(freqs).to(options));
     register_buffer("sin_freqs", torch::sin(freqs).to(options));
 };
 
-at::Tensor RotaryEmbeddingImpl::get_inv_freqs() const {
+torch::Tensor RotaryEmbeddingImpl::get_inv_freqs() const {
     // Torch2.0 does not have support for ATen::pow in the MPS(apple) backend.
     // Use a vector and std::pow from cmath instead and cast to a tensor
 
     // Equivalent to:
-    // const at::Tensor inv_freq =
+    // const torch::Tensor inv_freq =
     //         torch::pow(theta, torch::arange(0, dim, 2, options) / dim).reciprocal();
 
     // TODO: Remove when updating to torch2.1+
@@ -105,13 +105,13 @@ at::Tensor RotaryEmbeddingImpl::get_inv_freqs() const {
     for (float i = 0; i < dim; i += 2) {
         vec.push_back(std::pow(static_cast<double>(theta), static_cast<double>(i / (float)dim)));
     }
-    at::Tensor inv_freq = torch::from_blob(vec.data(), vec.size(), torch::TensorOptions().dtype(torch::kDouble))
+    torch::Tensor inv_freq = torch::from_blob(vec.data(), vec.size(), torch::TensorOptions().dtype(torch::kDouble))
         .to(options)
         .reciprocal();
     return inv_freq;
 }
 
-at::Tensor RotaryEmbeddingImpl::forward(at::Tensor &qkv) {
+torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
     // Input is NT3HD
     assert_forward_dims(qkv);
     const int64_t N = qkv.size(0);
@@ -120,14 +120,14 @@ at::Tensor RotaryEmbeddingImpl::forward(at::Tensor &qkv) {
     const int64_t D = qkv.size(4);
 
     auto buffers = named_buffers();
-    const at::Tensor cos_buf = buffers["cos_freqs"].narrow(0, 0, T);
-    const at::Tensor sin_buf = buffers["sin_freqs"].narrow(0, 0, T);
+    const torch::Tensor cos_buf = buffers["cos_freqs"].narrow(0, 0, T);
+    const torch::Tensor sin_buf = buffers["sin_freqs"].narrow(0, 0, T);
 
     auto qk_evens = qkv.slice(2, 0, 2).slice(4, 0, D / 2);
     auto qk_odds = qkv.slice(2, 0, 2).slice(4, D / 2, D);
 
     // Allocate output tensor with memory layout as consumed by attention: 3NHTD
-    auto output = at::empty({3, N, H, T, D}, qkv.options());
+    auto output = torch::empty({3, N, H, T, D}, qkv.options());
     // View as [3 (q|k|v), N, H, T, 2 (even|odd), D/2], narrow first dim to 2 (q|k), then
     // permute as [2 (even|odd), N, T, 2 (q|k), H, D/2] which is compatible with assignment below
     auto output_kv_even_odd = output.view({3, N, H, T, 2, D / 2}).slice(0, 0, 2).permute({4, 1, 3, 0, 2, 5});
@@ -142,7 +142,7 @@ at::Tensor RotaryEmbeddingImpl::forward(at::Tensor &qkv) {
     return output;
 }
 
-void RotaryEmbeddingImpl::assert_forward_dims(const at::Tensor &qkv) const {
+void RotaryEmbeddingImpl::assert_forward_dims(const torch::Tensor &qkv) const {
     // Expected shape: N, seq_len, 3, nhead, head_dim
     const int64_t seq_len = qkv.size(1);
     const int64_t three = qkv.size(2);
@@ -172,7 +172,7 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     bool qkv_bias_,
     bool out_bias_,
     const std::pair<int, int> &attn_window_,
-    const at::TensorOptions &options_
+    const torch::TensorOptions &options_
 ) :
     d_model(d_model_),
     nhead(nhead_),
@@ -189,7 +189,7 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     rotary_emb = register_module("rotary_emb", RotaryEmbedding(head_dim, theta, max_seq_len, options));
 };
 
-at::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
+torch::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
     const auto key = MaskKey{size, options.device()};
     if (mask_cache.find(key) == mask_cache.end()) {
         mask_cache[key] = build_attn_window_mask(size);
@@ -197,25 +197,25 @@ at::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
     return mask_cache.at(key);
 }
 
-at::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size) const {
+torch::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size) const {
     const auto win_upper = std::get<0>(attn_window);
     const auto win_lower = std::get<1>(attn_window);
-    at::Tensor mask = at::ones({size, size}, options.device());
+    torch::Tensor mask = torch::ones({size, size}, options.device());
     mask.triu_(-win_upper).tril_(win_lower);
-    mask = mask.to(at::kBool);
+    mask = mask.to(torch::kBool);
     return mask;
 };
 
-at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
+torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const int64_t N = x.size(0);
     const int64_t T = x.size(1);
     const int64_t C = x.size(2);
 
-    at::Tensor qkv;
-    at::Tensor attn_output_ntc;
+    torch::Tensor qkv;
+    torch::Tensor attn_output_ntc;
     qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
     qkv = rotary_emb(qkv);
-    attn_output_ntc = at::empty({N, T, C}, x.options());
+    attn_output_ntc = torch::empty({N, T, C}, x.options());
     auto attn_window_mask = get_attn_window_mask(T);
     auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
     const auto win_upper = std::get<0>(attn_window);
@@ -235,31 +235,31 @@ at::Tensor MultiHeadAttentionImpl::forward(at::Tensor x) {
         const auto k = qkv[1].slice(-2, kvb, kve);
         const auto v = qkv[2].slice(-2, kvb, kve);
         const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
-        c10::optional<at::Tensor> opt_mask;
+        c10::optional<torch::Tensor> opt_mask;
         // Not using the mask gets us significantly better performance, at the cost of some
         // accuracy. Accuracy loss is minimised by larger num_splits.
         opt_mask = mask;
-        attn_output.slice(-2, qb, qe) = at::scaled_dot_product_attention(q, k, v, opt_mask);
+        attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
     }
     x = out_proj(attn_output_ntc);
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const at::TensorOptions &options) : params(params_) {
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options) : params(params_) {
     self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
 
-    const at::Tensor deepnorm_alpha = at::tensor(params.deepnorm_alpha);
+    const torch::Tensor deepnorm_alpha = torch::tensor(params.deepnorm_alpha);
     register_buffer("deepnorm_alpha", deepnorm_alpha);
 };
 
-at::Tensor TxEncoderImpl::forward(at::Tensor x) {
-    at::Tensor attn, f;
+torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
+    torch::Tensor attn, f;
     const auto deepnorm_alpha = named_buffers()["deepnorm_alpha"];
 
-    auto run_norm = [&](RMSNorm norm, const at::Tensor &in) {
+    auto run_norm = [&](RMSNorm norm, const torch::Tensor &in) {
         x = norm(in + (x * deepnorm_alpha));
     };
     attn = self_attn(x);
@@ -270,7 +270,7 @@ at::Tensor TxEncoderImpl::forward(at::Tensor x) {
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const at::TensorOptions &options) {
+TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
         TxEncoder encoder(params, options);
@@ -280,7 +280,7 @@ TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const at::
     use_i8 = false;
 };
 
-at::Tensor TxEncoderStackImpl::forward(const at::Tensor &x) {
+torch::Tensor TxEncoderStackImpl::forward(const torch::Tensor &x) {
     return stack->forward(x);
 }
 
@@ -288,11 +288,11 @@ LinearUpsampleImpl::LinearUpsampleImpl(const EncoderUpsampleParams &params) : sc
     linear = register_module("linear", Linear(LinearOptions(params.d_model, scale_factor * params.d_model).bias(true)));
 };
 
-at::Tensor LinearUpsampleImpl::forward(const at::Tensor &x) {
+torch::Tensor LinearUpsampleImpl::forward(const torch::Tensor &x) {
     const int64_t N = x.size(0);
     const int64_t T = x.size(1);
     const int64_t C = x.size(2);
-    at::Tensor out = linear(x).reshape({N, scale_factor * T, C});
+    torch::Tensor out = linear(x).reshape({N, scale_factor * T, C});
     return out;
 };
 
@@ -301,7 +301,7 @@ LinearScaledCRFImpl::LinearScaledCRFImpl(const CRFEncoderParams &params) {
     linear = register_module("linear", Linear(LinearOptions(m_params.insize, m_params.outsize()).bias(false)));
 };
 
-at::Tensor LinearScaledCRFImpl::forward(const at::Tensor &x) {
+torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
     if (!scale_applied) {
         linear->weight *= m_params.scale;
         scale_applied = true;
@@ -309,15 +309,15 @@ at::Tensor LinearScaledCRFImpl::forward(const at::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const CRFModelConfig &config, const at::TensorOptions &options) : m_options(options) {
+TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options) : m_options(options) {
     convs = register_module("convs", ::ConvStack(config.convs));
     tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
 }
 
-at::Tensor TxModelImpl::forward(const at::Tensor &chunk_NCT) {
-    at::Tensor h;
+torch::Tensor TxModelImpl::forward(const torch::Tensor &chunk_NCT) {
+    torch::Tensor h;
     h = convs->forward(chunk_NCT);
     h = tx_encoder(h);
     h = tx_decoder(h);
@@ -513,7 +513,7 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const at::TensorOptions &options) {
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options) {
     auto model = TxModel(model_config, options);
     auto state_dict = load_tx_model_weights(model_config.model_path);
     model->load_state_dict(state_dict);

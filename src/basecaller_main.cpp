@@ -269,6 +269,10 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n[%s] data processing: %.3f sec", __func__, core->time_process_db);
     fprintf(stderr, "\n[%s]     - parse: %.3f sec", __func__, core->time_parse);
     fprintf(stderr, "\n[%s]     - preprocess: %.3f sec", __func__, core->time_preproc);
+    // fprintf(stderr, "\n[%s]          - tens from rec: %.3f sec", __func__, core->time_tens);
+    // fprintf(stderr, "\n[%s]          - scale: %.3f sec", __func__, core->time_scale);
+    // fprintf(stderr, "\n[%s]          - chunk: %.3f sec", __func__, core->time_chunk);
+    // fprintf(stderr, "\n[%s]          - chunk tens: %.3f sec", __func__, core->time_chunk_tens);
     fprintf(stderr, "\n[%s]     - basecall: %.3f sec", __func__, core->time_basecall);
     fprintf(stderr, "\n[%s]          - synchronisation: %.3f sec", __func__, core->time_sync);
 

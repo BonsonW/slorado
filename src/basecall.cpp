@@ -57,7 +57,7 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-static void accept_chunk(const int num_chunks, at::Tensor slice, const core_t* core, const int runner_idx) {
+static void accept_chunk(const int num_chunks, torch::Tensor slice, const core_t* core, const int runner_idx) {
     runner_t* runner = (*core->runners)[runner_idx];
     runner->input_tensor.index_put_({num_chunks, 0}, slice);
 }
@@ -174,11 +174,11 @@ static void* pthread_single_basecall(void* voidargs) {
     std::vector<torch::Tensor> tensors;
 
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
-        auto this_chunk = (*db->chunks)[read_idx];
-        auto this_tensor = (*db->elephant->tensors)[read_idx];
+        auto& this_chunk = (*db->chunks)[read_idx];
+        auto& this_tensor = (*db->elephant->tensors)[read_idx];
 
         for (size_t chunk_idx = 0; chunk_idx < this_chunk.size(); ++chunk_idx) {
-            chunks.push_back(this_chunk[chunk_idx]);
+            chunks.push_back(&this_chunk[chunk_idx]);
             tensors.push_back(this_tensor[chunk_idx]);
 
             if (chunks.size() == (size_t)opt.gpu_batch_size) {

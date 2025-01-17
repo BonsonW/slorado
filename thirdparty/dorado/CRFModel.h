@@ -9,12 +9,12 @@
 
 using namespace torch::nn;
 
-ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const at::TensorOptions &options);
+ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const torch::TensorOptions &options);
 
 struct ConvStackImpl : torch::nn::Module {
     explicit ConvStackImpl(const std::vector<ConvParams> &layer_params);
 
-    at::Tensor forward(at::Tensor x);
+    torch::Tensor forward(torch::Tensor x);
 
     struct ConvLayer {
         explicit ConvLayer(const ConvParams &params);
@@ -27,7 +27,7 @@ struct ConvStackImpl : torch::nn::Module {
 
 struct LinearCRFImpl : torch::nn::Module {
     LinearCRFImpl(int insize, int outsize, bool bias_, bool tanh_and_scale);
-    at::Tensor forward(const at::Tensor &x);
+    torch::Tensor forward(const torch::Tensor &x);
 
     bool bias;
     static constexpr int scale = 5;
@@ -37,14 +37,14 @@ struct LinearCRFImpl : torch::nn::Module {
 
 struct LSTMStackImpl : torch::nn::Module {
     LSTMStackImpl(int num_layers, int size);
-    at::Tensor forward(at::Tensor x);
+    torch::Tensor forward(torch::Tensor x);
     int layer_size;
     std::vector<torch::nn::LSTM> rnns;
 };
 
 struct ClampImpl : torch::nn::Module {
     ClampImpl(float _min, float _max, bool _active);
-    at::Tensor forward(at::Tensor x);
+    torch::Tensor forward(torch::Tensor x);
     bool active;
     float min, max;
 };
@@ -56,9 +56,9 @@ TORCH_MODULE(Clamp);
 
 struct CRFModelImpl : torch::nn::Module {
     explicit CRFModelImpl(const CRFModelConfig &config);
-    void load_state_dict(const std::vector<at::Tensor> &weights);
+    void load_state_dict(const std::vector<torch::Tensor> &weights);
 
-    at::Tensor forward(const at::Tensor &x);
+    torch::Tensor forward(const torch::Tensor &x);
     ConvStack convs{nullptr};
     LSTMStack rnns{nullptr};
     LinearCRF linear1{nullptr}, linear2{nullptr};

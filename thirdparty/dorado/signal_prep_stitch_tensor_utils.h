@@ -28,11 +28,11 @@ T pad_to(const T a, const T b) {
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec);
 void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams scaling_params);
-std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap);
-std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, size_t chunk_size);
+std::vector<Chunk> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap);
+std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, size_t chunk_size);
 
 // Given a read with unstitched chunks, stitch the chunks (accounting for overlap) and assign basecalled read and qstring to Read
-void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::string &qstring);
+void stitch_chunks(std::vector<Chunk> &chunks, std::string &sequence, std::string &qstring);
 
 // Load serialised tensor from disk.
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors);
@@ -48,7 +48,7 @@ torch::Tensor quantile(const torch::Tensor t, const torch::Tensor q);
 torch::Tensor quantile_counting(const torch::Tensor t, const torch::Tensor q);
 
 // temporary
-inline void module_load_state_dict(torch::nn::Module& module, const std::vector<at::Tensor>& weights) {
+inline void module_load_state_dict(torch::nn::Module& module, const std::vector<torch::Tensor>& weights) {
     assert(weights.size() == module.parameters().size());
     for (size_t idx = 0; idx < weights.size(); idx++) {
         module.parameters()[idx].data() = weights[idx].data();

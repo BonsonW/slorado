@@ -20,7 +20,7 @@ ConvStackImpl::ConvStackImpl(const std::vector<ConvParams> &layer_params) {
     }
 }
 
-at::Tensor ConvStackImpl::forward(at::Tensor x) {
+torch::Tensor ConvStackImpl::forward(torch::Tensor x) {
     // Input x is [N, C_in, T_in], contiguity optional
     for (auto &layer : layers) {
         x = layer.conv(x);
@@ -47,7 +47,7 @@ LinearCRFImpl::LinearCRFImpl(int insize, int outsize, bool bias_, bool tanh_and_
     }
 };
 
-at::Tensor LinearCRFImpl::forward(const at::Tensor &x) {
+torch::Tensor LinearCRFImpl::forward(const torch::Tensor &x) {
     // Input x is [N, T, C], contiguity optional
     auto scores = linear(x);
     if (activation) {
@@ -67,7 +67,7 @@ LSTMStackImpl::LSTMStackImpl(int num_layers, int size) : layer_size(size) {
     }
 };
 
-at::Tensor LSTMStackImpl::forward(at::Tensor x) {
+torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
     // Input is [N, T, C], contiguity optional
     for (auto &rnn : rnns) {
         x = std::get<0>(rnn(x.flip(1)));
@@ -80,7 +80,7 @@ at::Tensor LSTMStackImpl::forward(at::Tensor x) {
 ClampImpl::ClampImpl(float _min, float _max, bool _active)
         : active(_active), min(_min), max(_max) {}
 
-at::Tensor ClampImpl::forward(at::Tensor x) {
+torch::Tensor ClampImpl::forward(torch::Tensor x) {
     if (active) {
         x.clamp_(min, max);
     }
@@ -112,11 +112,11 @@ CRFModelImpl::CRFModelImpl(const CRFModelConfig &config) {
     }
 }
 
-void CRFModelImpl::load_state_dict(const std::vector<at::Tensor> &weights) {
+void CRFModelImpl::load_state_dict(const std::vector<torch::Tensor> &weights) {
     module_load_state_dict(*this, weights);
 }
 
-at::Tensor CRFModelImpl::forward(const at::Tensor &x) {
+torch::Tensor CRFModelImpl::forward(const torch::Tensor &x) {
     // Output is [N, T, C]
     return encoder->forward(x);
 }
@@ -160,7 +160,7 @@ std::vector<torch::Tensor> load_lstm_model_weights(const std::string &dir,
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const at::TensorOptions &options) {
+ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const torch::TensorOptions &options) {
     auto model = CRFModel(model_config);
     auto state_dict = load_lstm_model_weights(model_config.model_path, model_config.has_out_features, model_config.bias);
     model->load_state_dict(state_dict);
