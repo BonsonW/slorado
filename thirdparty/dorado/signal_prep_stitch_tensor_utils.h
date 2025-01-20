@@ -27,7 +27,7 @@ T pad_to(const T a, const T b) {
 }
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec);
-void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams scaling_params);
+void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params);
 std::vector<Chunk> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap);
 std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk> &chunks, size_t chunk_size);
 
@@ -54,4 +54,5 @@ inline void module_load_state_dict(torch::nn::Module& module, const std::vector<
         module.parameters()[idx].data() = weights[idx].data();
     }
 }
+
 #endif

@@ -68,7 +68,7 @@ std::pair<float, float> med_mad(torch::Tensor &x, float factor=1.4826){
     return {med.item<float>(), mad.item<float>()};
 }
 
-void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams scaling_params) {
+void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params) {
     auto strategy = scaling_params.strategy;
     float scale = 1.0f;
     float shift = 0.0f;
@@ -163,7 +163,6 @@ std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<C
     return tensors;
 }
 
-
 int div_round_closest(const int n, const int d)
 {
     return ((n < 0) ^ (d < 0)) ? ((n - d/2)/d) : ((n + d/2)/d);
@@ -210,8 +209,6 @@ void stitch_chunks(std::vector<Chunk > &chunks, std::string &sequence, std::stri
     sequence = std::accumulate(sequences.begin(), sequences.end(), std::string(""));
     qstring = std::accumulate(qstrings.begin(), qstrings.end(), std::string(""));
 }
-
-
 
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors) {
     auto weights = std::vector<torch::Tensor>();
