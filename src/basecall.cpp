@@ -41,6 +41,9 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
+#include <iostream>
+#include <fstream>
+
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
 #endif
@@ -81,12 +84,19 @@ void call_chunks(std::vector<DecodedChunk> &chunks, const int num_chunks, const 
 #endif
     ts->time_infer += realtime();
 
-    auto scores_TNC = scores;
+    auto scores_TNC = scores.transpose(0, 1).to("cpu");
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
-    scores_TNC = scores_TNC.transpose(0, 1).contiguous();
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
+
+    std::ofstream fp("scores_TNC.blob");
+
+    fp << scores_TNC << std::endl;
+
+    fp.close();
+    
+    exit(0);
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
