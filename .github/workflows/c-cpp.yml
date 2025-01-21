@@ -172,8 +172,8 @@ jobs:
       run: scripts/install-torch2.sh rocm
     - name: build
       run: make rocm=1 -j2
-  ubuntu_22_cuda:
-    name: Ubuntu 22 CUDA
+  ubuntu_24_cuda:
+    name: Ubuntu 24 CUDA
     runs-on: [self-hosted, Linux, X64, cuda]
     steps:
     - uses: actions/checkout@v2
@@ -184,10 +184,10 @@ jobs:
     - name: cuda
       run: |
         export DEBIAN_FRONTEND=noninteractive
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.0-1_all.deb
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.0-1_all.deb
         sudo dpkg -i cuda-keyring_1.0-1_all.deb
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
-        sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-ubuntu2404.pin
+        sudo mv cuda-ubuntu2404.pin /etc/apt/preferences.d/cuda-repository-pin-600
         sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
         sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
         sudo apt-get update
