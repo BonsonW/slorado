@@ -1,0 +1,56 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+
+# thanks https://github.com/dixyes/ghactionsplay/blob/main/.github/workflows/glibc217node20.yml
+
+jobs:
+  ubuntu_24_cuda:
+    name: Ubuntu 24 CUDA
+    runs-on: [self-hosted, Linux, X64, cuda]
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: cuda
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.0-1_all.deb
+        sudo dpkg -i cuda-keyring_1.0-1_all.deb
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-ubuntu2404.pin
+        sudo mv cuda-ubuntu2404.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
+        sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
+        sudo apt-get update
+        sudo apt-get -y install cuda-11-1
+    - name: torch
+      run: scripts/install-torch2.sh
+    - name: build cuda=1
+      run: make -j2 cuda=1
+    - name: test
+      run: export DEVICE=cuda:0 && make test
+  ubuntu_24:
+    name: Ubuntu 24
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
+    - name: torch
+      run: scripts/install-torch2.sh cpu
+    - name: build
+      run: make -j2
+    - name: test
+      run: export DEVICE=cpu && make test
+    - name: build asan
+      run: make clean && make asan=1 -j2
+    - name: asan
+      run: export DEVICE=cpu && make test
