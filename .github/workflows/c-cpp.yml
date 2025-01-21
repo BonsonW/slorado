@@ -174,7 +174,7 @@ jobs:
       run: make rocm=1 -j2
   ubuntu_22_cuda:
     name: Ubuntu 22 CUDA
-    runs-on: hasindu-HP-Z240
+    runs-on: [self-hosted, Linux, X64, cuda]
     steps:
     - uses: actions/checkout@v2
       with:
