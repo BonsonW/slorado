@@ -12,8 +12,6 @@ jobs:
   ubuntu_24_cuda:
     name: Ubuntu 24 CUDA
     runs-on: [self-hosted, Linux, X64, cuda]
-    env:
-      CUDA_ARCH: '-arch=sm_50'
     steps:
     - uses: actions/checkout@v2
       with:
@@ -21,6 +19,6 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
-      run: make -j cuda=1
+      run: make -j cuda=1 CUDA_ARCH=-"arch=sm_50"
     - name: test
       run: export DEVICE=cuda:0 && make test
