@@ -18,7 +18,9 @@ jobs:
         submodules: recursive
     - name: torch
       run: scripts/install-torch2.sh
+    - name: set arch
+      run: export CUDA_ARCH=-arch=sm_50
     - name: build cuda=1
-      run: export CUDA_ARCH=-arch=sm_50 && make -j cuda=1
+      run: make -j cuda=1
     - name: test
       run: export DEVICE=cuda:0 && make test
