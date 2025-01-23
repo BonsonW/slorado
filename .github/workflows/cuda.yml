@@ -3,8 +3,6 @@ name: C/C++ CI
 on:
   push:
     branches: [ '*' ]
-  pull_request:
-    branches: [ '*' ]
 
 # thanks https://github.com/dixyes/ghactionsplay/blob/main/.github/workflows/glibc217node20.yml
 
@@ -19,8 +17,6 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
-      env:
-        CUDA_ARCH: "-arch=sm_50"
-      run: make -j cuda=1
+      run: make -j cuda=1 CUDA_ARCH=-arch=sm_50
     - name: test
       run: export DEVICE=cuda:0 && make test
