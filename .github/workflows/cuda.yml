@@ -11,6 +11,8 @@ jobs:
     name: Ubuntu 24 CUDA
     runs-on: [self-hosted, Linux, X64, cuda]
     steps:
+    - name: cleanup
+        rm -rf ${{ github.workspace }}/*
     - uses: actions/checkout@v2
       with:
         submodules: recursive
