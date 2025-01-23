@@ -21,6 +21,8 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
-      run: make -j cuda=1
+      run: |
+        echo "cuda arch: $CUDA_ARCH"
+        make -j cuda=1
     - name: test
       run: export DEVICE=cuda:0 && make test
