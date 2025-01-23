@@ -135,7 +135,7 @@ $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
 
 openfish/lib/libopenfish.a:
-	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT=$(ROCM_ROOT) ROCM_ARCH=$(ROCM_ARCH) CUDA_ROOT=$(CUDA_ROOT) CUDA_ARCH=${CUDA_ARCH} lib/libopenfish.a
+	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT=$(ROCM_ROOT) ROCM_ARCH=$(ROCM_ARCH) CUDA_ROOT=$(CUDA_ROOT) CUDA_ARCH=$$CUDA_ARCH lib/libopenfish.a
 
 slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a
