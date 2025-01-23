@@ -13,6 +13,8 @@ jobs:
     steps:
     - name: cleanup
       run: rm -rf ${{ github.workspace }}/
+    - name: make dir
+      run: mkdir ${{ github.workspace }}
     - uses: actions/checkout@v2
       with:
         submodules: recursive
