@@ -19,6 +19,6 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
-      run: make -j CUDA_ARCH="-arch=sm_50" cuda=1
+      run: test/cuda_workflow_make.sh
     - name: test
       run: export DEVICE=cuda:0 && make test
