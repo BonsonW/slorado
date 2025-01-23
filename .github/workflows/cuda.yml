@@ -21,4 +21,4 @@ jobs:
     - name: build cuda=1
       run: test/cuda_workflow_make.sh
     - name: test
-      run: export DEVICE=cuda:0 && make test
+      run: export DEVICE=cuda:0 && test/test.sh
