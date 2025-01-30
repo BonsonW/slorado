@@ -112,12 +112,18 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
 #endif
     }
 
+    LOG_DEBUG("%s", "writing to chunks");
+
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
         chunks[chunk]->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
         size_t num_bases = 0;
         for (auto move: chunks[chunk]->moves) {
             num_bases += move;
+        }
+        if (num_bases > T) {
+            ERROR("num bases %zu greater than number of timesteps %d", num_bases, T);
+            exit(EXIT_FAILURE);
         }
         chunks[chunk]->seq = std::string(sequence + idx, num_bases);
         chunks[chunk]->qstring = std::string(qstring + idx, num_bases);
