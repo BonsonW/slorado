@@ -251,6 +251,7 @@ void free_db_tmp(db_t* db) {
         free(db->mem_records[i]);
         free((*db->sequence)[i]);
         free((*db->qstring)[i]);
+        for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
         (*db->chunks)[i].clear();
     }
 }
@@ -266,7 +267,6 @@ void free_db(db_t* db) {
     free(db->mem_records);
     free(db->mem_bytes);
     free(db->means);
-    for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
     delete db->chunks;
     delete db->sequence;
     delete db->qstring;
