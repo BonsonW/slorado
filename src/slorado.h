@@ -87,7 +87,7 @@ typedef struct {
     double *means;
 
     // each slow5 record has a vec of chunks and tensors assigned to it
-    std::vector<std::vector<Chunk>> *chunks;
+    std::vector<std::vector<Chunk *>> *chunks;
 
     elephant_t *elephant;
 

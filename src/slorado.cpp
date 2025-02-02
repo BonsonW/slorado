@@ -56,7 +56,7 @@ void free_runners(core_t *core);
 void init_elephant(db_t *db);
 void free_elephant(db_t *db);
 void preprocess_signal(core_t* core, db_t* db, int32_t i);
-void stitch_chunks(std::vector<Chunk> &chunks, std::string &sequence, std::string &qstring);
+void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::string &qstring);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -116,7 +116,7 @@ db_t* init_db(core_t* core) {
     MALLOC_CHK(db->means);
 
 
-    db->chunks = new std::vector<std::vector<Chunk>>(db->capacity_rec, std::vector<Chunk>());
+    db->chunks = new std::vector<std::vector<Chunk *>>(db->capacity_rec, std::vector<Chunk *>());
 
     init_elephant(db);
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
@@ -180,7 +180,7 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     uint64_t len_raw_signal = rec->len_raw_signal;
 
     if (len_raw_signal > 0) {
-        std::vector<Chunk> &chunks = (*db->chunks)[i];
+        std::vector<Chunk *> chunks = (*db->chunks)[i];
 
         std::string sequence;
         std::string qstring;
@@ -266,6 +266,7 @@ void free_db(db_t* db) {
     free(db->mem_records);
     free(db->mem_bytes);
     free(db->means);
+    for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
     delete db->chunks;
     delete db->sequence;
     delete db->qstring;
