@@ -110,11 +110,24 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                     auto t_scores = scores_cpu.index(
                             {Slice(), Slice(t_first_chunk, t_first_chunk + t_num_chunks)});
 
+                    torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
+                    bwd = bwd.transpose(0, 1).contiguous();
                     torch::Tensor fwd = forward_scores(t_scores, options.blank_score);
                     fwd = fwd.transpose(0, 1).contiguous();
                     auto N = fwd.sizes()[0];
                     auto T = fwd.sizes()[1];
                     auto C = fwd.sizes()[2];
+                    for (int i = 0; i < N; ++i) {
+                        fprintf(stdout, "n %d:\n", i);
+                        for (int j = 0; j < T; ++j) {
+                            fprintf(stdout, "t %d: ", j);
+                            for (int k = 0; k < C; ++k) {
+                                fprintf(stdout, "%.3f,", ((float *)bwd.data_ptr())[i * T * C + j * C + k]);
+                            }
+                            fprintf(stdout, "\n");
+                        }
+                        fprintf(stdout, "\n\n");
+                    }
                     for (int i = 0; i < N; ++i) {
                         fprintf(stdout, "n %d:\n", i);
                         for (int j = 0; j < T; ++j) {
@@ -128,12 +141,12 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                     }
                     
                     exit(0);
-                    torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
+                    
 
                     torch::Tensor posts = torch::softmax(fwd + bwd, -1);
 
                     t_scores = t_scores.transpose(0, 1);
-                    bwd = bwd.transpose(0, 1).contiguous();
+                    
                     posts = posts.transpose(0, 1).contiguous();
 
                     for (int i = 0; i < t_num_chunks; i++) {
