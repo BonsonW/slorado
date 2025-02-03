@@ -91,7 +91,7 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                                                   const DecoderOptions& options,
                                                   std::string &device) {
     const auto scores_cpu = scores.to(torch::kCPU).transpose(0, 1);
-    int num_threads = std::min(num_chunks, 4);
+    int num_threads = 1;
     int chunks_per_thread = num_chunks / num_threads;
     int num_threads_with_one_more_chunk = num_chunks % num_threads;
 
@@ -111,6 +111,23 @@ std::vector<DecodedChunk> beam_search_cpu(const torch::Tensor& scores,
                             {Slice(), Slice(t_first_chunk, t_first_chunk + t_num_chunks)});
 
                     torch::Tensor fwd = forward_scores(t_scores, options.blank_score);
+                    fwd = fwd.transpose(0, 1).contiguous();
+                    auto N = fwd.sizes()[0];
+                    auto T = fwd.sizes()[1];
+                    auto C = fwd.sizes()[2];
+                    for (int i = 0; i < N; ++i) {
+                        fprintf(stdout, "n %d:\n", i);
+                        for (int j = 0; j < T; ++j) {
+                            fprintf(stdout, "t %d: ", j);
+                            for (int k = 0; k < C; ++k) {
+                                fprintf(stdout, "%.3f,", ((float *)fwd.data_ptr())[i * T * C + j * C + k]);
+                            }
+                            fprintf(stdout, "\n");
+                        }
+                        fprintf(stdout, "\n\n");
+                    }
+                    
+                    exit(0);
                     torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
 
                     torch::Tensor posts = torch::softmax(fwd + bwd, -1);
