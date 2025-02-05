@@ -177,6 +177,11 @@ int basecaller_main(int argc, char* argv[]) {
         }
     }
 
+    if ((size_t)opt.overlap >= opt.chunk_size) {
+        ERROR("Your overlap: %d should be lesser than chunk size: %ld", opt.overlap, opt.chunk_size);
+        exit(EXIT_FAILURE);
+    }
+
     // Incorrect number of arguments given
     if (argc - optind != 2 || fp_help == stdout) {
         print_help_msg(fp_help, opt);
