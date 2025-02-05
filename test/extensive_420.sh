@@ -169,11 +169,23 @@ make clean && make -j asan=1
 echo "Memory Check - CPU - FAST model - 1 5khz reads"
 ex ./slorado basecaller models/$FAST test/5khz_r10/one_5khz.blow5 -xcpu -c100 -K10 > test/tmp.fastq  || die "Running the tool failed"
 
-echo "Memory Check - CPU - FAST model - 2 batch"
-ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K5 > test/tmp.fastq  || die "Running the tool failed"
+echo "Memory Check - CPU - FAST model - 2 batch 1 thread"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K5 -t1 > test/tmp.fastq  || die "Running the tool failed"
 
-echo "Memory Check - CPU - FAST model - incomplete batch"
-ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K6 > test/tmp.fastq  || die "Running the tool failed"
+echo "Memory Check - CPU - FAST model - incomplete batch 1 thread"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K6 -t1 > test/tmp.fastq  || die "Running the tool failed"
+
+echo "Memory Check - CPU - FAST model - 2 batch 2 thread"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K5 -t2 > test/tmp.fastq  || die "Running the tool failed"
+
+echo "Memory Check - CPU - FAST model - incomplete batch 2 thread"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K6 -t2 > test/tmp.fastq  || die "Running the tool failed"
+
+echo "Memory Check - CPU - FAST model - 2 batch 3 thread"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K5 -t3 > test/tmp.fastq  || die "Running the tool failed"
+
+echo "Memory Check - CPU - FAST model - incomplete batch 3 thread"
+ex ./slorado basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c100 -K6 -t3 > test/tmp.fastq  || die "Running the tool failed"
 
 # accuracy check
 make clean && make -j cuda=1
