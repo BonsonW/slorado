@@ -156,4 +156,4 @@ test: $(BINARY)
 
 # make mem with run a simple memory test using valgrind
 mem: $(BINARY)
-	./test/mem.sh mem
+	./test/test.sh mem
