@@ -143,8 +143,8 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
 }
 
 static void basecall_chunks(
-    std::vector<torch::Tensor *> tensors,
-    std::vector<Chunk *> chunks,
+    std::vector<torch::Tensor *> &tensors,
+    std::vector<Chunk *> &chunks,
     const int chunk_size,
     const core_t* core,
     const int runner_idx
