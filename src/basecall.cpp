@@ -173,6 +173,9 @@ static void* pthread_single_basecall(void* voidargs) {
     std::vector<Chunk *> chunks;
     std::vector<torch::Tensor *> tensors;
 
+    NULL_CHK(db->chunks->data());
+    NULL_CHK(db->elephant->tensors->data());
+
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
         std::vector<Chunk> *sig_chunks = db->chunks->data() + read_idx;
         std::vector<torch::Tensor> *sig_tensors = db->elephant->tensors->data() + read_idx;
