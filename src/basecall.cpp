@@ -57,9 +57,9 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-static void accept_chunk(const int num_chunks, torch::Tensor slice, const core_t* core, const int runner_idx) {
+static void accept_chunk(const int num_chunks, torch::Tensor *slice, const core_t* core, const int runner_idx) {
     runner_t* runner = (*core->runners)[runner_idx];
-    runner->input_tensor.index_put_({num_chunks, 0}, slice);
+    runner->input_tensor.index_put_({num_chunks, 0}, *slice);
 }
 
 static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const int runner_idx) {
@@ -112,21 +112,11 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
 #endif
     }
 
-    LOG_DEBUG("%s", "writing to chunks");
-
     for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
+        chunks[chunk]->seq = std::string(sequence + idx);
+        chunks[chunk]->qstring = std::string(qstring + idx);
         chunks[chunk]->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
-        size_t num_bases = 0;
-        for (auto move: chunks[chunk]->moves) {
-            num_bases += move;
-        }
-        if (num_bases > T) {
-            ERROR("num bases %zu greater than number of timesteps %d", num_bases, T);
-            exit(EXIT_FAILURE);
-        }
-        chunks[chunk]->seq = std::string(sequence + idx, num_bases);
-        chunks[chunk]->qstring = std::string(qstring + idx, num_bases);
 
         if (chunks[chunk]->seq.size() == 0) {
             ERROR("%s", "empty sequence returned by decoder");
@@ -153,7 +143,7 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
 }
 
 static void basecall_chunks(
-    std::vector<torch::Tensor> tensors,
+    std::vector<torch::Tensor *> tensors,
     std::vector<Chunk *> chunks,
     const int chunk_size,
     const core_t* core,
@@ -181,15 +171,15 @@ static void* pthread_single_basecall(void* voidargs) {
     opt_t opt = core->opt;
 
     std::vector<Chunk *> chunks;
-    std::vector<torch::Tensor> tensors;
+    std::vector<torch::Tensor *> tensors;
 
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
-        auto& this_chunk = (*db->chunks)[read_idx];
-        auto& this_tensor = (*db->elephant->tensors)[read_idx];
+        std::vector<Chunk> *sig_chunks = db->chunks->data() + read_idx;
+        std::vector<torch::Tensor> *sig_tensors = db->elephant->tensors->data() + read_idx;
 
-        for (size_t chunk_idx = 0; chunk_idx < this_chunk.size(); ++chunk_idx) {
-            chunks.push_back(&this_chunk[chunk_idx]);
-            tensors.push_back(this_tensor[chunk_idx]);
+        for (size_t chunk_idx = 0; chunk_idx < sig_chunks->size(); ++chunk_idx) {
+            chunks.push_back(sig_chunks->data() + chunk_idx);
+            tensors.push_back(sig_tensors->data() + chunk_idx);
 
             if (chunks.size() == (size_t)opt.gpu_batch_size) {
                 basecall_chunks(tensors, chunks, opt.chunk_size, core, runner_idx);
