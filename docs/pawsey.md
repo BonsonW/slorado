@@ -1,7 +1,7 @@
 # Basecalling on Pawsey's AMD GPUs
 
 
-With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has many AMD Instinct MI250X GPUs.
+With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has several hundres AMD Instinct MI250X GPUs.
 For those who have access to Pawsey, this post will show how you can do this. 
 
 ## Getting started
@@ -17,7 +17,7 @@ Following are the directory paths to get started:
 - example slurm script: `/scratch/references/slorado/slorado-06-11-2024/scripts/slurm.sh`
    - the script is also in [Note 1](#note-1) below
 
-First, copy the example slurm script and change the account in the header from `pawsey0001-gpu` to your account code. Now you simply call `sbatch slurm.sh` to submit the test job. 
+First, copy the example slurm script. The ${PAWSEY_PROJECT} variable will automatically fill in your default account code. Now you simply call `sbatch slurm.sh` to submit the test job. 
 This script will basecall the above test dataset using the `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` model and generate a fastq file in the current directory called giga.fastq.
 
 ## Running on your own data
@@ -32,7 +32,7 @@ To run on your own data, below are the steps. If you run into a problem, feel fr
 
 ## Tests and benchmarks
 
-We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 8 MI250X GPUs on the node. The execution times were as follows for the three different basecalling models:
+We tested slorado on [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 8 MI250X GPUs on the node. The execution times were as follows for the three different basecalling models:
 
 | Basecalling model | Execution time (hh:mm:ss) |
 |---|---|
@@ -52,11 +52,11 @@ After basecalling, we aligned the reads to the hg38 genome using minimap2 and ca
 
 ### Note 1
 
-Pawsey slurm script:
+Pawsey example slurm script:
 ```
 #!/bin/bash --login
 #SBATCH --partition=gpu
-#SBATCH --account=pawsey0001-gpu
+#SBATCH --account=${PAWSEY_PROJECT}-gpu 
 #SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -78,9 +78,10 @@ BATCH_SIZE=500
 SLORADO_DIR=/scratch/references/slorado/slorado-06-11-2024
 SLORADO=${SLORADO_DIR}/bin/slorado
 
-/usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -x cuda:all -t64 -C ${BATCH_SIZE} -v5
+srun -N 1 -n 1 -c 8 --gres=gpu:1 --gpus-per-task=1 /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -x cuda:all -t64 -C ${BATCH_SIZE} -v5
 ```
 
+See the [Pawsey GPU documentation](https://pawsey.atlassian.net/wiki/spaces/US/pages/51928618/Setonix+GPU+Partition+Quick+Start) for best practices on using GPUs effectively. 
 
 ### Note 2
 
@@ -95,7 +96,7 @@ pip install blue-crab
 # Then convert a POD5 directory to BLOW5
 blue-crab p2s pod5_dir/ -o merged.blow5
 ```
-Alternatively, [@gbouras13](https://github.com/gbouras13) has created a docker image, so you can use it throug singularity as well:
+Alternatively, [@gbouras13](https://github.com/gbouras13) has created a docker image, so you can use it through singularity as well:
 ```
 module  load pawseyenv/2023.08
 module load singularity/3.11.4-slurm
