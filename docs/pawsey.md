@@ -1,7 +1,7 @@
 # Basecalling on Pawsey's AMD GPUs
 
 
-With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has several hundres AMD Instinct MI250X GPUs.
+With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has several hundred AMD Instinct MI250X GPUs.
 For those who have access to Pawsey, this post will show how you can do this. 
 
 ## Getting started
@@ -78,7 +78,7 @@ BATCH_SIZE=500
 SLORADO_DIR=/scratch/references/slorado/slorado-06-11-2024
 SLORADO=${SLORADO_DIR}/bin/slorado
 
-srun -N 1 -n 1 -c 8 --gres=gpu:1 --gpus-per-task=1 /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -x cuda:all -t64 -C ${BATCH_SIZE} -v5
+srun -N 1 -n 1 -c 64 --gres=gpu:8 --gpus-per-task=8 /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -x cuda:all -t64 -C ${BATCH_SIZE} -v5
 ```
 
 See the [Pawsey GPU documentation](https://pawsey.atlassian.net/wiki/spaces/US/pages/51928618/Setonix+GPU+Partition+Quick+Start) for best practices on using GPUs effectively. 
