@@ -34,10 +34,39 @@ SOFTWARE.
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "error.h"
 #include "misc.h"
 #include "slorado.h"
+
+#define HAVE_EXECINFO_H 1
+
+#ifdef HAVE_EXECINFO_H
+    #include <execinfo.h>
+#endif
+
+//make the segmentation faults a bit cool
+void sig_handler(int sig) {
+#ifdef HAVE_EXECINFO_H
+    void* array[100];
+    size_t size = backtrace(array, 100);
+    ERROR("I regret to inform that a segmentation fault occurred. But at least "
+          "it is better than a wrong answer%s",
+          ".");
+    fprintf(stderr,
+            "[%s::DEBUG]\033[1;35m Here is the backtrace in case it is of any "
+            "use:\n",
+            __func__);
+    backtrace_symbols_fd(&array[2], size - 1, STDERR_FILENO);
+    fprintf(stderr, "\033[0m\n");
+#else
+    ERROR("I regret to inform that a segmentation fault occurred. But at least "
+          "it is better than a wrong answer%s",
+          ".");
+#endif
+    exit(EXIT_FAILURE);
+}
 
 int basecaller_main(int argc, char* argv[]);
 
@@ -57,6 +86,7 @@ int print_usage(FILE *fp_help) {
 
 int main(int argc, char* argv[]) {
     double realtime0 = realtime();
+    signal(SIGSEGV, sig_handler);
 
     int ret = 1;
 
