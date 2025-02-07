@@ -1,0 +1,24 @@
+name: CUDA run CI
+
+on:
+  push:
+    branches: [ '*' ]
+
+# thanks https://github.com/dixyes/ghactionsplay/blob/main/.github/workflows/glibc217node20.yml
+
+jobs:
+  ubuntu_24_cuda:
+    name: Ubuntu 24 CUDA
+    runs-on: [self-hosted, Linux, X64, cuda]
+    steps:
+    - name: cleanup
+      run: rm -rf ${{ github.workspace }}/.*
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: torch
+      run: scripts/install-torch2.sh
+    - name: build cuda=1
+      run: make -j cuda=1 CUDA_ARCH=-arch=sm_50
+    - name: test run
+      run: export DEVICE=cuda:0 && make test
