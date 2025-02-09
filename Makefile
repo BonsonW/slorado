@@ -15,7 +15,7 @@ LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../li
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
 			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
-LDFLAGS  += $(LIBS) -lz -lm -lpthread
+LDFLAGS  += $(LIBS) -lz -lm -lpthread -rdynamic
 BUILD_DIR = build
 
 ifeq ($(zstd),1)

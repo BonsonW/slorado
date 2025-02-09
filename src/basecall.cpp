@@ -57,12 +57,12 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-static void accept_chunk(const int num_chunks, torch::Tensor *slice, const core_t* core, const int runner_idx) {
+void accept_chunk(const int num_chunks, torch::Tensor *slice, const core_t* core, const int runner_idx) {
     runner_t* runner = (*core->runners)[runner_idx];
     runner->input_tensor.index_put_({num_chunks, 0}, *slice);
 }
 
-static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const int runner_idx) {
+void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const int runner_idx) {
     torch::InferenceMode guard;
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
@@ -150,7 +150,7 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
     free(qstring);
 }
 
-static void basecall_chunks(
+void basecall_chunks(
     std::vector<torch::Tensor *> &tensors,
     std::vector<Chunk *> &chunks,
     const int chunk_size,
@@ -169,7 +169,7 @@ static void basecall_chunks(
     ts->time_decode += realtime();
 }
 
-static void* pthread_single_basecall(void* voidargs) {
+void* pthread_single_basecall(void* voidargs) {
     model_thread_arg_t* args = (model_thread_arg_t*)voidargs;
     db_t* db = args->db;
     core_t* core = args->core;
