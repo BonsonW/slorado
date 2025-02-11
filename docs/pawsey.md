@@ -55,8 +55,11 @@ After basecalling, we aligned the reads to the hg38 genome using minimap2 and ca
 Pawsey example slurm script:
 ```
 #!/bin/bash --login
+
+ACCOUNT="${PAWSEY_PROJECT}-gpu" 
+
 #SBATCH --partition=gpu
-#SBATCH --account=${PAWSEY_PROJECT}-gpu 
+#SBATCH --account=$ACCOUNT
 #SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -78,7 +81,7 @@ BATCH_SIZE=500
 SLORADO_DIR=/scratch/references/slorado/slorado-06-11-2024
 SLORADO=${SLORADO_DIR}/bin/slorado
 
-srun -N 1 -n 1 -c 64 --gres=gpu:8 --gpus-per-task=8 /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -x cuda:all -t64 -C ${BATCH_SIZE} -v5
+srun /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -x cuda:all -t 64 -C ${BATCH_SIZE}
 ```
 
 See the [Pawsey GPU documentation](https://pawsey.atlassian.net/wiki/spaces/US/pages/51928618/Setonix+GPU+Partition+Quick+Start) for best practices on using GPUs effectively. 
