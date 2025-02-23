@@ -31,12 +31,8 @@ SOFTWARE.
 #include <cstdint>
 #include <stdlib.h>
 #include <vector>
-#include <slow5/slow5.h>
-#include <openfish/openfish.h>
 
-#include <torch/torch.h>
-
-#include "elephant.h"
+#include "torchbox.h"
 #include "basecall.h"
 #include "misc.h"
 #include "error.h"
@@ -57,12 +53,16 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-static void accept_chunk(const int num_chunks, torch::Tensor slice, const core_t* core, const int runner_idx) {
+static void accept_chunk(const int num_chunks, const torch::Tensor *slice, const core_t* core, const int runner_idx) {
     runner_t* runner = (*core->runners)[runner_idx];
-    runner->input_tensor.index_put_({num_chunks, 0}, slice);
+    runner->input_tensor.index_put_({num_chunks, 0}, *slice);
 }
 
-static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const int runner_idx) {
+static void call_chunks(
+    const core_t* core,
+    const std::vector<chunk_t *> &chunks,
+    const int runner_idx
+) {
     torch::InferenceMode guard;
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
@@ -85,7 +85,7 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
     const int C = scores_TNC.size(2);
-    const int state_len = runner->model_config.state_len;
+    const int state_len = core->model_config.state_len;
     int nthreads = core->opt.num_thread / core->runners->size();
 
     uint8_t *moves;
@@ -96,7 +96,7 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
 
     ts->time_beamsearch -= realtime();
     if (runner->device == "cpu") {
-        openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, &moves, &sequence, &qstring);
+        openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
     } else {
 #ifdef USE_GPU
 #ifdef HAVE_CUDA
@@ -105,7 +105,7 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
 #ifdef HAVE_ROCM
     c10::hip::HIPGuard device_guard(runner->device_idx);
 #endif
-        openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &runner->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+        openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else
         ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
         exit(EXIT_FAILURE);
@@ -153,11 +153,10 @@ static void call_chunks(std::vector<Chunk *> &chunks, const core_t* core, const 
 }
 
 static void basecall_chunks(
-    std::vector<torch::Tensor> tensors,
-    std::vector<Chunk *> chunks,
-    const int chunk_size,
     const core_t* core,
-    const int runner_idx
+    const int runner_idx,
+    const std::vector<torch::Tensor *> &tensors,
+    const std::vector<chunk_t *> &chunks
 ) {
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
     for (size_t i = 0; i < tensors.size(); ++i) {
@@ -167,7 +166,7 @@ static void basecall_chunks(
     }
 
     ts->time_decode -= realtime();
-    call_chunks(chunks, core, runner_idx);
+    call_chunks(core, chunks, runner_idx);
     ts->time_decode += realtime();
 }
 
@@ -180,19 +179,19 @@ static void* pthread_single_basecall(void* voidargs) {
     const size_t end = args->end;
     opt_t opt = core->opt;
 
-    std::vector<Chunk *> chunks;
-    std::vector<torch::Tensor> tensors;
+    std::vector<chunk_t *> chunks;
+    std::vector<torch::Tensor *> tensors;
 
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
-        auto this_chunk = (*db->chunks)[read_idx];
-        auto this_tensor = (*db->elephant->tensors)[read_idx];
+        auto& this_chunk = (*db->chunks)[read_idx];
+        auto& this_tensor = (*db->tensor_db->tensors)[read_idx];
 
         for (size_t chunk_idx = 0; chunk_idx < this_chunk.size(); ++chunk_idx) {
-            chunks.push_back(this_chunk[chunk_idx]);
-            tensors.push_back(this_tensor[chunk_idx]);
+            chunks.push_back(&this_chunk[chunk_idx]);
+            tensors.push_back(&this_tensor[chunk_idx]);
 
             if (chunks.size() == (size_t)opt.gpu_batch_size) {
-                basecall_chunks(tensors, chunks, opt.chunk_size, core, runner_idx);
+                basecall_chunks(core, runner_idx, tensors, chunks);
                 chunks.clear();
                 tensors.clear();
             }
@@ -201,7 +200,7 @@ static void* pthread_single_basecall(void* voidargs) {
 
     // leftover chunks
     if (chunks.size() > 0) {
-        basecall_chunks(tensors, chunks, opt.chunk_size, core, runner_idx);
+        basecall_chunks(core, runner_idx, tensors, chunks);
     }
 
     pthread_exit(0);

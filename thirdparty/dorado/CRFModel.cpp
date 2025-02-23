@@ -3,7 +3,7 @@
 
 #include "CRFModel.h"
 #include "error.h"
-#include "signal_prep_stitch_tensor_utils.h"
+#include "tensor_chunk_utils.h"
 
 using namespace torch::nn;
 namespace F = torch::nn::functional;

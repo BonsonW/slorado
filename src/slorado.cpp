@@ -44,25 +44,22 @@ SOFTWARE.
 #include "basecall.h"
 #include "writer.h"
 
-#include <slow5/slow5.h>
-#include <openfish/openfish.h>
-
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
-void init_elephant(db_t *db);
-void free_elephant(db_t *db);
+void init_tensor_db(db_t *db);
+void free_tensor_db(db_t *db);
 void preprocess_signal(core_t* core, db_t* db, int32_t i);
-void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::string &qstring);
+void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::string &qstring);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)malloc(sizeof(core_t));
     MALLOC_CHK(core);
-    memset(core, 0, sizeof(core_t));
+    *core = {0};
 
     core->realtime0 = realtime0;
 
@@ -71,6 +68,26 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         VERBOSE("Error opening SLOW5 file %s\n", slow5file);
         exit(EXIT_FAILURE);
     }
+
+    CRFModelConfig model_config;
+    if (is_tx_model_config(model)) {
+        model_config = load_tx_model_config(model);
+    } else {
+        model_config = load_lstm_model_config(model);
+    }
+    model_config.model_path = std::string(model);
+
+    core->model_stride = static_cast<size_t>(model_config.stride);
+    core->chunk_size = opt.chunk_size;
+    core->chunk_size -= core->chunk_size % core->model_stride;
+    core->chunk_size = core->chunk_size;
+
+    core->model_config = model_config;
+    LOG_TRACE("%s", "model config loaded");
+
+    core->decoder_opts = DECODER_INIT;
+    core->decoder_opts.q_shift = model_config.qbias;
+    core->decoder_opts.q_scale = model_config.qscale;
 
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
@@ -116,9 +133,9 @@ db_t* init_db(core_t* core) {
     MALLOC_CHK(db->means);
 
 
-    db->chunks = new std::vector<std::vector<Chunk *>>(db->capacity_rec, std::vector<Chunk *>());
+    db->chunks = new std::vector<std::vector<chunk_t>>(db->capacity_rec, std::vector<chunk_t>());
 
-    init_elephant(db);
+    init_tensor_db(db);
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
     db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
 
@@ -180,7 +197,7 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     uint64_t len_raw_signal = rec->len_raw_signal;
 
     if (len_raw_signal > 0) {
-        std::vector<Chunk *> chunks = (*db->chunks)[i];
+        std::vector<chunk_t> &chunks = (*db->chunks)[i];
 
         std::string sequence;
         std::string qstring;
@@ -251,7 +268,6 @@ void free_db_tmp(db_t* db) {
         free(db->mem_records[i]);
         free((*db->sequence)[i]);
         free((*db->qstring)[i]);
-        for (Chunk *chunk: (*db->chunks)[i]) delete chunk;
         (*db->chunks)[i].clear();
     }
 }
@@ -270,7 +286,7 @@ void free_db(db_t* db) {
     delete db->chunks;
     delete db->sequence;
     delete db->qstring;
-    free_elephant(db);
+    free_tensor_db(db);
     free(db);
 }
 

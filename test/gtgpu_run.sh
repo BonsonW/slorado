@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DEVICE=cuda:1,2,3
+DEVICE=cuda:2
 MODEL=$1
 BATCH_SIZE=500
 THREADS=40

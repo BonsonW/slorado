@@ -7,15 +7,8 @@
 #ifndef SIGNAL_PREP_H
 #define SIGNAL_PREP_H
 
-#include <slow5/slow5.h>
-
+#include "slorado.h"
 #include <torch/torch.h>
-
-#include <string>
-#include <vector>
-
-#include "Chunk.h"
-#include "model_config.h"
 
 template <typename T>
 T div_round_up(const T a, const T b) {
@@ -28,11 +21,11 @@ T pad_to(const T a, const T b) {
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec);
 void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params);
-std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap);
-std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, size_t chunk_size);
+std::vector<chunk_t> chunks_from_tensor(torch::Tensor &tensor, size_t chunk_size, int overlap);
+std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<chunk_t> &chunks, size_t chunk_size);
 
 // Given a read with unstitched chunks, stitch the chunks (accounting for overlap) and assign basecalled read and qstring to Read
-void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::string &qstring);
+void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::string &qstring);
 
 // Load serialised tensor from disk.
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors);

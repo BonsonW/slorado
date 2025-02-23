@@ -3,7 +3,7 @@
 #include "model_config.h"
 #include "CRFModel.h"
 #include "error.h"
-#include "signal_prep_stitch_tensor_utils.h"
+#include "tensor_chunk_utils.h"
 
 #include <ATen/core/TensorBody.h>
 #include <c10/core/Device.h>

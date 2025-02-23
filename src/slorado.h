@@ -36,9 +36,11 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdint.h>
 #include <slow5/slow5.h>
+#include <openfish/openfish.h>
 #include <vector>
+#include <string>
 
-#include "dorado/Chunk.h"
+#include "dorado/model_config.h"
 
 #define SLORADO_VERSION "0.2.0-beta"
 
@@ -72,7 +74,18 @@ typedef struct {
     int32_t num_runners;        // number of runners: r
 } opt_t;
 
-typedef struct elephant_s elephant_t;
+typedef struct tensor_db tensor_db_t;
+
+/* chunk of raw signal, metadata and basecalling result */
+typedef struct {
+    size_t input_offset;    // raw signal offset
+    size_t idx_in_read;     // order in read
+    size_t raw_chunk_size;  // size in raw signal
+
+    std::string seq;
+    std::string qstring;
+    std::vector<uint8_t> moves;
+} chunk_t;
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -87,9 +100,9 @@ typedef struct {
     double *means;
 
     // each slow5 record has a vec of chunks and tensors assigned to it
-    std::vector<std::vector<Chunk *>> *chunks;
+    std::vector<std::vector<chunk_t>> *chunks;
 
-    elephant_t *elephant;
+    tensor_db_t *tensor_db;
 
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
@@ -120,7 +133,7 @@ typedef struct {
     uint64_t total_dp;
 } runner_stat_t;
 
-typedef struct runner_s runner_t;
+typedef struct runner runner_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
@@ -129,6 +142,10 @@ typedef struct {
 
     // options
     opt_t opt;
+    openfish_opt_t decoder_opts;
+    CRFModelConfig model_config;
+    size_t model_stride;
+    size_t chunk_size;
 
     // create model runner
     // only one per GPU is used for now

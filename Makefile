@@ -42,9 +42,9 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/misc.o \
 	  $(BUILD_DIR)/error.o \
 	  $(BUILD_DIR)/writer.o \
-	  $(BUILD_DIR)/elephant.o \
+	  $(BUILD_DIR)/torchbox.o \
 	  $(BUILD_DIR)/basecall.o \
-	  $(BUILD_DIR)/signal_prep_stitch_tensor_utils.o \
+	  $(BUILD_DIR)/tensor_chunk_utils.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/TxModel.o \
 	  $(BUILD_DIR)/model_config.o \
@@ -111,20 +111,20 @@ $(BUILD_DIR)/error.o: src/error.cpp src/error.h
 $(BUILD_DIR)/writer.o: src/writer.cpp src/error.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/elephant.o: src/elephant.cpp src/elephant.h src/slorado.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
+$(BUILD_DIR)/torchbox.o: src/torchbox.cpp src/torchbox.h src/slorado.h thirdparty/dorado/tensor_chunk_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/elephant.h
+$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/torchbox.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 # dorado
-$(BUILD_DIR)/signal_prep_stitch_tensor_utils.o: thirdparty/dorado/signal_prep_stitch_tensor_utils.cpp
+$(BUILD_DIR)/tensor_chunk_utils.o: thirdparty/dorado/tensor_chunk_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFModel.h src/error.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
+$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFModel.h src/error.h thirdparty/dorado/tensor_chunk_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp thirdparty/dorado/TxModel.h src/error.h thirdparty/dorado/signal_prep_stitch_tensor_utils.h
+$(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp thirdparty/dorado/TxModel.h src/error.h thirdparty/dorado/tensor_chunk_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp thirdparty/dorado/model_config.h src/error.h thirdparty/tomlc99
