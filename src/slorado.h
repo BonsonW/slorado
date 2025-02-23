@@ -118,12 +118,12 @@ typedef struct {
     double time_pad;
     double time_assign;
     double time_accept;
+    double time_runners;
     double time_basecall;
-    double time_decode;
     double time_copy_score;
     double time_scan_score;
-    double time_beamsearch;
-    double time_decode_cleanup;
+    double time_decode;
+    double time_basecall_cleanup;
     double time_infer;
     double time_stitch;
     double time_sync;
@@ -143,7 +143,7 @@ typedef struct {
     // options
     opt_t opt;
     openfish_opt_t decoder_opts;
-    CRFModelConfig model_config;
+    CRFModelConfig *model_config;
     size_t model_stride;
     size_t chunk_size;
 
@@ -161,7 +161,7 @@ typedef struct {
     double time_process_db;
     double time_parse;
     double time_preproc;
-    double time_basecall;
+    double time_runners;
     double time_postproc;
     double time_output;
     double time_tens;

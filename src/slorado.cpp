@@ -57,9 +57,8 @@ void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::str
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
-    core_t* core = (core_t*)malloc(sizeof(core_t));
+    core_t* core = (core_t*)calloc(1, sizeof(core_t));
     MALLOC_CHK(core);
-    *core = {0};
 
     core->realtime0 = realtime0;
 
@@ -78,16 +77,14 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     model_config.model_path = std::string(model);
 
     core->model_stride = static_cast<size_t>(model_config.stride);
-    core->chunk_size = opt.chunk_size;
-    core->chunk_size -= core->chunk_size % core->model_stride;
-    core->chunk_size = core->chunk_size;
-
-    core->model_config = model_config;
-    LOG_TRACE("%s", "model config loaded");
+    core->chunk_size = opt.chunk_size - (opt.chunk_size % core->model_stride);
 
     core->decoder_opts = DECODER_INIT;
     core->decoder_opts.q_shift = model_config.qbias;
     core->decoder_opts.q_scale = model_config.qscale;
+
+    core->model_config = new CRFModelConfig(model_config);
+    LOG_TRACE("%s", "model config loaded");
 
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
@@ -110,6 +107,7 @@ void free_core(core_t* core, opt_t opt) {
     slow5_close(core->sp);
     delete core->runners;
     delete core->runner_stats;
+    delete core->model_config;
     free(core);
 }
 
@@ -229,7 +227,7 @@ void process_db(core_t* core, db_t* db) {
     a = realtime();
     basecall_db(core, db);
     b = realtime();
-    core->time_basecall += (b-a);
+    core->time_runners += (b-a);
     LOG_DEBUG("%s", "basecalled reads");
 
     a = realtime();
@@ -305,8 +303,6 @@ void init_opt(opt_t* opt) {
 #else
     opt->device = "cpu";
 #endif
-
-
 
     opt->chunk_size = 10000;
     opt->overlap = 150;

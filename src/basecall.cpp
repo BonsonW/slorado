@@ -85,7 +85,7 @@ static void call_chunks(
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
     const int C = scores_TNC.size(2);
-    const int state_len = core->model_config.state_len;
+    const int state_len = core->model_config->state_len;
     int nthreads = core->opt.num_thread / core->runners->size();
 
     uint8_t *moves;
@@ -94,7 +94,7 @@ static void call_chunks(
 
     LOG_DEBUG("%s", "decoding scores");
 
-    ts->time_beamsearch -= realtime();
+    ts->time_decode -= realtime();
     if (runner->device == "cpu") {
         openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
     } else {
@@ -145,7 +145,7 @@ static void call_chunks(
             exit(EXIT_FAILURE);
         }
     }
-    ts->time_beamsearch += realtime();
+    ts->time_decode += realtime();
 
     free(moves);
     free(sequence);
@@ -165,9 +165,9 @@ static void basecall_chunks(
         ts->time_accept += realtime();
     }
 
-    ts->time_decode -= realtime();
+    ts->time_basecall -= realtime();
     call_chunks(core, chunks, runner_idx);
-    ts->time_decode += realtime();
+    ts->time_basecall += realtime();
 }
 
 static void* pthread_single_basecall(void* voidargs) {

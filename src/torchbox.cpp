@@ -76,7 +76,6 @@ void init_runner(
     runner_t* runner,
     char *model_path,
     const std::string &device,
-    int chunk_size,
     int batch_size,
     torch::ScalarType dtype
 ) {
@@ -84,14 +83,14 @@ void init_runner(
     runner->device = device;
 
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
-    if (core->model_config.tx != NULL) {
-        runner->module = load_tx_model(core->model_config, runner->tensor_opts);
+    if (core->model_config->tx != NULL) {
+        runner->module = load_tx_model(*core->model_config, runner->tensor_opts);
     } else {
-        runner->module = load_lstm_model(core->model_config, runner->tensor_opts);
+        runner->module = load_lstm_model(*core->model_config, runner->tensor_opts);
     }
     LOG_TRACE("%s", "model populated");
 
-    runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
+    runner->input_tensor = torch::zeros({batch_size, 1, (int64_t)core->chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     
     if (device != "cpu") {
 #ifdef USE_GPU
@@ -104,7 +103,7 @@ void init_runner(
 #ifdef HAVE_ROCM
         c10::hip::HIPGuard device_guard(device_idx);
 #endif
-        runner->gpubuf = openfish_gpubuf_init(chunk_size / core->model_stride, batch_size, core->model_config.state_len);
+        runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
 #endif        
     }
 
@@ -127,7 +126,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
             init_runner_stat((*core->runner_stats).back());
 
             core->runners->push_back(new runner_t());
-            init_runner(core, (*core->runners).back(), model, device, core->chunk_size, opt->gpu_batch_size, torch::kF32);
+            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32);
         }
     } else {
 #ifdef USE_GPU
@@ -144,7 +143,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
                 core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
                 init_runner_stat((*core->runner_stats).back());
                 core->runners->push_back(new runner_t());
-                init_runner(core, (*core->runners).back(), model, device, opt->chunk_size, opt->gpu_batch_size, torch::kF16);
+                init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16);
             }
         }
 #else
@@ -200,7 +199,7 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
     opt_t opt = core->opt;
 
     if (len_raw_signal > 0) {
-        auto signal_norm_params = core->model_config.signal_norm_params;
+        auto signal_norm_params = core->model_config->signal_norm_params;
 
         torch::Tensor signal = tensor_from_record(rec);
 
