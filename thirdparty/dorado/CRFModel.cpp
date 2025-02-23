@@ -6,8 +6,6 @@
 #include "tensor_chunk_utils.h"
 
 using namespace torch::nn;
-namespace F = torch::nn::functional;
-using Slice = torch::indexing::Slice;
 
 ConvStackImpl::ConvStackImpl(const std::vector<ConvParams> &layer_params) {
     for (size_t i = 0; i < layer_params.size(); ++i) {
