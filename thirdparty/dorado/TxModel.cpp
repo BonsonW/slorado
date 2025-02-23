@@ -15,7 +15,6 @@
 #include <string>
 
 using namespace torch::nn;
-namespace Idx = torch::indexing;
 using Slice = torch::indexing::Slice;
 
 void apply_rounding(torch::Tensor &t, int remove_bits) {
