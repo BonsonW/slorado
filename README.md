@@ -21,6 +21,8 @@ Detailed instructions are available at:
 - [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-bin.md)
 - [AMD GPUs (rocm) on x84_64 systems](docs/rocm-bin.md)
 
+Running on Western Australia HPC (AMD GPUs): [Pawsey](docs/pawsey.md)
+
 Binaries for the CPU-only version are not provided as basecalling on the CPU is impractically slow. Nevertheless, the CPU-only version is easier to build compared to the GPU version (see [below](#compilation-and-running)).
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
