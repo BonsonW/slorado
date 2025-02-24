@@ -10,11 +10,11 @@ The binaries have already been installed on a shared location, so you do not nee
 
 Following are the directory paths to get started:
 
-- slorado binaries: `/scratch/references/slorado/slorado-06-11-2024/`
+- slorado binaries: `/scratch/references/slorado/slorado-v0.2.0-beta`
    - you may setup binaries yourself too by following instructions [here](rocm-bin.md)
-- test dataset: `/scratch/references/slorado/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5`
+- test dataset: `/scratch/references/slorado/slorado-v0.2.0-beta/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5`
    - you may download it as `wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample`)
-- example slurm script: `/scratch/references/slorado/slorado-06-11-2024/scripts/slurm.sh`
+- example slurm script: `TODO`
    - the script is also in [Note 1](#note-1) below
 
 First, copy the example slurm script. The ${PAWSEY_PROJECT} variable will automatically fill in your default account code. Now you simply call `sbatch slurm.sh` to submit the test job. 
