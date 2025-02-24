@@ -111,36 +111,6 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNorm
     }
 }
 
-std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<chunk_t> &chunks, size_t chunk_size) {
-    std::vector<torch::Tensor> tensors;
-    tensors.reserve(chunks.size());
-
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        auto input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks[i].input_offset, chunks[i].input_offset + chunk_size)});
-        if (input_slice.ndimension() == 1) {
-            input_slice = input_slice.unsqueeze(0);
-        }
-        size_t slice_size = input_slice.size(1);
-
-        // repeat-pad any non-full chunks
-        if (slice_size != chunk_size) {
-            auto t0 = std::div((int)chunk_size, (int)slice_size);
-            auto n = t0.quot;
-            auto overhang = t0.rem;
-            input_slice = torch::concat(
-                {
-                    input_slice.repeat({1, n}),
-                    input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, overhang)})
-                },
-                1
-            );
-        }
-        tensors.push_back(input_slice);
-    }
-
-    return tensors;
-}
-
 int div_round_closest(const int n, const int d) {
     return ((n < 0) ^ (d < 0)) ? ((n - d/2)/d) : ((n + d/2)/d);
 }

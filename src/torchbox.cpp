@@ -198,12 +198,11 @@ torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
 }
 
-std::vector<chunk_t> create_chunks(size_t tensor_size, size_t chunk_size, int overlap) {
+std::vector<chunk_t> create_chunks(size_t tensor_size, size_t chunk_size, size_t overlap) {
     size_t step = chunk_size - overlap;
 
-    auto t0 = std::div((int)tensor_size, (int)step);
-    size_t extra_chunk = t0.rem > 0 ? 1 : 0;
-    size_t n_chunks = t0.quot + extra_chunk;
+    size_t n_chunks = tensor_size / step;
+    n_chunks += tensor_size % step > 0 ? 1 : 0;
 
     std::vector<chunk_t> chunks;
     chunks.reserve(n_chunks);
@@ -214,6 +213,33 @@ std::vector<chunk_t> create_chunks(size_t tensor_size, size_t chunk_size, int ov
     }
 
     return chunks;
+}
+
+std::vector<torch::Tensor> tensor_chunks(torch::Tensor &signal, std::vector<chunk_t> &chunks, size_t chunk_size) {
+    std::vector<torch::Tensor> tensors;
+    tensors.reserve(chunks.size());
+
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        torch::Tensor input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks[i].input_offset, chunks[i].input_offset + chunk_size)});
+        input_slice = input_slice.unsqueeze(0);
+        size_t slice_size = input_slice.size(1);
+
+        // repeat-pad non-full chunks
+        if (slice_size != chunk_size) {
+            int64_t quot = chunk_size / slice_size;
+            int64_t rem = chunk_size % slice_size;
+            input_slice = torch::concat(
+                {
+                    input_slice.repeat({1, quot}),
+                    input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, rem)})
+                },
+                1
+            );
+        }
+        tensors.push_back(input_slice);
+    }
+
+    return tensors;
 }
 
 void preprocess_signal(core_t *core, db_t *db, int32_t i) {
@@ -231,7 +257,7 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         std::vector<chunk_t> chunks = create_chunks(signal.size(0), core->chunk_size, opt.overlap);
         (*db->chunks)[i] = chunks;
 
-        std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, core->chunk_size);
+        std::vector<torch::Tensor> tensors = tensor_chunks(signal, chunks, core->chunk_size);
         (*db->tensor_db->tensors)[i] = tensors;
     }
 }

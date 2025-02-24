@@ -20,7 +20,6 @@ T pad_to(const T a, const T b) {
 }
 
 void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params);
-std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<chunk_t> &chunks, size_t chunk_size);
 
 // Given a read with unstitched chunks, stitch the chunks (accounting for overlap) and assign basecalled read and qstring to Read
 void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::string &qstring);
