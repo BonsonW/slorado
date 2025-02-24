@@ -14,10 +14,9 @@ Following are the directory paths to get started:
    - you may setup binaries yourself too by following instructions [here](rocm-bin.md)
 - test dataset: `/scratch/references/slorado/slorado-v0.2.0-beta/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5`
    - you may download it as `wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample`
-- example slurm script: [Note 1](#note-1)
 
-First, copy the example slurm script, and simply call `sbatch --account=${PAWSEY_PROJECT}-gpu example.sh` to submit the test job. 
-This script will basecall the above test dataset using the `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` model and generate a fastq file in the current directory called giga.fastq.
+First, copy the example slurm script in [Note 1](#note-1) in to a file called `example.sh`, and simply call `sbatch --account=${PAWSEY_PROJECT}-gpu example.sh` to submit the test job. 
+This script will basecall the above test dataset using the `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` model and generate a fastq file in the current directory called `reads.fastq`.
 
 ## Running on your own data
 
@@ -31,7 +30,7 @@ To run on your own data, below are the steps. If you run into a problem, feel fr
 
 ## Tests and benchmarks
 
-We tested slorado on [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 8 MI250X GPUs on the node. The execution times were as follows for the three different basecalling models:
+We tested slorado on [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 4 MI250X GPUs on the node (8 graphics compute dies in total). The execution times were as follows for the three different basecalling models:
 
 | Basecalling model | Execution time (hh:mm:ss) |
 |---|---|
