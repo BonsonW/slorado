@@ -193,6 +193,27 @@ void free_tensor_db(db_t *db) {
     free(db->tensor_db);
 }
 
+torch::Tensor tensor_from_record(slow5_rec_t *rec) {
+    torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
+    return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
+}
+
+std::vector<chunk_t> chunks_from_tensor(torch::Tensor &tensor, size_t chunk_size, int overlap) {
+    std::vector<chunk_t> chunks;
+
+    size_t tensor_size = tensor.size(0);
+    size_t offset = 0;
+    size_t step = chunk_size - overlap;
+
+    chunks.push_back({offset, 0, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
+    for (size_t i = 1; offset + chunk_size < tensor_size; ++i) {
+        offset = std::min(offset + step, tensor_size - chunk_size);
+        chunks.push_back({offset, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
+    }
+
+    return chunks;
+}
+
 void preprocess_signal(core_t *core, db_t *db, int32_t i) {
     slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;

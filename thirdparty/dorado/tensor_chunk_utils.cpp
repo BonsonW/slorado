@@ -111,28 +111,6 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNorm
     }
 }
 
-torch::Tensor tensor_from_record(slow5_rec_t *rec) {
-    torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
-    return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
-}
-
-std::vector<chunk_t> chunks_from_tensor(torch::Tensor &tensor, size_t chunk_size, int overlap) {
-    std::vector<chunk_t> chunks;
-
-    size_t raw_size = tensor.size(0);
-    size_t offset = 0;
-    size_t chunk_in_read_idx = 0;
-    size_t signal_chunk_step = chunk_size - overlap;
-    chunks.push_back({offset, chunk_in_read_idx++, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
-
-    while (offset + chunk_size < raw_size) {
-        offset = std::min(offset + signal_chunk_step, raw_size - chunk_size);
-        chunks.push_back({offset, chunk_in_read_idx++, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
-    }
-
-    return chunks;
-}
-
 std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<chunk_t> &chunks, size_t chunk_size) {
     std::vector<torch::Tensor> tensors;
     tensors.reserve(chunks.size());
