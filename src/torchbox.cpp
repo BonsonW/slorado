@@ -198,17 +198,19 @@ torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
 }
 
-std::vector<chunk_t> chunks_from_tensor(torch::Tensor &tensor, size_t chunk_size, int overlap) {
-    std::vector<chunk_t> chunks;
-
-    size_t tensor_size = tensor.size(0);
-    size_t offset = 0;
+std::vector<chunk_t> create_chunks(size_t tensor_size, size_t chunk_size, int overlap) {
     size_t step = chunk_size - overlap;
 
-    chunks.push_back({offset, 0, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
-    for (size_t i = 1; offset + chunk_size < tensor_size; ++i) {
-        offset = std::min(offset + step, tensor_size - chunk_size);
-        chunks.push_back({offset, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
+    auto t0 = std::div((int)tensor_size, (int)step);
+    size_t extra_chunk = t0.rem > 0 ? 1 : 0;
+    size_t n_chunks = t0.quot + extra_chunk;
+
+    std::vector<chunk_t> chunks;
+    chunks.reserve(n_chunks);
+
+    for (size_t i = 0; i < n_chunks; ++i) {
+        size_t sig_pos = std::min(step * i, tensor_size - chunk_size);
+        chunks.push_back({sig_pos, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
     }
 
     return chunks;
@@ -226,10 +228,10 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
 
         scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
-        std::vector<chunk_t> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
+        std::vector<chunk_t> chunks = create_chunks(signal.size(0), core->chunk_size, opt.overlap);
         (*db->chunks)[i] = chunks;
 
-        std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
+        std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, core->chunk_size);
         (*db->tensor_db->tensors)[i] = tensors;
     }
 }
