@@ -182,15 +182,17 @@ void free_runners(core_t *core) {
 
 }
 
-void init_tensor_db(db_t *db) {
-    db->tensor_db = (tensor_db_t *)malloc(sizeof(tensor_db_t));
-    MALLOC_CHK(db->tensor_db);
-    db->tensor_db->tensors = new std::vector<std::vector<torch::Tensor>>(db->capacity_rec, std::vector<torch::Tensor>());
+void init_chunk_db(db_t *db) {
+    db->chunk_db = (chunk_db_t *)malloc(sizeof(chunk_db_t));
+    MALLOC_CHK(db->chunk_db);
+    db->chunk_db->chunks_res = new std::vector<std::vector<chunk_res_t>>(db->capacity_rec, std::vector<chunk_res_t>());
+    db->chunk_db->chunks_sig = new std::vector<std::vector<chunk_sig_t>>(db->capacity_rec, std::vector<chunk_sig_t>());
 }
 
-void free_tensor_db(db_t *db) {
-    delete db->tensor_db->tensors;
-    free(db->tensor_db);
+void free_chunk_db(db_t *db) {
+    delete db->chunk_db->chunks_res;
+    delete db->chunk_db->chunks_sig;
+    free(db->chunk_db);
 }
 
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {
@@ -198,29 +200,29 @@ torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
 }
 
-std::vector<chunk_t> create_chunks(size_t tensor_size, size_t chunk_size, size_t overlap) {
+std::vector<chunk_res_t> create_chunks_res(size_t tensor_size, size_t chunk_size, size_t overlap) {
     size_t step = chunk_size - overlap;
 
     size_t n_chunks = tensor_size / step;
     n_chunks += tensor_size % step > 0 ? 1 : 0;
 
-    std::vector<chunk_t> chunks;
-    chunks.reserve(n_chunks);
+    std::vector<chunk_res_t> chunks_res;
+    chunks_res.reserve(n_chunks);
 
     for (size_t i = 0; i < n_chunks; ++i) {
         size_t sig_pos = std::min(step * i, tensor_size - chunk_size);
-        chunks.push_back({sig_pos, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
+        chunks_res.push_back({sig_pos, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
     }
 
-    return chunks;
+    return chunks_res;
 }
 
-std::vector<torch::Tensor> tensor_chunks(torch::Tensor &signal, std::vector<chunk_t> &chunks, size_t chunk_size) {
-    std::vector<torch::Tensor> tensors;
-    tensors.reserve(chunks.size());
+std::vector<chunk_sig_t> create_chunks_sig(torch::Tensor &signal, std::vector<chunk_res_t> &chunks_res, size_t chunk_size) {
+    std::vector<chunk_sig_t> chunks_sig;
+    chunks_sig.reserve(chunks_res.size());
 
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        torch::Tensor input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks[i].input_offset, chunks[i].input_offset + chunk_size)});
+    for (size_t i = 0; i < chunks_res.size(); ++i) {
+        torch::Tensor input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks_res[i].input_offset, chunks_res[i].input_offset + chunk_size)});
         input_slice = input_slice.unsqueeze(0);
         size_t slice_size = input_slice.size(1);
 
@@ -236,10 +238,10 @@ std::vector<torch::Tensor> tensor_chunks(torch::Tensor &signal, std::vector<chun
                 1
             );
         }
-        tensors.push_back(input_slice);
+        chunks_sig.push_back({input_slice});
     }
 
-    return tensors;
+    return chunks_sig;
 }
 
 void preprocess_signal(core_t *core, db_t *db, int32_t i) {
@@ -254,10 +256,10 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
 
         scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
-        std::vector<chunk_t> chunks = create_chunks(signal.size(0), core->chunk_size, opt.overlap);
-        (*db->chunks)[i] = chunks;
+        std::vector<chunk_res_t> chunks_res = create_chunks_res(signal.size(0), core->chunk_size, opt.overlap);
+        (*db->chunk_db->chunks_res)[i] = chunks_res;
 
-        std::vector<torch::Tensor> tensors = tensor_chunks(signal, chunks, core->chunk_size);
-        (*db->tensor_db->tensors)[i] = tensors;
+        std::vector<chunk_sig_t> chunks_sig = create_chunks_sig(signal, chunks_res, core->chunk_size);
+        (*db->chunk_db->chunks_sig)[i] = chunks_sig;
     }
 }

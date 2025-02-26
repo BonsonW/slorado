@@ -50,10 +50,10 @@ SOFTWARE.
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
-void init_tensor_db(db_t *db);
-void free_tensor_db(db_t *db);
+void init_chunk_db(db_t *db);
+void free_chunk_db(db_t *db);
 void preprocess_signal(core_t* core, db_t* db, int32_t i);
-void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::string &qstring);
+void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -130,10 +130,7 @@ db_t* init_db(core_t* core) {
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
 
-
-    db->chunks = new std::vector<std::vector<chunk_t>>(db->capacity_rec, std::vector<chunk_t>());
-
-    init_tensor_db(db);
+    init_chunk_db(db);
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
     db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
 
@@ -195,11 +192,9 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     uint64_t len_raw_signal = rec->len_raw_signal;
 
     if (len_raw_signal > 0) {
-        std::vector<chunk_t> &chunks = (*db->chunks)[i];
-
         std::string sequence;
         std::string qstring;
-        stitch_chunks(chunks, sequence, qstring);
+        stitch_chunks(db->chunk_db, i, sequence, qstring);
 
         (*db->sequence)[i] = strdup(sequence.c_str());
         assert((*db->sequence)[i] != NULL);
@@ -266,7 +261,6 @@ void free_db_tmp(db_t* db) {
         free(db->mem_records[i]);
         free((*db->sequence)[i]);
         free((*db->qstring)[i]);
-        (*db->chunks)[i].clear();
     }
 }
 
@@ -281,10 +275,9 @@ void free_db(db_t* db) {
     free(db->mem_records);
     free(db->mem_bytes);
     free(db->means);
-    delete db->chunks;
     delete db->sequence;
     delete db->qstring;
-    free_tensor_db(db);
+    free_chunk_db(db);
     free(db);
 }
 

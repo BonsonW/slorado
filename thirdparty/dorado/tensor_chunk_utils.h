@@ -7,8 +7,7 @@
 #ifndef SIGNAL_PREP_H
 #define SIGNAL_PREP_H
 
-#include "slorado.h"
-#include <torch/torch.h>
+#include "torchbox.h"
 
 template <typename T>
 T div_round_up(const T a, const T b) {
@@ -22,7 +21,7 @@ T pad_to(const T a, const T b) {
 void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params);
 
 // Given a read with unstitched chunks, stitch the chunks (accounting for overlap) and assign basecalled read and qstring to Read
-void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::string &qstring);
+void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring);
 
 // Load serialised tensor from disk.
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors);

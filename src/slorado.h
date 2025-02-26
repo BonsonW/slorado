@@ -74,18 +74,9 @@ typedef struct {
     int32_t num_runners;        // number of runners: r
 } opt_t;
 
-typedef struct tensor_db tensor_db_t;
-
-/* chunk of raw signal, metadata and basecalling result */
-typedef struct {
-    size_t input_offset;    // raw signal offset
-    size_t idx_in_read;     // order in read
-    size_t raw_chunk_size;  // size in raw signal
-
-    std::string seq;
-    std::string qstring;
-    std::vector<uint8_t> moves;
-} chunk_t;
+typedef struct chunk_sig chunk_sig_t;
+typedef struct chunk_res chunk_res_t;
+typedef struct chunk_db chunk_db_t;
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -99,10 +90,7 @@ typedef struct {
 
     double *means;
 
-    // each slow5 record has a vec of chunks and tensors assigned to it
-    std::vector<std::vector<chunk_t>> *chunks;
-
-    tensor_db_t *tensor_db;
+    chunk_db_t *chunk_db;
 
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;

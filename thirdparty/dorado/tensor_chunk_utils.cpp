@@ -6,7 +6,6 @@
 #include <string>
 #include <utility>
 
-#include "slorado.h"
 #include "error.h"
 #include "tensor_chunk_utils.h"
 
@@ -115,7 +114,8 @@ int div_round_closest(const int n, const int d) {
     return ((n < 0) ^ (d < 0)) ? ((n - d/2)/d) : ((n + d/2)/d);
 }
 
-void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::string &qstring) {
+void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring) {
+    std::vector<chunk_res> &chunks = (*chunk_db->chunks_res)[i];
     // Calculate the chunk down sampling, round to closest int.
     int down_sampling = div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size());
 
@@ -123,8 +123,8 @@ void stitch_chunks(std::vector<chunk_t> &chunks, std::string &sequence, std::str
     std::vector<std::string> sequences;
     std::vector<std::string> qstrings;
     for (size_t i = 0; i < chunks.size() - 1; i++){
-        chunk_t &current_chunk = chunks[i];
-        chunk_t &next_chunk = chunks[i+1];
+        chunk_res_t &current_chunk = chunks[i];
+        chunk_res_t &next_chunk = chunks[i+1];
         int overlap_size = (current_chunk.raw_chunk_size + current_chunk.input_offset) - (next_chunk.input_offset);
         int overlap_down_sampled = overlap_size / down_sampling;
         int mid_point = overlap_down_sampled / 2;
