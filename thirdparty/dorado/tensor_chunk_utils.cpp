@@ -115,7 +115,7 @@ int div_round_closest(const int n, const int d) {
 }
 
 void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring) {
-    std::vector<chunk_res> &chunks = (*chunk_db->chunks_res)[i];
+    std::vector<chunk_res> &chunks = chunk_db->chunks_res[i];
     // Calculate the chunk down sampling, round to closest int.
     int down_sampling = div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size());
 
