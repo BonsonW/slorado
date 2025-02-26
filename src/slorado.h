@@ -102,21 +102,10 @@ typedef struct {
 
 /* time stamps */
 typedef struct {
-    double time_read;
-    double time_pad;
-    double time_assign;
     double time_accept;
-    double time_runners;
     double time_basecall;
-    double time_copy_score;
-    double time_scan_score;
-    double time_decode;
-    double time_basecall_cleanup;
     double time_infer;
-    double time_stitch;
-    double time_sync;
-    double time_write;
-    double time_total;
+    double time_decode;
 
     uint64_t total_dp;
 } runner_stat_t;
@@ -144,19 +133,14 @@ typedef struct {
 
     // timings
     double time_init_runners;
-    double time_sync;
     double time_load_db;
     double time_process_db;
     double time_parse;
     double time_preproc;
     double time_runners;
+    double time_sync;
     double time_postproc;
     double time_output;
-    double time_tens;
-    double time_trim;
-    double time_scale;
-    double time_chunk;
-    double time_chunk_tens;
 
     // stats for each runner
     std::vector<runner_stat_t *> *runner_stats;
