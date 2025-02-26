@@ -21,8 +21,8 @@ struct chunk_sig {
 };
 
 struct chunk_db {
-    std::vector<std::vector<chunk_res_t>> chunks_res;
-    std::vector<std::vector<chunk_sig_t>> chunks_sig;
+    std::vector<std::vector<chunk_res_t>> *chunks_res;
+    std::vector<std::vector<chunk_sig_t>> *chunks_sig;
 };
 
 struct runner {

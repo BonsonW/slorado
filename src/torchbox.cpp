@@ -185,11 +185,13 @@ void free_runners(core_t *core) {
 void init_chunk_db(db_t *db) {
     db->chunk_db = (chunk_db_t *)malloc(sizeof(chunk_db_t));
     MALLOC_CHK(db->chunk_db);
-    db->chunk_db->chunks_res = std::vector<std::vector<chunk_res_t>>(db->capacity_rec, std::vector<chunk_res_t>());
-    db->chunk_db->chunks_sig = std::vector<std::vector<chunk_sig_t>>(db->capacity_rec, std::vector<chunk_sig_t>());
+    db->chunk_db->chunks_res = new std::vector<std::vector<chunk_res_t>>(db->capacity_rec, std::vector<chunk_res_t>());
+    db->chunk_db->chunks_sig = new std::vector<std::vector<chunk_sig_t>>(db->capacity_rec, std::vector<chunk_sig_t>());
 }
 
 void free_chunk_db(db_t *db) {
+    delete db->chunk_db->chunks_res;
+    delete db->chunk_db->chunks_sig;
     free(db->chunk_db);
 }
 
@@ -255,9 +257,9 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
         std::vector<chunk_res_t> chunks_res = create_chunks_res(signal.size(0), core->chunk_size, opt.overlap);
-        db->chunk_db->chunks_res[i] = chunks_res;
+        (*db->chunk_db->chunks_res)[i] = chunks_res;
 
         std::vector<chunk_sig_t> chunks_sig = create_chunks_sig(signal, chunks_res, core->chunk_size);
-        db->chunk_db->chunks_sig[i] = chunks_sig;
+        (*db->chunk_db->chunks_sig)[i] = chunks_sig;
     }
 }

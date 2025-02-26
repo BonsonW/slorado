@@ -183,8 +183,8 @@ static void* pthread_single_basecall(void* voidargs) {
     std::vector<chunk_sig_t *> signals;
 
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
-        auto& chunks_res = db->chunk_db->chunks_res[read_idx];
-        auto& chunks_sig = db->chunk_db->chunks_sig[read_idx];
+        auto& chunks_res = (*db->chunk_db->chunks_res)[read_idx];
+        auto& chunks_sig = (*db->chunk_db->chunks_sig)[read_idx];
 
         for (size_t chunk_idx = 0; chunk_idx < chunks_res.size(); ++chunk_idx) {
             results.push_back(&chunks_res[chunk_idx]);
@@ -207,7 +207,7 @@ static void* pthread_single_basecall(void* voidargs) {
 }
 
 void basecall_db(core_t* core, db_t* db) {
-    int32_t n_reads = db->chunk_db->chunks_res.size();
+    int32_t n_reads = (*db->chunk_db->chunks_res).size();
     int32_t num_threads = (*core->runners).size();
     int32_t step = (n_reads + num_threads - 1) / num_threads;
 
