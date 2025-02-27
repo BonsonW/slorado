@@ -70,6 +70,18 @@ std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     return devices;
 }
 
+lstm_stats_t *init_lstm_stats() {
+    lstm_stats_t *lstm_stats = (lstm_stats_t *)calloc(1, sizeof(lstm_stats_t));
+    MALLOC_CHK(lstm_stats);
+    return lstm_stats;
+}
+
+tx_stats_t *init_tx_stats() {
+    tx_stats_t *tx_stats = (tx_stats_t *)calloc(1, sizeof(tx_stats_t));
+    MALLOC_CHK(tx_stats);
+    return tx_stats;
+}
+
 /* initialise runners */
 void init_runner(
     core_t* core,
@@ -77,21 +89,12 @@ void init_runner(
     char *model_path,
     const std::string &device,
     int batch_size,
-    torch::ScalarType dtype
+    torch::ScalarType dtype,
+    int runner_idx
 ) {
     LOG_TRACE("initializing model runner for device %s", device.c_str());
     runner->device = device;
 
-    runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
-    if (core->model_config->tx != NULL) {
-        runner->module = load_tx_model(*core->model_config, runner->tensor_opts);
-    } else {
-        runner->module = load_lstm_model(*core->model_config, runner->tensor_opts);
-    }
-    LOG_TRACE("%s", "model populated");
-
-    runner->input_tensor = torch::zeros({batch_size, 1, (int64_t)core->chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
-    
     if (device != "cpu") {
 #ifdef USE_GPU
         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
@@ -106,6 +109,20 @@ void init_runner(
         runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
 #endif        
     }
+
+    runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
+    if (core->model_config->tx != NULL) {
+        tx_stats_t *model_stats = init_tx_stats();
+        runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats);
+        (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+    } else {
+        lstm_stats_t *model_stats = init_lstm_stats();
+        runner->module = load_lstm_model(*core->model_config, runner->tensor_opts);
+        (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+    }
+    LOG_TRACE("%s", "model populated");
+
+    runner->input_tensor = torch::zeros({batch_size, 1, (int64_t)core->chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }
@@ -126,7 +143,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
             init_runner_stat((*core->runner_stats).back());
 
             core->runners->push_back(new runner_t());
-            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32);
+            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32, i);
         }
     } else {
 #ifdef USE_GPU
@@ -143,7 +160,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
                 core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
                 init_runner_stat((*core->runner_stats).back());
                 core->runners->push_back(new runner_t());
-                init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16);
+                init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16, i);
             }
         }
 #else
@@ -161,6 +178,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
 
 void free_runners(core_t *core) {
     for (size_t i = 0; i < core->runner_stats->size(); ++i) {
+        free((*core->runner_stats)[i]->model_stats);
         free((*core->runner_stats)[i]);
     }
 

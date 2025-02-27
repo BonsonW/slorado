@@ -308,19 +308,38 @@ torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options) : m_options(options) {
+TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats) : m_options(options) {
     convs = register_module("convs", ::ConvStack(config.convs));
     tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
+    model_stats = _model_stats;
 }
 
 torch::Tensor TxModelImpl::forward(const torch::Tensor &chunk_NCT) {
     torch::Tensor h;
+    double a, b;
+    
+    a = realtime();
     h = convs->forward(chunk_NCT);
+    b = realtime();
+    model_stats->time_conv_stack += b-a;
+    
+    a = realtime();
     h = tx_encoder(h);
+    b = realtime();
+    model_stats->time_tx_encoder += b-a;
+
+    a = realtime();
     h = tx_decoder(h);
+    b = realtime();
+    model_stats->time_tx_decoder += b-a;
+
+    a = realtime();
     h = crf(h);
+    b = realtime();
+    model_stats->time_crf += b-a;
+
     // Returns: NTC
     return h;
 }
@@ -512,8 +531,8 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options) {
-    auto model = TxModel(model_config, options);
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats) {
+    auto model = TxModel(model_config, options, model_stats);
     auto state_dict = load_tx_model_weights(model_config.model_path);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());

@@ -100,12 +100,29 @@ typedef struct {
     int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } db_t;
 
+typedef struct {
+    double time_conv_stack;
+    double time_rnns;
+    double time_crf_1;
+    double time_crf_2;
+    double time_clamp;
+} lstm_stats_t;
+
+typedef struct {
+    double time_conv_stack;
+    double time_tx_encoder;
+    double time_tx_decoder;
+    double time_crf;
+} tx_stats_t;
+
 /* time stamps */
 typedef struct {
     double time_accept;
     double time_basecall;
     double time_infer;
     double time_decode;
+
+    void *model_stats;
 
     uint64_t total_dp;
 } runner_stat_t;

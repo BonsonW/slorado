@@ -3,6 +3,7 @@
 #include "model_config.h"
 #include "CRFModel.h"
 #include "error.h"
+#include "misc.h"
 #include "tensor_chunk_utils.h"
 
 #include <ATen/core/TensorBody.h>
@@ -17,7 +18,7 @@
 
 using namespace torch::nn;
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options);
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
 torch::Tensor scaled_dot_product_attention_naive(
     const torch::Tensor &q,
@@ -159,7 +160,7 @@ struct LinearScaledCRFImpl : torch::nn::Module {
 TORCH_MODULE(LinearScaledCRF);
 
 struct TxModelImpl : torch::nn::Module {
-    explicit TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options);
+    explicit TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats);
 
     void load_state_dict(const std::vector<torch::Tensor> &weights) {
         module_load_state_dict(*this, weights);
@@ -171,6 +172,8 @@ struct TxModelImpl : torch::nn::Module {
     TxEncoderStack tx_encoder{nullptr};
     LinearUpsample tx_decoder{nullptr};
     LinearScaledCRF crf{nullptr};
+
+    tx_stats_t *model_stats;
 
     const torch::TensorOptions m_options;
 };
