@@ -319,24 +319,29 @@ TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOption
 torch::Tensor TxModelImpl::forward(const torch::Tensor &chunk_NCT) {
     torch::Tensor h;
     double a, b;
+    auto device_idx = m_options.device_index();
     
     a = realtime();
     h = convs->forward(chunk_NCT);
+    torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_conv_stack += b-a;
     
     a = realtime();
     h = tx_encoder(h);
+    torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_tx_encoder += b-a;
 
     a = realtime();
     h = tx_decoder(h);
+    torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_tx_decoder += b-a;
 
     a = realtime();
     h = crf(h);
+    torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_crf += b-a;
 
