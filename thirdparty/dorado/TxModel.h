@@ -87,7 +87,8 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
         bool qkv_bias_,
         bool out_bias_,
         const std::pair<int, int> &attn_window_,
-        const torch::TensorOptions &options_
+        const torch::TensorOptions &options_,
+        tx_stats_t *_model_stats
     );
 
     torch::Tensor forward(torch::Tensor x);
@@ -104,6 +105,8 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 
     torch::nn::Linear wqkv{nullptr}, out_proj{nullptr};
     RotaryEmbedding rotary_emb{nullptr};
+
+    tx_stats_t *model_stats;
 };
 
 TORCH_MODULE(MultiHeadAttention);
@@ -117,12 +120,12 @@ struct TxEncoderImpl : torch::nn::Module {
     
     torch::Tensor sincos_bfr, proj_weight, proj_bias, t_res_weights, t_res2_weights, t_fc2_wts;
 
-    tx_stats_t *model_stats;
-    int device_idx;
-
     MultiHeadAttention self_attn{nullptr};
     GatedMLP ff{nullptr};
     RMSNorm norm1{nullptr}, norm2{nullptr};
+
+    tx_stats_t *model_stats;
+    int device_idx;
 };
 
 TORCH_MODULE(TxEncoder);

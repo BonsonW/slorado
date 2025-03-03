@@ -118,6 +118,11 @@ typedef struct {
     double time_norm1;
     double time_ff;
     double time_norm2;
+
+    double time_mm;
+    double time_rotary_emb;
+    double time_sdp_attn;
+    double time_out_proj;
 } tx_stats_t;
 
 /* time stamps */
