@@ -113,6 +113,11 @@ typedef struct {
     double time_tx_encoder;
     double time_tx_decoder;
     double time_crf;
+
+    double time_self_attn;
+    double time_norm1;
+    double time_ff;
+    double time_norm2;
 } tx_stats_t;
 
 /* time stamps */

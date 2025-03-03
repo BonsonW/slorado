@@ -244,11 +244,13 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options) : params(params_) {
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats) : params(params_) {
     self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
+    device_idx = options.device_index();
+    model_stats = _model_stats;
 
     const torch::Tensor deepnorm_alpha = torch::tensor(params.deepnorm_alpha);
     register_buffer("deepnorm_alpha", deepnorm_alpha);
@@ -258,21 +260,43 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     torch::Tensor attn, f;
     const auto deepnorm_alpha = named_buffers()["deepnorm_alpha"];
 
+    double a, b;
+
     auto run_norm = [&](RMSNorm norm, const torch::Tensor &in) {
         x = norm(in + (x * deepnorm_alpha));
     };
-    attn = self_attn(x);
-    run_norm(norm1, attn);
-    f = ff(x);
-    run_norm(norm2, f);
 
+    a = realtime();
+    attn = self_attn(x);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_self_attn += b-a;
+
+    a = realtime();
+    run_norm(norm1, attn);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_norm1 += b-a;
+
+    a = realtime();
+    f = ff(x);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_ff += b-a;
+
+    a = realtime();
+    run_norm(norm2, f);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_norm2 += b-a;
+    
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options) {
+TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
-        TxEncoder encoder(params, options);
+        TxEncoder encoder(params, options, model_stats);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
         layer_vec.push_back(encoder);
     }
@@ -310,7 +334,7 @@ torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
 
 TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats) : m_options(options) {
     convs = register_module("convs", ::ConvStack(config.convs));
-    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options));
+    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
     model_stats = _model_stats;

@@ -109,13 +109,16 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 TORCH_MODULE(MultiHeadAttention);
 
 struct TxEncoderImpl : torch::nn::Module {
-    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options);
+    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
     torch::Tensor forward(torch::Tensor x);
 
     TxEncoderParams params;
     
     torch::Tensor sincos_bfr, proj_weight, proj_bias, t_res_weights, t_res2_weights, t_fc2_wts;
+
+    tx_stats_t *model_stats;
+    int device_idx;
 
     MultiHeadAttention self_attn{nullptr};
     GatedMLP ff{nullptr};
@@ -125,7 +128,7 @@ struct TxEncoderImpl : torch::nn::Module {
 TORCH_MODULE(TxEncoder);
 
 struct TxEncoderStackImpl : torch::nn::Module {
-    TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options);
+    TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
     torch::Tensor forward(const torch::Tensor &x);
     
