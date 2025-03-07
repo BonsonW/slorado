@@ -135,16 +135,14 @@ void init_runner_stat(runner_stat_t *time_stamps) {
 void init_runners(core_t* core, opt_t *opt, char *model) {
     core->runners = new std::vector<runner_t *>();
     core->runner_stats = new std::vector<runner_stat_t *>();
-    int runner_idx = 0;
+    
     if (strcmp(opt->device, "cpu") == 0) {
         std::string device = opt->device;
-        for (int i = 0; i < opt->num_runners; ++i) {
-            core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
-            init_runner_stat((*core->runner_stats).back());
+        core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
+        init_runner_stat((*core->runner_stats).back());
 
-            core->runners->push_back(new runner_t());
-            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32, runner_idx++);
-        }
+        core->runners->push_back(new runner_t());
+        init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32, 0);
     } else {
 #ifdef USE_GPU
         std::vector<std::string> devices;
@@ -155,13 +153,12 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
             exit(EXIT_FAILURE);
         }
 
+        int runner_idx = 0;
         for (auto device: devices) {
-            for (int i = 0; i < opt->num_runners; ++i) {
-                core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
-                init_runner_stat((*core->runner_stats).back());
-                core->runners->push_back(new runner_t());
-                init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16, runner_idx++);
-            }
+            core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
+            init_runner_stat((*core->runner_stats).back());
+            core->runners->push_back(new runner_t());
+            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16, runner_idx++);
         }
 #else
         ERROR("Invalid device: %s. Please compile again for GPU", opt->device);

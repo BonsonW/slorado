@@ -77,7 +77,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -c INT                      chunk size [%zu]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
-    // fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
@@ -154,16 +153,7 @@ int basecaller_main(int argc, char* argv[]) {
                 ERROR("Error in opening output file %s: %s\n", opt.out_path, strerror(errno));
                 exit(EXIT_FAILURE);
             }
-        } else if (c == 'r') {
-            opt.num_runners = atoi(optarg);
-            if (opt.num_runners < 1) {
-                ERROR("Number of runners should larger than 0. You entered %d", opt.num_runners);
-                exit(EXIT_FAILURE);
-            } else if (opt.num_runners > 1) {
-                ERROR("Number of runners greater than 1 is not supported yet. You entered %d", opt.num_runners);
-                exit(EXIT_FAILURE);
-            }
-        } else if (c == 'V') {
+        }  else if (c == 'V') {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
         } else if (c == 'h') {
@@ -221,7 +211,6 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"batch size:         %d\n", opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
-    //fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
 

@@ -299,7 +299,6 @@ void init_opt(opt_t* opt) {
 
     opt->chunk_size = 10000;
     opt->overlap = 150;
-    opt->num_runners = 1;
 
     opt->out = stdout;
 

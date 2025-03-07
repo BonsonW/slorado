@@ -71,7 +71,6 @@ typedef struct {
     const char *device;         // specified device: x
     size_t chunk_size;          // size of chunks: c
     int32_t overlap;            // overlap: p
-    int32_t num_runners;        // number of runners: r
 } opt_t;
 
 typedef struct chunk_sig chunk_sig_t;
