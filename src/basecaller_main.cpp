@@ -77,7 +77,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -c INT                      chunk size [%zu]\n", opt.chunk_size);
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
-    // fprintf(fp_help, "  -r INT                      number of runners [%d]\n", opt.num_runners);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
@@ -154,16 +153,7 @@ int basecaller_main(int argc, char* argv[]) {
                 ERROR("Error in opening output file %s: %s\n", opt.out_path, strerror(errno));
                 exit(EXIT_FAILURE);
             }
-        } else if (c == 'r') {
-            opt.num_runners = atoi(optarg);
-            if (opt.num_runners < 1) {
-                ERROR("Number of runners should larger than 0. You entered %d", opt.num_runners);
-                exit(EXIT_FAILURE);
-            } else if (opt.num_runners > 1) {
-                ERROR("Number of runners greater than 1 is not supported yet. You entered %d", opt.num_runners);
-                exit(EXIT_FAILURE);
-            }
-        } else if (c == 'V') {
+        }  else if (c == 'V') {
             fprintf(stdout,"slorado %s\n",SLORADO_VERSION);
             exit(EXIT_SUCCESS);
         } else if (c == 'h') {
@@ -221,7 +211,6 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"batch size:         %d\n", opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
-    //fprintf(stderr,"no. runners:        %d\n", opt.num_runners);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
     fprintf(stderr, "\n");
 
@@ -274,23 +263,38 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n[%s] data processing: %.3f sec", __func__, core->time_process_db);
     fprintf(stderr, "\n[%s]     - parse: %.3f sec", __func__, core->time_parse);
     fprintf(stderr, "\n[%s]     - preprocess: %.3f sec", __func__, core->time_preproc);
-    // fprintf(stderr, "\n[%s]          - tens from rec: %.3f sec", __func__, core->time_tens);
-    // fprintf(stderr, "\n[%s]          - scale: %.3f sec", __func__, core->time_scale);
-    // fprintf(stderr, "\n[%s]          - chunk: %.3f sec", __func__, core->time_chunk);
-    // fprintf(stderr, "\n[%s]          - chunk tens: %.3f sec", __func__, core->time_chunk_tens);
-    fprintf(stderr, "\n[%s]     - basecall: %.3f sec", __func__, core->time_basecall);
+    fprintf(stderr, "\n[%s]     - runners: %.3f sec", __func__, core->time_runners);
     fprintf(stderr, "\n[%s]          - synchronisation: %.3f sec", __func__, core->time_sync);
 
     auto runner_stats = *core->runner_stats;
     for (size_t i = 0; i < runner_stats.size(); ++i) {
-        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_stats[i]->time_basecall + runner_stats[i]->time_decode + runner_stats[i]->time_accept);
+        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_stats[i]->time_basecall + runner_stats[i]->time_accept);
         fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_stats[i]->time_accept);
-        fprintf(stderr, "\n[%s]             - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
+        fprintf(stderr, "\n[%s]             - basecall: %.3f sec", __func__, runner_stats[i]->time_basecall);
         fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_stats[i]->time_infer);
-        // fprintf(stderr, "\n[%s]                 - copy to cpu: %.3f sec", __func__, runner_stats[i]->time_copy_score);
-        // fprintf(stderr, "\n[%s]                 - scan scores: %.3f sec", __func__, runner_stats[i]->time_scan_score);
-        fprintf(stderr, "\n[%s]                 - beamsearch: %.3f sec", __func__, runner_stats[i]->time_beamsearch);
-        // fprintf(stderr, "\n[%s]                 - cleanup: %.3f sec", __func__, runner_stats[i]->time_decode_cleanup);
+        if (core->model_config->tx != NULL) { // tx
+            tx_stats_t *model_stats = (tx_stats_t *)runner_stats[i]->model_stats;
+            fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
+            fprintf(stderr, "\n[%s]                     - tx_encoder: %.3f sec", __func__, model_stats->time_tx_encoder);
+            fprintf(stderr, "\n[%s]                         - self_attn: %.3f sec", __func__, model_stats->time_self_attn);
+            fprintf(stderr, "\n[%s]                             - mm: %.3f sec", __func__, model_stats->time_mm);
+            fprintf(stderr, "\n[%s]                             - rotary_emb: %.3f sec", __func__, model_stats->time_rotary_emb);
+            fprintf(stderr, "\n[%s]                             - sdp_attn: %.3f sec", __func__, model_stats->time_sdp_attn);
+            fprintf(stderr, "\n[%s]                             - out_proj: %.3f sec", __func__, model_stats->time_out_proj);
+            fprintf(stderr, "\n[%s]                         - norm1: %.3f sec", __func__, model_stats->time_norm1);
+            fprintf(stderr, "\n[%s]                         - ff: %.3f sec", __func__, model_stats->time_ff);
+            fprintf(stderr, "\n[%s]                         - norm2: %.3f sec", __func__, model_stats->time_norm2);
+            fprintf(stderr, "\n[%s]                     - tx_decoder: %.3f sec", __func__, model_stats->time_tx_decoder);
+            fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
+        } else { // lstm
+            lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
+            // fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
+            // fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
+            // fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
+            // fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
+            // fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
+        }
+        fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
         // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
     }
     fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);

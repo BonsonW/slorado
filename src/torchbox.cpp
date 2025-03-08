@@ -1,5 +1,5 @@
 /**
- * @file elephant.c
+ * @file torchbox.c
  * @brief common functions for slorado that depends on torch
  * @author Hasindu Gamaarachchi (hasindu@unsw.edu.au)
  * @author Bonson Wong (bonson.ym@gmail.com)
@@ -31,8 +31,8 @@ SOFTWARE.
 ******************************************************************************/
 #include "error.h"
 #include "misc.h"
-#include "elephant.h"
-#include "dorado/signal_prep_stitch_tensor_utils.h"
+#include "torchbox.h"
+#include "dorado/tensor_chunk_utils.h"
 #include "dorado/CRFModel.h"
 #include "dorado/TxModel.h"
 
@@ -70,50 +70,30 @@ std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     return devices;
 }
 
+lstm_stats_t *init_lstm_stats() {
+    lstm_stats_t *lstm_stats = (lstm_stats_t *)calloc(1, sizeof(lstm_stats_t));
+    MALLOC_CHK(lstm_stats);
+    return lstm_stats;
+}
+
+tx_stats_t *init_tx_stats() {
+    tx_stats_t *tx_stats = (tx_stats_t *)calloc(1, sizeof(tx_stats_t));
+    MALLOC_CHK(tx_stats);
+    return tx_stats;
+}
+
 /* initialise runners */
 void init_runner(
+    core_t* core,
     runner_t* runner,
     char *model_path,
     const std::string &device,
-    int chunk_size,
     int batch_size,
-    torch::ScalarType dtype
+    torch::ScalarType dtype,
+    int runner_idx
 ) {
     LOG_TRACE("initializing model runner for device %s", device.c_str());
-    bool use_tx = is_tx_model_config(model_path);
-
-    CRFModelConfig model_config;
-
-    if (use_tx) {
-        model_config = load_tx_model_config(model_path);
-    } else {
-        model_config = load_lstm_model_config(model_path);
-    }
-    model_config.model_path = std::string(model_path);
-    
-    LOG_TRACE("%s", "model config loaded");
-
-    runner->model_stride = static_cast<size_t>(model_config.stride);
-
-    runner->decoder_opts = DECODER_INIT;
-    runner->decoder_opts.q_shift = model_config.qbias;
-    runner->decoder_opts.q_scale = model_config.qscale;
-
     runner->device = device;
-    runner->model_config = model_config;
-
-    runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
-    if (use_tx) {
-        runner->module = load_tx_model(model_config, runner->tensor_opts);
-    } else {
-        runner->module = load_lstm_model(model_config, runner->tensor_opts);
-    }
-
-    LOG_TRACE("%s", "model populated");
-
-    chunk_size -= chunk_size % runner->model_stride;
-    runner->input_tensor = torch::zeros({batch_size, 1, chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
-    runner->chunk_size = chunk_size;
 
     if (device != "cpu") {
 #ifdef USE_GPU
@@ -126,9 +106,23 @@ void init_runner(
 #ifdef HAVE_ROCM
         c10::hip::HIPGuard device_guard(device_idx);
 #endif
-        runner->gpubuf = openfish_gpubuf_init(chunk_size / runner->model_stride, batch_size, model_config.state_len);
+        runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
 #endif        
     }
+
+    runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
+    if (core->model_config->tx != NULL) {
+        tx_stats_t *model_stats = init_tx_stats();
+        runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats);
+        (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+    } else {
+        lstm_stats_t *model_stats = init_lstm_stats();
+        runner->module = load_lstm_model(*core->model_config, runner->tensor_opts);
+        (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+    }
+    LOG_TRACE("%s", "model populated");
+
+    runner->input_tensor = torch::zeros({batch_size, 1, (int64_t)core->chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
 
     LOG_DEBUG("fully initialized model runner for device %s", device.c_str());
 }
@@ -141,16 +135,14 @@ void init_runner_stat(runner_stat_t *time_stamps) {
 void init_runners(core_t* core, opt_t *opt, char *model) {
     core->runners = new std::vector<runner_t *>();
     core->runner_stats = new std::vector<runner_stat_t *>();
-
+    
     if (strcmp(opt->device, "cpu") == 0) {
         std::string device = opt->device;
-        for (int i = 0; i < opt->num_runners; ++i) {
-            core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
-            init_runner_stat((*core->runner_stats).back());
+        core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
+        init_runner_stat((*core->runner_stats).back());
 
-            core->runners->push_back(new runner_t());
-            init_runner((*core->runners).back(), model, device, opt->chunk_size, opt->gpu_batch_size, torch::kF32);
-        }
+        core->runners->push_back(new runner_t());
+        init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32, 0);
     } else {
 #ifdef USE_GPU
         std::vector<std::string> devices;
@@ -161,13 +153,12 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
             exit(EXIT_FAILURE);
         }
 
+        int runner_idx = 0;
         for (auto device: devices) {
-            for (int i = 0; i < opt->num_runners; ++i) {
-                core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
-                init_runner_stat((*core->runner_stats).back());
-                core->runners->push_back(new runner_t());
-                init_runner((*core->runners).back(), model, device, opt->chunk_size, opt->gpu_batch_size, torch::kF16);
-            }
+            core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
+            init_runner_stat((*core->runner_stats).back());
+            core->runners->push_back(new runner_t());
+            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16, runner_idx++);
         }
 #else
         ERROR("Invalid device: %s. Please compile again for GPU", opt->device);
@@ -175,7 +166,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
 #endif
     }
 
-    auto adjusted_chunk_size = core->runners->front()->chunk_size;
+    auto adjusted_chunk_size = core->chunk_size;
     if (opt->chunk_size != adjusted_chunk_size) {
         LOG_DEBUG("Adjusting chunk size to %zu", adjusted_chunk_size);
         opt->chunk_size = adjusted_chunk_size;
@@ -184,6 +175,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
 
 void free_runners(core_t *core) {
     for (size_t i = 0; i < core->runner_stats->size(); ++i) {
+        free((*core->runner_stats)[i]->model_stats);
         free((*core->runner_stats)[i]);
     }
 
@@ -205,37 +197,84 @@ void free_runners(core_t *core) {
 
 }
 
-void init_elephant(db_t *db) {
-    db->elephant = (elephant_t *)malloc(sizeof(elephant_t));
-    MALLOC_CHK(db->elephant);
-    db->elephant->tensors = new std::vector<std::vector<torch::Tensor>>(db->capacity_rec, std::vector<torch::Tensor>());
+void init_chunk_db(db_t *db) {
+    db->chunk_db = (chunk_db_t *)malloc(sizeof(chunk_db_t));
+    MALLOC_CHK(db->chunk_db);
+    db->chunk_db->chunks_res = new std::vector<std::vector<chunk_res_t>>(db->capacity_rec, std::vector<chunk_res_t>());
+    db->chunk_db->chunks_sig = new std::vector<std::vector<chunk_sig_t>>(db->capacity_rec, std::vector<chunk_sig_t>());
 }
 
-void free_elephant(db_t *db) {
-    delete db->elephant->tensors;
-    free(db->elephant);
+void free_chunk_db(db_t *db) {
+    delete db->chunk_db->chunks_res;
+    delete db->chunk_db->chunks_sig;
+    free(db->chunk_db);
+}
+
+torch::Tensor tensor_from_record(slow5_rec_t *rec) {
+    torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
+    return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
+}
+
+std::vector<chunk_res_t> create_chunks_res(size_t tensor_size, size_t chunk_size, size_t overlap) {
+    size_t step = chunk_size - overlap;
+
+    size_t n_chunks = tensor_size / step;
+    n_chunks += tensor_size % step > 0 ? 1 : 0;
+
+    std::vector<chunk_res_t> chunks_res;
+    chunks_res.reserve(n_chunks);
+
+    for (size_t i = 0; i < n_chunks; ++i) {
+        size_t sig_pos = std::min(step * i, tensor_size - chunk_size);
+        chunks_res.push_back({sig_pos, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
+    }
+
+    return chunks_res;
+}
+
+std::vector<chunk_sig_t> create_chunks_sig(torch::Tensor &signal, std::vector<chunk_res_t> &chunks_res, size_t chunk_size) {
+    std::vector<chunk_sig_t> chunks_sig;
+    chunks_sig.reserve(chunks_res.size());
+
+    for (size_t i = 0; i < chunks_res.size(); ++i) {
+        torch::Tensor input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks_res[i].input_offset, chunks_res[i].input_offset + chunk_size)});
+        input_slice = input_slice.unsqueeze(0);
+        size_t slice_size = input_slice.size(1);
+
+        // repeat-pad non-full chunks
+        if (slice_size != chunk_size) {
+            int64_t quot = chunk_size / slice_size;
+            int64_t rem = chunk_size % slice_size;
+            input_slice = torch::concat(
+                {
+                    input_slice.repeat({1, quot}),
+                    input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, rem)})
+                },
+                1
+            );
+        }
+        chunks_sig.push_back({input_slice});
+    }
+
+    return chunks_sig;
 }
 
 void preprocess_signal(core_t *core, db_t *db, int32_t i) {
-    torch::InferenceMode inference_mode_guard;
-
     slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
 
     if (len_raw_signal > 0) {
-        // quick and dirty model config, todo: should move this to core
-        runner_t* runner = (*core->runners)[0];
-        auto signal_norm_params = runner->model_config.signal_norm_params;
+        auto signal_norm_params = core->model_config->signal_norm_params;
 
         torch::Tensor signal = tensor_from_record(rec);
 
         scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
-        std::vector<Chunk *> chunks = chunks_from_tensor(signal, opt.chunk_size, opt.overlap);
-        (*db->chunks)[i] = chunks;
+        std::vector<chunk_res_t> chunks_res = create_chunks_res(signal.size(0), core->chunk_size, opt.overlap);
+        (*db->chunk_db->chunks_res)[i] = chunks_res;
 
-        std::vector<torch::Tensor> tensors = tensor_as_chunks(signal, chunks, opt.chunk_size);
-        (*db->elephant->tensors)[i] = tensors;
+        std::vector<chunk_sig_t> chunks_sig = create_chunks_sig(signal, chunks_res, core->chunk_size);
+        (*db->chunk_db->chunks_sig)[i] = chunks_sig;
     }
 }

@@ -6,9 +6,8 @@
 #include <string>
 #include <utility>
 
-#include "slorado.h"
 #include "error.h"
-#include "signal_prep_stitch_tensor_utils.h"
+#include "tensor_chunk_utils.h"
 
 #define EPS (1e-9f)
 #define DEFAULT_TRIM_THRESHOLD (2.4f)
@@ -111,73 +110,21 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNorm
     }
 }
 
-torch::Tensor tensor_from_record(slow5_rec_t *rec) {
-    torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
-    return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
-}
-
-std::vector<Chunk *> chunks_from_tensor(torch::Tensor &tensor, int chunk_size, int overlap) {
-    std::vector<Chunk *> chunks;
-
-    size_t raw_size = tensor.size(0);
-    size_t offset = 0;
-    size_t chunk_in_read_idx = 0;
-    size_t signal_chunk_step = chunk_size - overlap;
-    chunks.push_back(new Chunk(offset, chunk_in_read_idx++, chunk_size));
-
-    while (offset + chunk_size < raw_size) {
-        offset = std::min(offset + signal_chunk_step, raw_size - chunk_size);
-        chunks.push_back(new Chunk(offset, chunk_in_read_idx++, chunk_size));
-    }
-
-    return chunks;
-}
-
-std::vector<torch::Tensor> tensor_as_chunks(torch::Tensor &signal, std::vector<Chunk *> &chunks, size_t chunk_size) {
-    std::vector<torch::Tensor> tensors;
-    tensors.reserve(chunks.size());
-
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        auto input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks[i]->input_offset, chunks[i]->input_offset + chunk_size)});
-        if (input_slice.ndimension() == 1) {
-            input_slice = input_slice.unsqueeze(0);
-        }
-        size_t slice_size = input_slice.size(1);
-
-        // repeat-pad any non-full chunks
-        if (slice_size != chunk_size) {
-            auto t0 = std::div((int)chunk_size, (int)slice_size);
-            auto n = t0.quot;
-            auto overhang = t0.rem;
-            input_slice = torch::concat(
-                {
-                    input_slice.repeat({1, n}),
-                    input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, overhang)})
-                },
-                1
-            );
-        }
-        tensors.push_back(input_slice);
-    }
-
-    return tensors;
-}
-
-int div_round_closest(const int n, const int d)
-{
+int div_round_closest(const int n, const int d) {
     return ((n < 0) ^ (d < 0)) ? ((n - d/2)/d) : ((n + d/2)/d);
 }
 
-void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::string &qstring) {
+void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring) {
+    std::vector<chunk_res> &chunks = (*chunk_db->chunks_res)[i];
     // Calculate the chunk down sampling, round to closest int.
-    int down_sampling = div_round_closest(chunks[0]->raw_chunk_size, chunks[0]->moves.size());
+    int down_sampling = div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size());
 
     int start_pos = 0;
     std::vector<std::string> sequences;
     std::vector<std::string> qstrings;
     for (size_t i = 0; i < chunks.size() - 1; i++){
-        Chunk &current_chunk = *chunks[i];
-        Chunk &next_chunk = *chunks[i+1];
+        chunk_res_t &current_chunk = chunks[i];
+        chunk_res_t &next_chunk = chunks[i+1];
         int overlap_size = (current_chunk.raw_chunk_size + current_chunk.input_offset) - (next_chunk.input_offset);
         int overlap_down_sampled = overlap_size / down_sampling;
         int mid_point = overlap_down_sampled / 2;
@@ -200,8 +147,8 @@ void stitch_chunks(std::vector<Chunk *> &chunks, std::string &sequence, std::str
     }
 
     //append the final read
-    sequences.push_back(chunks[chunks.size() - 1]->seq.substr(start_pos));
-    qstrings.push_back(chunks[chunks.size() - 1]->qstring.substr(start_pos));
+    sequences.push_back(chunks[chunks.size() - 1].seq.substr(start_pos));
+    qstrings.push_back(chunks[chunks.size() - 1].qstring.substr(start_pos));
 
     // Set the read seq and qstring
     sequence = std::accumulate(sequences.begin(), sequences.end(), std::string(""));

@@ -36,9 +36,11 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdint.h>
 #include <slow5/slow5.h>
+#include <openfish/openfish.h>
 #include <vector>
+#include <string>
 
-#include "dorado/Chunk.h"
+#include "dorado/model_config.h"
 
 #define SLORADO_VERSION "0.2.0-beta"
 
@@ -69,10 +71,11 @@ typedef struct {
     const char *device;         // specified device: x
     size_t chunk_size;          // size of chunks: c
     int32_t overlap;            // overlap: p
-    int32_t num_runners;        // number of runners: r
 } opt_t;
 
-typedef struct elephant_s elephant_t;
+typedef struct chunk_sig chunk_sig_t;
+typedef struct chunk_res chunk_res_t;
+typedef struct chunk_db chunk_db_t;
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -86,10 +89,7 @@ typedef struct {
 
     double *means;
 
-    // each slow5 record has a vec of chunks and tensors assigned to it
-    std::vector<std::vector<Chunk *>> *chunks;
-
-    elephant_t *elephant;
+    chunk_db_t *chunk_db;
 
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
@@ -99,28 +99,44 @@ typedef struct {
     int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 } db_t;
 
+typedef struct {
+    double time_conv_stack;
+    double time_rnns;
+    double time_crf_1;
+    double time_crf_2;
+    double time_clamp;
+} lstm_stats_t;
+
+typedef struct {
+    double time_conv_stack;
+    double time_tx_encoder;
+    double time_tx_decoder;
+    double time_crf;
+
+    double time_self_attn;
+    double time_norm1;
+    double time_ff;
+    double time_norm2;
+
+    double time_mm;
+    double time_rotary_emb;
+    double time_sdp_attn;
+    double time_out_proj;
+} tx_stats_t;
+
 /* time stamps */
 typedef struct {
-    double time_read;
-    double time_pad;
-    double time_assign;
     double time_accept;
     double time_basecall;
-    double time_decode;
-    double time_copy_score;
-    double time_scan_score;
-    double time_beamsearch;
-    double time_decode_cleanup;
     double time_infer;
-    double time_stitch;
-    double time_sync;
-    double time_write;
-    double time_total;
+    double time_decode;
+
+    void *model_stats;
 
     uint64_t total_dp;
 } runner_stat_t;
 
-typedef struct runner_s runner_t;
+typedef struct runner runner_t;
 
 /* core data structure (mostly static data throughout the program lifetime) */
 typedef struct {
@@ -129,6 +145,10 @@ typedef struct {
 
     // options
     opt_t opt;
+    openfish_opt_t decoder_opts;
+    CRFModelConfig *model_config;
+    size_t model_stride;
+    size_t chunk_size;
 
     // create model runner
     // only one per GPU is used for now
@@ -139,19 +159,14 @@ typedef struct {
 
     // timings
     double time_init_runners;
-    double time_sync;
     double time_load_db;
     double time_process_db;
     double time_parse;
     double time_preproc;
-    double time_basecall;
+    double time_runners;
+    double time_sync;
     double time_postproc;
     double time_output;
-    double time_tens;
-    double time_trim;
-    double time_scale;
-    double time_chunk;
-    double time_chunk_tens;
 
     // stats for each runner
     std::vector<runner_stat_t *> *runner_stats;

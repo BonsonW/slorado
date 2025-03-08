@@ -15,7 +15,6 @@
 #include <string>
 
 using namespace torch::nn;
-namespace Idx = torch::indexing;
 using Slice = torch::indexing::Slice;
 
 void apply_rounding(torch::Tensor &t, int remove_bits) {
@@ -172,7 +171,8 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     bool qkv_bias_,
     bool out_bias_,
     const std::pair<int, int> &attn_window_,
-    const torch::TensorOptions &options_
+    const torch::TensorOptions &options_,
+    tx_stats_t *_model_stats
 ) :
     d_model(d_model_),
     nhead(nhead_),
@@ -187,6 +187,7 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     const float theta = 10000.0f;
     const int64_t max_seq_len = 2048;
     rotary_emb = register_module("rotary_emb", RotaryEmbedding(head_dim, theta, max_seq_len, options));
+    model_stats = _model_stats;
 };
 
 torch::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
@@ -213,8 +214,22 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     torch::Tensor qkv;
     torch::Tensor attn_output_ntc;
+
+    double a, b;
+    auto device_idx = options.device_index();
+    
+    a = realtime();
     qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_mm += b-a;
+
+    a = realtime();
     qkv = rotary_emb(qkv);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_rotary_emb += b-a;
+
     attn_output_ntc = torch::empty({N, T, C}, x.options());
     auto attn_window_mask = get_attn_window_mask(T);
     auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
@@ -223,6 +238,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // The MPS backend refuses to work on a span of the mask that doesn't have an
     // alignment of 4 elements, so pad the amount we process each loop to that.
     const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
+
+    a = realtime();
     for (int i = 0; i < num_splits; ++i) {
         const auto qb = i * elems_per_split;
         if (qb >= T) {
@@ -241,15 +258,26 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
         opt_mask = mask;
         attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
     }
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_sdp_attn += b-a;
+
+    a = realtime();
     x = out_proj(attn_output_ntc);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_out_proj += b-a;
+    
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options) : params(params_) {
-    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options));
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats) : params(params_) {
+    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
+    device_idx = options.device_index();
+    model_stats = _model_stats;
 
     const torch::Tensor deepnorm_alpha = torch::tensor(params.deepnorm_alpha);
     register_buffer("deepnorm_alpha", deepnorm_alpha);
@@ -259,21 +287,43 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     torch::Tensor attn, f;
     const auto deepnorm_alpha = named_buffers()["deepnorm_alpha"];
 
+    double a, b;
+
     auto run_norm = [&](RMSNorm norm, const torch::Tensor &in) {
         x = norm(in + (x * deepnorm_alpha));
     };
-    attn = self_attn(x);
-    run_norm(norm1, attn);
-    f = ff(x);
-    run_norm(norm2, f);
 
+    a = realtime();
+    attn = self_attn(x);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_self_attn += b-a;
+
+    a = realtime();
+    run_norm(norm1, attn);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_norm1 += b-a;
+
+    a = realtime();
+    f = ff(x);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_ff += b-a;
+
+    a = realtime();
+    run_norm(norm2, f);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_norm2 += b-a;
+    
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options) {
+TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
-        TxEncoder encoder(params, options);
+        TxEncoder encoder(params, options, model_stats);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
         layer_vec.push_back(encoder);
     }
@@ -309,19 +359,43 @@ torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options) : m_options(options) {
+TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats) : m_options(options) {
     convs = register_module("convs", ::ConvStack(config.convs));
-    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options));
+    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
+    model_stats = _model_stats;
 }
 
 torch::Tensor TxModelImpl::forward(const torch::Tensor &chunk_NCT) {
     torch::Tensor h;
+    double a, b;
+    auto device_idx = m_options.device_index();
+    
+    a = realtime();
     h = convs->forward(chunk_NCT);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_conv_stack += b-a;
+    
+    a = realtime();
     h = tx_encoder(h);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_tx_encoder += b-a;
+
+    a = realtime();
     h = tx_decoder(h);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_tx_decoder += b-a;
+
+    a = realtime();
     h = crf(h);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_crf += b-a;
+
     // Returns: NTC
     return h;
 }
@@ -513,8 +587,8 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options) {
-    auto model = TxModel(model_config, options);
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats) {
+    auto model = TxModel(model_config, options, model_stats);
     auto state_dict = load_tx_model_weights(model_config.model_path);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());
