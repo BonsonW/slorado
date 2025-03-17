@@ -25,7 +25,7 @@ Path to example dataset on Pawsey: `/scratch/references/slorado/slorado-v0.2.0-b
 Or you may download a 20k dataset with: `wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample`
 
 ### Example Slurm Script
-Copy the example slurm script in [Note 1](#note-1) in to a file called `example.sh`, and simply call `sbatch --account=${PAWSEY_PROJECT}-gpu example.sh` to submit the test job. 
+Copy the example slurm script in [Note 1](#note-1) in to a file called `example.sh`. Change the line `SLORADO_DIR=/path/to/slorado-v0.2.0-beta` to your extracted package location. Then simply call `sbatch --account=${PAWSEY_PROJECT}-gpu example.sh` to submit the test job. 
 This script will basecall the above test dataset using the `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` model and generate a fastq file in the current directory called `reads.fastq`.
 
 ## Running on your own data
@@ -82,7 +82,7 @@ BATCH_SIZE=500
 
 ########################################################################
 
-SLORADO_DIR=/scratch/references/slorado/slorado-v0.2.0-beta
+SLORADO_DIR=/path/to/slorado-v0.2.0-beta
 SLORADO=${SLORADO_DIR}/bin/slorado
 
 srun /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -t64 -C ${BATCH_SIZE}
