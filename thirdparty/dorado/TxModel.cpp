@@ -208,6 +208,9 @@ torch::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size)
 };
 
 torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
+    FILE *fp;
+    size_t numel;
+
     const int64_t N = x.size(0);
     const int64_t T = x.size(1);
     const int64_t C = x.size(2);
@@ -217,6 +220,16 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     double a, b;
     auto device_idx = options.device_index();
+
+    // print tens
+    numel = x.numel();
+    fp = fopen("x.blob", "w");
+    F_CHK(fp, "x.blob");
+    if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
     
     a = realtime();
     qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
@@ -224,11 +237,31 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_mm += b-a;
 
+    // print tens
+    numel = qkv.numel();
+    fp = fopen("wqkv.blob", "w");
+    F_CHK(fp, "wqkv.blob");
+    if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
+
     a = realtime();
     qkv = rotary_emb(qkv);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_rotary_emb += b-a;
+
+    // print tens
+    numel = qkv.numel();
+    fp = fopen("rotary_emb.blob", "w");
+    F_CHK(fp, "rotary_emb.blob");
+    if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
 
     attn_output_ntc = torch::empty({N, T, C}, x.options());
     auto attn_window_mask = get_attn_window_mask(T);
@@ -262,11 +295,34 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_sdp_attn += b-a;
 
+    // print tens
+    numel = attn_output_ntc.numel();
+    fp = fopen("attn.blob", "w");
+    F_CHK(fp, "attn.blob");
+    if (fwrite(attn_output_ntc.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
+
     a = realtime();
     x = out_proj(attn_output_ntc);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_out_proj += b-a;
+
+    // print tens
+    numel = x.numel();
+    fp = fopen("out_proj.blob", "w");
+    F_CHK(fp, "out_proj.blob");
+    if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
+
+    // exit
+    exit(0);
     
     return x;
 };
@@ -293,11 +349,15 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
         x = norm(in + (x * deepnorm_alpha));
     };
 
+    // print tens
+
     a = realtime();
     attn = self_attn(x);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_self_attn += b-a;
+
+    // print tens
 
     a = realtime();
     run_norm(norm1, attn);
@@ -311,11 +371,17 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_ff += b-a;
 
+    // print tens
+
     a = realtime();
     run_norm(norm2, f);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_norm2 += b-a;
+
+    // print tens
+
+    // exit
     
     return x;
 }
