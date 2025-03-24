@@ -222,9 +222,10 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     auto device_idx = options.device_index();
 
     // print tens
+    fprintf(stderr, "ntc: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
     numel = x.numel();
-    fp = fopen("x.blob", "w");
-    F_CHK(fp, "x.blob");
+    fp = fopen("ntc.blob", "w");
+    F_CHK(fp, "ntc.blob");
     if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -232,15 +233,27 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     fclose(fp);
     
     a = realtime();
-    qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
+    auto _wqkv = wqkv(x);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_mm += b-a;
 
-    // print tens
-    numel = qkv.numel();
+    fprintf(stderr, "wqkv: %zd %zd %zd | %zd\n", _wqkv.size(0), _wqkv.size(1), _wqkv.size(2), _wqkv.dim());
+    numel = _wqkv.numel();
     fp = fopen("wqkv.blob", "w");
     F_CHK(fp, "wqkv.blob");
+    if (fwrite(_wqkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fp);
+
+    qkv = _wqkv.view({N, T, 3, nhead, head_dim});
+    // print tens
+    fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
+    numel = qkv.numel();
+    fp = fopen("qkv.blob", "w");
+    F_CHK(fp, "qkv.blob");
     if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -254,9 +267,10 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_rotary_emb += b-a;
 
     // print tens
+    fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     numel = qkv.numel();
-    fp = fopen("rotary_emb.blob", "w");
-    F_CHK(fp, "rotary_emb.blob");
+    fp = fopen("rotary_emb_qkv.blob", "w");
+    F_CHK(fp, "rotary_emb_qkv.blob");
     if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -296,9 +310,10 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_sdp_attn += b-a;
 
     // print tens
+    fprintf(stderr, "attn_ntc: %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.dim());
     numel = attn_output_ntc.numel();
-    fp = fopen("attn.blob", "w");
-    F_CHK(fp, "attn.blob");
+    fp = fopen("attn_ntc.blob", "w");
+    F_CHK(fp, "attn_ntc.blob");
     if (fwrite(attn_output_ntc.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -312,9 +327,10 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_out_proj += b-a;
 
     // print tens
+    fprintf(stderr, "out_proj_ntc: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
     numel = x.numel();
-    fp = fopen("out_proj.blob", "w");
-    F_CHK(fp, "out_proj.blob");
+    fp = fopen("out_proj_ntc.blob", "w");
+    F_CHK(fp, "out_proj_ntc.blob");
     if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
