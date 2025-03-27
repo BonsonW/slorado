@@ -1,8 +1,8 @@
 # Building ROCM version of slorado on x84_64
 
-1. To build for the AMD GPU, you need to have the ROCM SDK installed. As of slorado v0.2.0, as we are using libtorch v2.2.0 with rocm 5.7, you will need [rocm 5.7.x](https://rocm.docs.amd.com/en/docs-5.7.1/deploy/linux/os-native/install.html).
+1. To build for the AMD GPU, you need to have the ROCM SDK installed. As of slorado v0.3.0, as we are using libtorch v2.2.0 with rocm 5.7, you will need [rocm 5.7.x](https://rocm.docs.amd.com/en/docs-5.7.1/deploy/linux/os-native/install.html).
 
-2. A minimum g++ version of 9 (available on Ubuntu 20.04 or higher) is required as of slorado v0.2.0 due to libtorch v2.2.0 we use.
+2. A minimum g++ version of 9 (available on Ubuntu 20.04 or higher) is required as of slorado v0.3.0 due to libtorch v2.2.0 we use.
 
 3. Install zlib development files needed for slow5lib:
 
