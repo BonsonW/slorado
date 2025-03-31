@@ -2,7 +2,8 @@ name: CUDA run CI
 
 on:
   push:
-    branches: [ 'dev' ]
+    branches:
+      - dev
 
 jobs:
   ubuntu_24_cuda:
