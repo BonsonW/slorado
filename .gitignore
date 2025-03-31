@@ -54,6 +54,7 @@ build/
 test/tmp.fastq
 test/tmp.paf
 reads.fastq
+*.blob
 
 #Allowed files
 !CMakeLists.txt

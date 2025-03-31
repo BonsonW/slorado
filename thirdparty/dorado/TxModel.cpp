@@ -7,6 +7,7 @@
 #include <torch/nn/options/padding.h>
 #include <torch/types.h>
 #include <torch/version.h>
+#include <c10/cuda/CUDAGuard.h>
 
 #include <cmath>
 #include <ATen/ops/scaled_dot_product_attention.h>
@@ -14,8 +15,45 @@
 #include <stdexcept>
 #include <string>
 
+#include <openfish/openfish.h>
+
 using namespace torch::nn;
 using Slice = torch::indexing::Slice;
+
+// torch::Tensor forward(torch::Tensor Q, torch::Tensor K, torch::Tensor V) {
+//     // TODO: determine Bc, Br dynamically
+//     const int Bc = 32; const int Br = 32;
+
+//     const int B = Q.size(0); const int nh = Q.size(1);
+//     const int N = Q.size(2); const int d = Q.size(3);
+
+//     const int Tc = ceil((float) N / Bc); const int Tr = ceil((float) N / Br);
+//     const float softmax_scale = 1.0 / sqrt(d);
+
+//     // Initialize O, l, m to HBM
+//     auto O = torch::zeros_like(Q);
+//     auto l = torch::zeros({B, nh, N});
+//     auto m = torch::full({B, nh, N}, -INFINITY);
+//     torch::Device device(torch::kCUDA);
+//     l = l.to(device); m = m.to(device);
+
+//     // Calculate SRAM size needed per block
+//     const int sram_size = (3 * Bc * d * sizeof(float)) + (Bc * Br * sizeof(float));
+//     int max_sram_size;
+//     cudaDeviceGetAttribute(&max_sram_size, cudaDevAttrMaxSharedMemoryPerBlock, 0);
+//     printf("Max shared memory: %d, requested shared memory: %d \\n", max_sram_size, sram_size);
+
+//     dim3 grid_dim(B, nh);  // batch_size x num_heads
+//     dim3 block_dim(Bc);  // Bc threads per block
+
+//     forward_kernel<<<grid_dim, block_dim, sram_size>>>(
+//         Q.data_ptr<float>(), K.data_ptr<float>(), V.data_ptr<float>(),
+//         N, d, Tc, Tr, Bc, Br, softmax_scale,
+//         l.data_ptr<float>(), m.data_ptr<float>(), O.data_ptr<float>()
+//     );
+    
+//     return O;
+// }
 
 void apply_rounding(torch::Tensor &t, int remove_bits) {
     // Round Float16 tensor elements such that the last `remove_bits` of the mantissa are 0s.
@@ -208,6 +246,10 @@ torch::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size)
 };
 
 torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
+    auto device_idx = options.device_index();
+
+    c10::cuda::CUDAGuard device_guard(device_idx);
+
     FILE *fp;
     size_t numel;
 
@@ -219,18 +261,17 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     torch::Tensor attn_output_ntc;
 
     double a, b;
-    auto device_idx = options.device_index();
-
+    
     // print tens
-    fprintf(stderr, "ntc: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
-    numel = x.numel();
-    fp = fopen("ntc.blob", "w");
-    F_CHK(fp, "ntc.blob");
-    if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
+    // fprintf(stderr, "ntc: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
+    // numel = x.numel();
+    // fp = fopen("ntc.blob", "w");
+    // F_CHK(fp, "ntc.blob");
+    // if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
     
     a = realtime();
     auto _wqkv = wqkv(x);
@@ -238,27 +279,27 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_mm += b-a;
 
-    fprintf(stderr, "wqkv: %zd %zd %zd | %zd\n", _wqkv.size(0), _wqkv.size(1), _wqkv.size(2), _wqkv.dim());
-    numel = _wqkv.numel();
-    fp = fopen("wqkv.blob", "w");
-    F_CHK(fp, "wqkv.blob");
-    if (fwrite(_wqkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
+    // fprintf(stderr, "wqkv: %zd %zd %zd | %zd\n", _wqkv.size(0), _wqkv.size(1), _wqkv.size(2), _wqkv.dim());
+    // numel = _wqkv.numel();
+    // fp = fopen("wqkv.blob", "w");
+    // F_CHK(fp, "wqkv.blob");
+    // if (fwrite(_wqkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
 
     qkv = _wqkv.view({N, T, 3, nhead, head_dim});
     // print tens
-    fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
-    numel = qkv.numel();
-    fp = fopen("qkv.blob", "w");
-    F_CHK(fp, "qkv.blob");
-    if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
+    // fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
+    // numel = qkv.numel();
+    // fp = fopen("qkv.blob", "w");
+    // F_CHK(fp, "qkv.blob");
+    // if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
 
     a = realtime();
     qkv = rotary_emb(qkv);
@@ -267,17 +308,17 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_rotary_emb += b-a;
 
     // print tens
-    fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
-    numel = qkv.numel();
-    fp = fopen("rotary_emb_qkv.blob", "w");
-    F_CHK(fp, "rotary_emb_qkv.blob");
-    if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
+    // fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
+    // numel = qkv.numel();
+    // fp = fopen("rotary_emb_qkv.blob", "w");
+    // F_CHK(fp, "rotary_emb_qkv.blob");
+    // if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
 
-    attn_output_ntc = torch::empty({N, T, C}, x.options());
+    attn_output_ntc = torch::empty({N, T, C}, x.options()).contiguous();
     auto attn_window_mask = get_attn_window_mask(T);
     auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
     const auto win_upper = std::get<0>(attn_window);
@@ -286,39 +327,108 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // alignment of 4 elements, so pad the amount we process each loop to that.
     const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
 
+    // fprintf(stderr, "win upper: %d, win_lower: %d\n", win_upper, win_lower);
+
+    // fprintf(stderr, "q dims: %zd %zd %zd %zd | %zd\n", q.size(0), q.size(1), q.size(2), q.size(3), q.dim());
+    // fprintf(stderr, "q stride: batch %zd row %zd head %zd\n", q.stride(0), q.stride(-3), q.stride(-2));
+    // numel = q.numel();
+    // fp = fopen("q.blob", "w");
+    // F_CHK(fp, "q.blob");
+    // if (fwrite(q.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // fprintf(stderr, "k dims: %zd %zd %zd %zd | %zd\n", k.size(0), k.size(1), k.size(2), k.size(3), k.dim());
+    // fprintf(stderr, "k stride: %zd %zd %zd %zd | %zd\n", k.stride(0), k.stride(1), k.stride(2), k.stride(3), k.dim());
+    // numel = k.numel();
+    // fp = fopen("k.blob", "w");
+    // F_CHK(fp, "k.blob");
+    // if (fwrite(k.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // fprintf(stderr, "v dims: %zd %zd %zd %zd | %zd\n", v.size(0), v.size(1), v.size(2), v.size(3), v.dim());
+    // fprintf(stderr, "v stride: %zd %zd %zd %zd | %zd\n", v.stride(0), v.stride(1), v.stride(2), v.stride(3), v.dim());
+    // numel = v.numel();
+    // fp = fopen("v.blob", "w");
+    // F_CHK(fp, "v.blob");
+    // if (fwrite(v.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+    // exit(0);
+
     a = realtime();
-    for (int i = 0; i < num_splits; ++i) {
-        const auto qb = i * elems_per_split;
-        if (qb >= T) {
-            break;
-        }
-        const auto qe = std::min(T, qb + elems_per_split);
-        const auto kvb = std::max<int64_t>(0, qb - win_lower);
-        const auto kve = std::min<int64_t>(T, qe + win_upper);
-        const auto q = qkv[0].slice(-2, qb, qe);
-        const auto k = qkv[1].slice(-2, kvb, kve);
-        const auto v = qkv[2].slice(-2, kvb, kve);
-        const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
-        c10::optional<torch::Tensor> opt_mask;
-        // Not using the mask gets us significantly better performance, at the cost of some
-        // accuracy. Accuracy loss is minimised by larger num_splits.
-        opt_mask = mask;
-        attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
-    }
+
+    qkv = qkv.transpose(2, 3).contiguous();
+
+    const auto q = qkv[0].contiguous();
+    const auto k = qkv[1].contiguous();
+    const auto v = qkv[2].contiguous();
+    
+    openfish_flash_fwd(
+        q.data_ptr(),
+        k.data_ptr(),
+        v.data_ptr(),
+        attn_output_ntc.data_ptr(),
+        q.size(0),
+        q.size(1),
+        q.size(2),
+        q.size(3),
+        win_upper,
+        win_lower
+    );
+
+    // for (int i = 0; i < num_splits; ++i) {
+    //     const auto qb = i * elems_per_split;
+    //     if (qb >= T) {
+    //         break;
+    //     }
+    //     const auto qe = std::min(T, qb + elems_per_split);
+    //     const auto kvb = std::max<int64_t>(0, qb - win_lower);
+    //     const auto kve = std::min<int64_t>(T, qe + win_upper);
+    //     const auto q = qkv[0].slice(-2, qb, qe).to(torch::kFloat32);
+    //     const auto k = qkv[1].slice(-2, kvb, kve).to(torch::kFloat32);
+    //     const auto v = qkv[2].slice(-2, kvb, kve).to(torch::kFloat32);
+    //     const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
+    //     c10::optional<torch::Tensor> opt_mask;
+    //     // Not using the mask gets us significantly better performance, at the cost of some
+    //     // accuracy. Accuracy loss is minimised by larger num_splits.
+    //     opt_mask = mask;
+
+    //     auto o = torch::scaled_dot_product_attention(q, k, v, opt_mask);
+
+    //     fprintf(stderr, "o: %zd %zd %zd %zd | %zd\n", o.size(0), o.size(1), o.size(2), o.size(3), o.dim());
+    //     numel = o.numel();
+    //     fp = fopen("o.blob", "w");
+    //     F_CHK(fp, "o.blob");
+    //     if (fwrite(o.to("cpu").data_ptr(), sizeof(float), numel, fp) != numel) {
+    //         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //         exit(EXIT_FAILURE);
+    //     }
+    //     fclose(fp);
+
+    //     exit(0);
+    // }
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_sdp_attn += b-a;
 
     // print tens
-    fprintf(stderr, "attn_ntc: %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.dim());
-    numel = attn_output_ntc.numel();
-    fp = fopen("attn_ntc.blob", "w");
-    F_CHK(fp, "attn_ntc.blob");
-    if (fwrite(attn_output_ntc.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
+    // fprintf(stderr, "attn_ntc: %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.dim());
+    // numel = attn_output_ntc.numel();
+    // fp = fopen("attn_ntc.blob", "w");
+    // F_CHK(fp, "attn_ntc.blob");
+    // if (fwrite(attn_output_ntc.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
 
     a = realtime();
     x = out_proj(attn_output_ntc);
@@ -327,18 +437,18 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_out_proj += b-a;
 
     // print tens
-    fprintf(stderr, "out_proj_ntc: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
-    numel = x.numel();
-    fp = fopen("out_proj_ntc.blob", "w");
-    F_CHK(fp, "out_proj_ntc.blob");
-    if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
+    // fprintf(stderr, "out_proj_ntc: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
+    // numel = x.numel();
+    // fp = fopen("out_proj_ntc.blob", "w");
+    // F_CHK(fp, "out_proj_ntc.blob");
+    // if (fwrite(x.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
 
-    // exit
-    exit(0);
+    // // exit
+    // exit(0);
     
     return x;
 };
