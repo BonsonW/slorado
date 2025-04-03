@@ -9,7 +9,7 @@ if [ $# -ne 2 ]; then
     die "Usage: $0 <reference genome> <fastq file> "
 fi
 
-[ -z ${MINIMAP2} ] && MINIMAP2=minimap2
+[ -z ${MINIMAP2} ] && MINIMAP2=minimap2/minimap2
 
 ${MINIMAP2} --version &> /dev/null || { echo -e $RED"minimap2 not found! Either put minimap2 under path or set MINIMAP2 variable, e.g.,export MINIMAP2=/path/to/minimap2"$NORMAL; exit 1;}
 

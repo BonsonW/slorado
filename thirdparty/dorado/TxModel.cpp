@@ -13,12 +13,24 @@
 #include <ATen/ops/scaled_dot_product_attention.h>
 
 #include <stdexcept>
+#include <iostream>
+#include <fstream>
 #include <string>
 
 #include <openfish/openfish.h>
 
 using namespace torch::nn;
 using Slice = torch::indexing::Slice;
+
+std::vector<char> get_the_bytes(std::string filename) {
+    std::ifstream input(filename, std::ios::binary);
+    std::vector<char> bytes(
+        (std::istreambuf_iterator<char>(input)),
+        (std::istreambuf_iterator<char>()));
+
+    input.close();
+    return bytes;
+}
 
 // torch::Tensor forward(torch::Tensor Q, torch::Tensor K, torch::Tensor V) {
 //     // TODO: determine Bc, Br dynamically
@@ -309,18 +321,10 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     // print tens
     // fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
-    // numel = qkv.numel();
-    // fp = fopen("rotary_emb_qkv.blob", "w");
-    // F_CHK(fp, "rotary_emb_qkv.blob");
-    // if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-    //     exit(EXIT_FAILURE);
-    // }
-    // fclose(fp);
 
-    attn_output_ntc = torch::empty({N, T, C}, x.options()).contiguous();
+    attn_output_ntc = torch::empty({N, T, nhead, head_dim}, x.options()).contiguous();
     auto attn_window_mask = get_attn_window_mask(T);
-    auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+    // auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
     const auto win_upper = std::get<0>(attn_window);
     const auto win_lower = std::get<1>(attn_window);
     // The MPS backend refuses to work on a span of the mask that doesn't have an
@@ -366,11 +370,34 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     a = realtime();
 
     qkv = qkv.transpose(2, 3).contiguous();
+    // fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
+    // numel = qkv.numel();
+    // fp = fopen("slorado_qkv.blob", "w");
+    // F_CHK(fp, "slorado_qkv.blob");
+    // if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // exit(0);
+    std::vector<char> f;
+    torch::IValue ival;
+    torch::Tensor pickle;
+
+    // f = get_the_bytes("../bonito/bonito_qkv.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor().to("cuda:0");
+    // fprintf(stderr, "pickled: %zd %zd %zd %zd %zd | %zd\n", pickle.size(0), pickle.size(1), pickle.size(2), pickle.size(3), pickle.size(4), pickle.dim());
+
+    // const auto q = pickle[0].contiguous();
+    // const auto k = pickle[1].contiguous();
+    // const auto v = pickle[2].contiguous();
 
     const auto q = qkv[0].contiguous();
     const auto k = qkv[1].contiguous();
     const auto v = qkv[2].contiguous();
-    
+
     openfish_flash_fwd(
         q.data_ptr(),
         k.data_ptr(),
@@ -420,15 +447,34 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_sdp_attn += b-a;
 
     // print tens
-    // fprintf(stderr, "attn_ntc: %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.dim());
+    // fprintf(stderr, "attn_ntc: %zd %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.size(3), attn_output_ntc.dim());
     // numel = attn_output_ntc.numel();
-    // fp = fopen("attn_ntc.blob", "w");
-    // F_CHK(fp, "attn_ntc.blob");
-    // if (fwrite(attn_output_ntc.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    // fp = fopen("attn_ntc_2.blob", "w");
+    // F_CHK(fp, "attn_ntc_2.blob");
+    // if (fwrite(attn_output_ntc.to("cpu").to(torch::kFloat32).data_ptr(), sizeof(float), numel, fp) != numel) {
     //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
     //     exit(EXIT_FAILURE);
     // }
     // fclose(fp);
+    // exit(0);
+
+    // convert and save the bonito attn_output
+    // f = get_the_bytes("../bonito/bonito_attn_output.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor();
+    // fprintf(stderr, "pickled: %zd %zd %zd %zd | %zd\n", pickle.size(0), pickle.size(1), pickle.size(2), pickle.size(3), pickle.dim());
+    // numel = pickle.numel();
+    // fp = fopen("bonito_attn_ntc.blob", "w");
+    // F_CHK(fp, "bonito_attn_ntc.blob");
+    // if (fwrite(pickle.data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // exit(0);
+
+    attn_output_ntc = attn_output_ntc.reshape({N, T, C});
 
     a = realtime();
     x = out_proj(attn_output_ntc);
