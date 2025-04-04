@@ -315,6 +315,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     a = realtime();
     qkv = rotary_emb(qkv);
+    qkv = qkv.transpose(2, 3).contiguous();
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_rotary_emb += b-a;
@@ -322,54 +323,12 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // print tens
     // fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
 
-    attn_output_ntc = torch::empty({N, T, nhead, head_dim}, x.options()).contiguous();
-    auto attn_window_mask = get_attn_window_mask(T);
-    // auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+    attn_output_ntc = torch::empty({N, T, C}, x.options()).contiguous();
+    auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim});
     const auto win_upper = std::get<0>(attn_window);
     const auto win_lower = std::get<1>(attn_window);
-    // The MPS backend refuses to work on a span of the mask that doesn't have an
-    // alignment of 4 elements, so pad the amount we process each loop to that.
-    const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
-
-    // fprintf(stderr, "win upper: %d, win_lower: %d\n", win_upper, win_lower);
-
-    // fprintf(stderr, "q dims: %zd %zd %zd %zd | %zd\n", q.size(0), q.size(1), q.size(2), q.size(3), q.dim());
-    // fprintf(stderr, "q stride: batch %zd row %zd head %zd\n", q.stride(0), q.stride(-3), q.stride(-2));
-    // numel = q.numel();
-    // fp = fopen("q.blob", "w");
-    // F_CHK(fp, "q.blob");
-    // if (fwrite(q.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-    //     exit(EXIT_FAILURE);
-    // }
-    // fclose(fp);
-
-    // fprintf(stderr, "k dims: %zd %zd %zd %zd | %zd\n", k.size(0), k.size(1), k.size(2), k.size(3), k.dim());
-    // fprintf(stderr, "k stride: %zd %zd %zd %zd | %zd\n", k.stride(0), k.stride(1), k.stride(2), k.stride(3), k.dim());
-    // numel = k.numel();
-    // fp = fopen("k.blob", "w");
-    // F_CHK(fp, "k.blob");
-    // if (fwrite(k.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-    //     exit(EXIT_FAILURE);
-    // }
-    // fclose(fp);
-
-    // fprintf(stderr, "v dims: %zd %zd %zd %zd | %zd\n", v.size(0), v.size(1), v.size(2), v.size(3), v.dim());
-    // fprintf(stderr, "v stride: %zd %zd %zd %zd | %zd\n", v.stride(0), v.stride(1), v.stride(2), v.stride(3), v.dim());
-    // numel = v.numel();
-    // fp = fopen("v.blob", "w");
-    // F_CHK(fp, "v.blob");
-    // if (fwrite(v.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
-    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-    //     exit(EXIT_FAILURE);
-    // }
-    // fclose(fp);
-    // exit(0);
 
     a = realtime();
-
-    qkv = qkv.transpose(2, 3).contiguous();
     // fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     // numel = qkv.numel();
     // fp = fopen("slorado_qkv.blob", "w");
@@ -390,58 +349,19 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // pickle = ival.toTensor().to("cuda:0");
     // fprintf(stderr, "pickled: %zd %zd %zd %zd %zd | %zd\n", pickle.size(0), pickle.size(1), pickle.size(2), pickle.size(3), pickle.size(4), pickle.dim());
 
-    // const auto q = pickle[0].contiguous();
-    // const auto k = pickle[1].contiguous();
-    // const auto v = pickle[2].contiguous();
-
-    const auto q = qkv[0].contiguous();
-    const auto k = qkv[1].contiguous();
-    const auto v = qkv[2].contiguous();
-
     openfish_flash_fwd(
-        q.data_ptr(),
-        k.data_ptr(),
-        v.data_ptr(),
-        attn_output_ntc.data_ptr(),
-        q.size(0),
-        q.size(1),
-        q.size(2),
-        q.size(3),
+        qkv.data_ptr(),
+        attn_output.data_ptr(),
+        attn_output.size(0),
+        attn_output.size(1),
+        attn_output.size(2),
+        attn_output.size(3),
+        qkv.stride(1),
+        qkv.stride(2),
+        qkv.stride(3),
         win_upper,
         win_lower
     );
-
-    // for (int i = 0; i < num_splits; ++i) {
-    //     const auto qb = i * elems_per_split;
-    //     if (qb >= T) {
-    //         break;
-    //     }
-    //     const auto qe = std::min(T, qb + elems_per_split);
-    //     const auto kvb = std::max<int64_t>(0, qb - win_lower);
-    //     const auto kve = std::min<int64_t>(T, qe + win_upper);
-    //     const auto q = qkv[0].slice(-2, qb, qe).to(torch::kFloat32);
-    //     const auto k = qkv[1].slice(-2, kvb, kve).to(torch::kFloat32);
-    //     const auto v = qkv[2].slice(-2, kvb, kve).to(torch::kFloat32);
-    //     const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
-    //     c10::optional<torch::Tensor> opt_mask;
-    //     // Not using the mask gets us significantly better performance, at the cost of some
-    //     // accuracy. Accuracy loss is minimised by larger num_splits.
-    //     opt_mask = mask;
-
-    //     auto o = torch::scaled_dot_product_attention(q, k, v, opt_mask);
-
-    //     fprintf(stderr, "o: %zd %zd %zd %zd | %zd\n", o.size(0), o.size(1), o.size(2), o.size(3), o.dim());
-    //     numel = o.numel();
-    //     fp = fopen("o.blob", "w");
-    //     F_CHK(fp, "o.blob");
-    //     if (fwrite(o.to("cpu").data_ptr(), sizeof(float), numel, fp) != numel) {
-    //         fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-    //         exit(EXIT_FAILURE);
-    //     }
-    //     fclose(fp);
-
-    //     exit(0);
-    // }
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_sdp_attn += b-a;
@@ -473,8 +393,6 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // fclose(fp);
 
     // exit(0);
-
-    attn_output_ntc = attn_output_ntc.reshape({N, T, C});
 
     a = realtime();
     x = out_proj(attn_output_ntc);
