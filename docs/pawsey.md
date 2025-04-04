@@ -122,7 +122,7 @@ wget "https://github.com/hasindu2008/slow5tools/releases/download/$VERSION/slow5
 
 ### Note 3
 
-For advanced users can launch multiple jobs at once with Pawsey's array functionality. We've provided two scripts that automatically configure these jobs for you:
+Advanced users can launch array jobs to basecall multiple BLOW5 files at once on Pawsey. We've provided two scripts that automatically configure these jobs for you:
 
 This is a helper script that you can simply copy into a file called `slorado_arr.sh`. You should not edit anything in this script unless you know what you are doing.
 You will also need to keep this script in the same directory you are running `slorado_arr_launch.sh` (the scecond script provided) from.
