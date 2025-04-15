@@ -42,7 +42,7 @@ SOFTWARE.
 
 #include "dorado/model_config.h"
 
-#define SLORADO_VERSION "0.2.0-beta"
+#define SLORADO_VERSION "0.3.0-beta"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *

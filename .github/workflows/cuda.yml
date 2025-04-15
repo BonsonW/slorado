@@ -2,9 +2,7 @@ name: CUDA run CI
 
 on:
   push:
-    branches: [ '*' ]
-
-# thanks https://github.com/dixyes/ghactionsplay/blob/main/.github/workflows/glibc217node20.yml
+    branches: [ 'dev' ]
 
 jobs:
   ubuntu_24_cuda:

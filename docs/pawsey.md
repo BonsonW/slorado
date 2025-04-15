@@ -1,24 +1,32 @@
 # Basecalling on Pawsey's AMD GPUs
 
 
-With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has many AMD Instinct MI250X GPUs.
+With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has several hundred AMD Instinct MI250X GPUs.
 For those who have access to Pawsey, this post will show how you can do this. 
 
 ## Getting started
 
-The binaries have already been installed on a shared location, so you do not need to compile them. 
+### Installing
+First, download and extract the slorado rocm Linux binaries tarball.
 
-Following are the directory paths to get started:
+```
+VERSION=v0.2.0-beta
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz"
+tar xvf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz
+cd slorado-$VERSION
+bin/slorado --help
+```
+Detailed instructions are found [here](rocm-bin.md)
 
-- slorado binaries: `/scratch/references/slorado/slorado-06-11-2024/`
-   - you may setup binaries yourself too by following instructions [here](rocm-bin.md)
-- test dataset: `/scratch/references/slorado/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5`
-   - you may download it as `wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample`)
-- example slurm script: `/scratch/references/slorado/slorado-06-11-2024/scripts/slurm.sh`
-   - the script is also in [Note 1](#note-1) below
+### Example Datasets
 
-First, copy the example slurm script and change the account in the header from `pawsey0001-gpu` to your account code. Now you simply call `sbatch slurm.sh` to submit the test job. 
-This script will basecall the above test dataset using the `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` model and generate a fastq file in the current directory called giga.fastq.
+Path to example dataset on Pawsey: `/scratch/references/slorado/slorado-v0.2.0-beta/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5`
+
+Or you may download a 20k dataset with: `wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample`
+
+### Example Slurm Script
+Copy the example slurm script in [Note 1](#note-1) in to a file called `example.sh`. Change the line `SLORADO_DIR=/path/to/slorado-v0.2.0-beta` to your extracted package location. Then simply call `sbatch --account=${PAWSEY_PROJECT}-gpu example.sh` to submit the test job. 
+This script will basecall the above test dataset using the `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` model and generate a fastq file in the current directory called `reads.fastq`.
 
 ## Running on your own data
 
@@ -32,7 +40,7 @@ To run on your own data, below are the steps. If you run into a problem, feel fr
 
 ## Tests and benchmarks
 
-We tested slorado on a [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 8 MI250X GPUs on the node. The execution times were as follows for the three different basecalling models:
+We tested slorado on [Pawsey using a complete PromethION dataset (~20X coverage HG002)](https://gentechgp.github.io/gtgseq/docs/data.html#na24385-hg002-promethion-data-20x). We used all 4 MI250X GPUs on the node (8 graphics compute dies in total). The execution times were as follows for the three different basecalling models:
 
 | Basecalling model | Execution time (hh:mm:ss) |
 |---|---|
@@ -52,35 +60,35 @@ After basecalling, we aligned the reads to the hg38 genome using minimap2 and ca
 
 ### Note 1
 
-Pawsey slurm script:
+Pawsey example slurm script:
 ```
 #!/bin/bash --login
 #SBATCH --partition=gpu
-#SBATCH --account=pawsey0001-gpu
 #SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=1:00:00
 
+# usage: sbatch --account=${PAWSEY_PROJECT}-gpu example.sh
 
 # you can get the test BLOW5 as: wget -O PGXXXX230339_reads_chr22.blow5 https://slow5.bioinf.science/hg2_prom_5khz_chr22
-BLOW5=/scratch/references/slorado/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5
-FASTQ_OUT=giga.fastq
+BLOW5=/scratch/references/slorado/slorado-v0.2.0-beta/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5
+FASTQ_OUT=reads.fastq
 
 # you may change the model one of the available:  dna_r10.4.1_e8.2_400bps_fast@v4.2.0  dna_r10.4.1_e8.2_400bps_hac@v4.2.0  dna_r10.4.1_e8.2_400bps_sup@v4.2.0
 MODEL=dna_r10.4.1_e8.2_400bps_hac@v4.2.0
-# batch size must be adjusted so that we do not overflow the GPU memory: tested to work:  2000 for fast, 500 for hac and 250 for sup
+# batch size must be adjusted so that we do not overflow the GPU memory: tested to work:  2000 for fast, 500 for hac and 200 for sup
 BATCH_SIZE=500
-
 
 ########################################################################
 
-SLORADO_DIR=/scratch/references/slorado/slorado-06-11-2024
+SLORADO_DIR=/path/to/slorado-v0.2.0-beta
 SLORADO=${SLORADO_DIR}/bin/slorado
 
-/usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -x cuda:all -t64 -C ${BATCH_SIZE} -v5
+srun /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -t64 -C ${BATCH_SIZE}
 ```
 
+See the [Pawsey GPU documentation](https://pawsey.atlassian.net/wiki/spaces/US/pages/51928618/Setonix+GPU+Partition+Quick+Start) for best practices on using GPUs effectively. 
 
 ### Note 2
 
@@ -95,7 +103,7 @@ pip install blue-crab
 # Then convert a POD5 directory to BLOW5
 blue-crab p2s pod5_dir/ -o merged.blow5
 ```
-Alternatively, [@gbouras13](https://github.com/gbouras13) has created a docker image, so you can use it throug singularity as well:
+Alternatively, [@gbouras13](https://github.com/gbouras13) has created a docker image, so you can use it through singularity as well:
 ```
 module  load pawseyenv/2023.08
 module load singularity/3.11.4-slurm

@@ -35,5 +35,5 @@ rm -r slorado-$VERSION/share/cmake
 rm -r slorado-$VERSION/lib/*.a
 
 ./slorado-$VERSION/bin/slorado --version || die "Test failed"
-tar zcf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz slorado-$VERSION || die "Tar failed"
+tar cJf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.xz slorado-$VERSION || die "Tar failed"
 rm -rf slorado-$VERSION

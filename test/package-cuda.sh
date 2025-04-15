@@ -37,5 +37,5 @@ rm -f slorado-$VERSION/lib/libtorch_cuda_linalg.so slorado-$VERSION/lib/libnvrtc
 rm -f slorado-$VERSION/lib/libcudnn_cnn_train.so.8 slorado-$VERSION/lib/libcudnn_ops_train.so.8 slorado-$VERSION/lib/libcudnn_adv_train.so.8
 
 ./slorado-$VERSION/bin/slorado --version || die "Test failed"
-tar zcf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.gz slorado-$VERSION || die "Tar failed"
+tar cJf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz slorado-$VERSION || die "Tar failed"
 rm -rf slorado-$VERSION

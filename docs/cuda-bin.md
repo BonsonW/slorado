@@ -8,9 +8,9 @@ We have some compiled binaries which should work On Linux if you have GLIBC >= 2
 First, download and extract the slorado cuda Linux binaries tar ball. Note that this is for testing only and the link will not be persistent!!!!
 
 ```
-VERSION=v0.2.0-beta
-wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-cuda-linux-binaries.tar.gz"
-tar xvf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.gz
+VERSION=v0.3.0-beta
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz"
+tar xvf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz
 cd slorado-$VERSION
 bin/slorado --help
 ```
@@ -18,7 +18,7 @@ bin/slorado --help
 Download the test dataset with 20,000 reads and run slorado:
 ```
 wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample
-./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
+./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
 ```
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems.
@@ -38,4 +38,5 @@ It should print the mean identity score, median identity score and the number of
 
 Currently, we have tested these binaries on following systems:
 1. O/S: Ubuntu 22; GPU: Tesla V100
+2. O/S: Ubuntu 22; GPU: Tesla A100
 2. O/S: Ubuntu 22 through Windows Subsystem for Linux (WSL2); GPU: GeForce RTX 4070 (laptop)

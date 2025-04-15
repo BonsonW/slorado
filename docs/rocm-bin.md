@@ -5,12 +5,12 @@ With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some
 
 ## Getting Started
 
-First, download and extract the slorado rocm Linux binaries tarball. Note that this is for testing only and the link will not be persistent!!!!
+First, download and extract the slorado rocm Linux binaries tarball.
 
 ```
-VERSION=v0.2.0-beta
-wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz"
-tar xvf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.gz
+VERSION=v0.3.0-beta
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-rocm-linux-binaries.tar.xz"
+tar xvf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.xz
 cd slorado-$VERSION
 bin/slorado --help
 ```
@@ -18,7 +18,7 @@ bin/slorado --help
 Download the test dataset with 20,000 reads and run slorado:
 ```
 wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample
-./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
+./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
 ```
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems.

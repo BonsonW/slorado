@@ -9,17 +9,19 @@ Slorado is mainly for our research and educational purposes. Thus, only a minima
 We provide compiled binaries for [NVIDIA (cuda)](https://docs.nvidia.com/cuda) and [AMD (rocm)](https://rocm.docs.amd.com/en/latest) GPU accelerators on x86_64 CPUs for Linux. You can download the latest relevant binary release that includes the most recent supported basecalling models from [releases](https://github.com/BonsonW/slorado/releases) as below:
 
 ```
-VERSION=v0.2.0-beta
+VERSION=v0.3.0-beta
 GPU=cuda   # GPU=rocm for AMD GPUs
-wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.gz"
-tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.gz
+wget "https://github.com/BonsonW/slorado/releases/download/$VERSION/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz"
+tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz
 cd slorado-$VERSION
-./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v4.2.0 reads.blow5  -o out.fastq -x cuda:all
+./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5  -o out.fastq -x cuda:all
 ```
 
 Detailed instructions are available at:
 - [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-bin.md)
 - [AMD GPUs (rocm) on x84_64 systems](docs/rocm-bin.md)
+
+Basecalling on Australia's [Pawsey](https://pawsey.org.au/) supercomputer: [Pawsey Guide](docs/pawsey.md)
 
 Binaries for the CPU-only version are not provided as basecalling on the CPU is impractically slow. Nevertheless, the CPU-only version is easier to build compared to the GPU version (see [below](#compilation-and-running)).
 
@@ -38,7 +40,7 @@ Compilation instructions differ based on the system. Please pick one of the foll
 
 ### Running
 
-We have tested this slorado version on basecalling models `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` and `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`. You can download them using the provided script (the binary releases already include these):
+We have tested this slorado v0.3.0-beta on basecalling models `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0`, `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0` and `dna_r10.4.1_e8.2_400bps_sup@v5.0.0`. You can download them using the provided script (the binary releases already include these):
 
 ```
 scripts/download-models.sh
@@ -47,12 +49,12 @@ scripts/download-models.sh
 Now run on a test dataset:
 ```
 # for CPU
-./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
+./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
 # for GPU
-./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v4.2.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
+./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
 ```
 
-Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems. We are currently working on supporting the newer v5 basecalling models.
+Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
 
 ## Testing
 
