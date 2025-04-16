@@ -38,7 +38,14 @@ SOFTWARE.
 
 void write_to_file(FILE *out, char *sequence, char *qstring, char *read_id, bool emit_fastq) {
     if (emit_fastq) {
-        int expected_len_bytes = strlen(read_id) + strlen(sequence) + strlen(qstring) + 6;
+        int sequence_len = strlen(sequence);
+        int qstring_len = strlen(qstring);
+        if (sequence_len != qstring_len) {
+            ERROR("sequence len: %d != qstring len: %d", sequence_len, qstring_len);
+            exit(EXIT_FAILURE);
+        }
+
+        int expected_len_bytes = strlen(read_id) + sequence_len + qstring_len + 6;
         int ret = fprintf(out, "@%s\n%s\n+\n%s\n", read_id, sequence, qstring);
         if (ret != expected_len_bytes) {
             ERROR("error writing fastq: %s", strerror(ret));
