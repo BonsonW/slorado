@@ -305,28 +305,41 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     torch::IValue ival;
     torch::Tensor pickle;
 
-    f = get_the_bytes("../bonito/bonito_qkv.pt");
-    ival = torch::pickle_load(f);
-    pickle = ival.toTensor().to("cuda:0")
-    fprintf(stderr, "pickled: %zd %zd %zd %zd %zd | %zd\n", pickle.size(0), pickle.size(1), pickle.size(2), pickle.size(3), pickle.size(4), pickle.dim()).contiguous();
+    // sin
+    // f = get_the_bytes("../bonito/sin_cached.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor().cpu().to(torch::kFloat).contiguous();
+    // numel = pickle.numel();
+    // fp = fopen("sin.blob", "w");
+    // F_CHK(fp, "sin.blob");
+    // if (fwrite(pickle.data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
 
-    auto qk = pickle.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(0, 2)}).reshape({N, T, -1, 64});
-    fprintf(stderr, "qk: %zd %zd %zd %zd | %zd\n", qk.size(0), qk.size(1), qk.size(2), qk.size(3),  qk.dim());
+    // f = get_the_bytes("../bonito/bonito_qkv.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor().to("cuda:0")
+    // fprintf(stderr, "pickled: %zd %zd %zd %zd %zd | %zd\n", pickle.size(0), pickle.size(1), pickle.size(2), pickle.size(3), pickle.size(4), pickle.dim()).contiguous();
+
+    // auto qk = pickle.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(0, 2)}).reshape({N, T, -1, 64});
+    // fprintf(stderr, "qk: %zd %zd %zd %zd | %zd\n", qk.size(0), qk.size(1), qk.size(2), qk.size(3),  qk.dim());
     // auto pickled = torch::pickle_save(qk);
     // std::ofstream fout("qk.pt", std::ios::out | std::ios::binary);
     // fout.write(pickled.data(), pickled.size());
     // fout.close();
     // exit(0);
 
-    numel = qk.numel();
-    fp = fopen("qk.blob", "w");
-    F_CHK(fp, "qk.blob");
-    if (fwrite(qk.to("cpu").to(torch::kFloat).data_ptr(), sizeof(float), numel, fp) != numel) {
-        fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
-    exit(0);
+    // numel = qk.numel();
+    // fp = fopen("qk.blob", "w");
+    // F_CHK(fp, "qk.blob");
+    // if (fwrite(qk.to("cpu").to(torch::kFloat).data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+    // exit(0);
 
     qkv = _wqkv.view({N, T, 3, nhead, head_dim});
     // print tens
