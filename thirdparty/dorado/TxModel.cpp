@@ -131,34 +131,34 @@ RotaryEmbeddingImpl::RotaryEmbeddingImpl(
     theta(theta_),
     options(options_)
 {
-    const torch::Tensor inv_freq = get_inv_freqs();
+    auto inv_freq = torch::pow(theta, torch::arange(0, dim, 2, options) / dim).reciprocal();
+    torch::Tensor freqs = torch::arange(max_seq_len, options).outer(inv_freq);
 
-    // freqs.shape := {max_seq_len, 1, 1, dim/2}
-    const torch::Tensor freqs = torch::arange(max_seq_len, options).reshape({max_seq_len, 1, 1, 1}) * inv_freq;
+    auto cos = torch::cos(freqs).to(options);
+    auto sin = torch::sin(freqs).to(options);
+    register_buffer("cos_freqs", cos);
+    register_buffer("sin_freqs", sin);
 
-    register_buffer("cos_freqs", torch::cos(freqs).to(options));
-    register_buffer("sin_freqs", torch::sin(freqs).to(options));
+    // FILE *fp;
+    // size_t numel;
+    // torch::IValue ival;
+    // torch::Tensor pickle;
+
+    // sin
+    // cos = cos.index({torch::indexing::Slice(0, 833), torch::indexing::Ellipsis});
+    // fprintf(stderr, "cos: %zd %zd | %zd\n", cos.size(0), cos.size(1), cos.dim());
+    // pickle = cos.contiguous().to(torch::kFloat).cpu();
+    // numel = pickle.numel();
+    // fp = fopen("cos_2.blob", "w");
+    // F_CHK(fp, "cos_2.blob");
+    // if (fwrite(pickle.data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // exit(0);
 };
-
-torch::Tensor RotaryEmbeddingImpl::get_inv_freqs() const {
-    // Torch2.0 does not have support for ATen::pow in the MPS(apple) backend.
-    // Use a vector and std::pow from cmath instead and cast to a tensor
-
-    // Equivalent to:
-    // const torch::Tensor inv_freq =
-    //         torch::pow(theta, torch::arange(0, dim, 2, options) / dim).reciprocal();
-
-    // TODO: Remove when updating to torch2.1+
-    std::vector<double> vec;
-    vec.reserve(dim / 2);
-    for (float i = 0; i < dim; i += 2) {
-        vec.push_back(std::pow(static_cast<double>(theta), static_cast<double>(i / (float)dim)));
-    }
-    torch::Tensor inv_freq = torch::from_blob(vec.data(), vec.size(), torch::TensorOptions().dtype(torch::kDouble))
-        .to(options)
-        .reciprocal();
-    return inv_freq;
-}
 
 torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
     // Input is NT3HD
@@ -291,7 +291,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_mm += b-a;
 
-    // fprintf(stderr, "wqkv: %zd %zd %zd | %zd\n", _wqkv.size(0), _wqkv.size(1), _wqkv.size(2), _wqkv.dim());
+    fprintf(stderr, "wqkv: %zd %zd %zd | %zd\n", _wqkv.size(0), _wqkv.size(1), _wqkv.size(2), _wqkv.dim());
+    exit(0);
     // numel = _wqkv.numel();
     // fp = fopen("wqkv.blob", "w");
     // F_CHK(fp, "wqkv.blob");
@@ -341,7 +342,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // fclose(fp);
     // exit(0);
 
-    qkv = _wqkv.view({N, T, 3, nhead, head_dim});
+    qkv = _wqkv.view({N, T, 3, nhead, head_dim}).contiguous();
     // print tens
     // fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     // numel = qkv.numel();
