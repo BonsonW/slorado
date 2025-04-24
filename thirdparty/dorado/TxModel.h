@@ -61,6 +61,9 @@ struct RotaryEmbeddingImpl : torch::nn::Module {
     void assert_forward_dims(const torch::Tensor &qkv) const;
 
     torch::Tensor get_inv_freqs() const;
+    
+    torch::Tensor cos_buf;
+    torch::Tensor sin_buf;
 
     const int64_t dim, max_seq_len;
     const float theta;

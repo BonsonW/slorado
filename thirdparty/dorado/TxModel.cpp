@@ -133,17 +133,28 @@ RotaryEmbeddingImpl::RotaryEmbeddingImpl(
 {
     auto inv_freq = torch::pow(theta, torch::arange(0, dim, 2, options) / dim).reciprocal();
     torch::Tensor freqs = torch::arange(max_seq_len, options).outer(inv_freq);
+    // const torch::Tensor freqs = torch::arange(max_seq_len, options).reshape({max_seq_len, 1, 1, 1}) * inv_freq;
 
-    auto cos = torch::cos(freqs).to(options);
-    auto sin = torch::sin(freqs).to(options);
-    register_buffer("cos_freqs", cos);
-    register_buffer("sin_freqs", sin);
-
-    // FILE *fp;
+    // std::vector<char> f;
     // size_t numel;
     // torch::IValue ival;
     // torch::Tensor pickle;
 
+    // f = get_the_bytes("../bonito/sin_cached.pt");
+    // ival = torch::pickle_load(f);
+    // auto sin = ival.toTensor().to("cuda:0");
+
+    // f = get_the_bytes("../bonito/cos_cached.pt");
+    // ival = torch::pickle_load(f);
+    // auto cos = ival.toTensor().to("cuda:0");
+
+    auto cos = torch::cos(freqs).to(torch::kFloat32).contiguous();
+    auto sin = torch::sin(freqs).to(torch::kFloat32).contiguous();
+    cos_buf = cos;
+    sin_buf = sin;
+    // register_buffer("cos_freqs", cos);
+    // register_buffer("sin_freqs", sin);
+    
     // sin
     // cos = cos.index({torch::indexing::Slice(0, 833), torch::indexing::Ellipsis});
     // fprintf(stderr, "cos: %zd %zd | %zd\n", cos.size(0), cos.size(1), cos.dim());
@@ -163,32 +174,74 @@ RotaryEmbeddingImpl::RotaryEmbeddingImpl(
 torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
     // Input is NT3HD
     assert_forward_dims(qkv);
-    const int64_t N = qkv.size(0);
-    const int64_t T = qkv.size(1);
-    const int64_t H = qkv.size(3);
-    const int64_t D = qkv.size(4);
+    const int batch_size = qkv.size(0);
+    const int seqlen = qkv.size(1);
+    const int nheads = qkv.size(3);
+    const int head_dim = qkv.size(4);
+    const int rotary_dim = 32;
+    const int stride_batch = qkv.stride(0);
+    const int stride_seq = qkv.stride(1);
+    const int stride_head = qkv.stride(3);
 
-    auto buffers = named_buffers();
-    const torch::Tensor cos_buf = buffers["cos_freqs"].narrow(0, 0, T);
-    const torch::Tensor sin_buf = buffers["sin_freqs"].narrow(0, 0, T);
+    auto qkv_arr = qkv.chunk(3, 2);
+    
+    openfish_rotary_f16(
+        qkv_arr[0].data_ptr(),
+        sin_buf.data_ptr(),
+        cos_buf.data_ptr(),
+        batch_size,
+        seqlen,
+        nheads,
+        head_dim,
+        rotary_dim,
+        stride_batch,
+        stride_seq,
+        stride_head
+    );
+    
+    openfish_rotary_f16(
+        qkv_arr[1].data_ptr(),
+        sin_buf.data_ptr(),
+        cos_buf.data_ptr(),
+        batch_size,
+        seqlen,
+        nheads,
+        head_dim,
+        rotary_dim,
+        stride_batch,
+        stride_seq,
+        stride_head
+    );
+    return qkv;
+    
+    // // Input is NT3HD
+    // assert_forward_dims(qkv);
+    // const int64_t N = qkv.size(0);
+    // const int64_t T = qkv.size(1);
+    // const int64_t H = qkv.size(3);
+    // const int64_t D = qkv.size(4);
 
-    auto qk_evens = qkv.slice(2, 0, 2).slice(4, 0, D / 2);
-    auto qk_odds = qkv.slice(2, 0, 2).slice(4, D / 2, D);
+    // auto buffers = named_buffers();
+    // const torch::Tensor cos_buf = buffers["cos_freqs"].narrow(0, 0, T);
+    // const torch::Tensor sin_buf = buffers["sin_freqs"].narrow(0, 0, T);
 
-    // Allocate output tensor with memory layout as consumed by attention: 3NHTD
-    auto output = torch::empty({3, N, H, T, D}, qkv.options());
-    // View as [3 (q|k|v), N, H, T, 2 (even|odd), D/2], narrow first dim to 2 (q|k), then
-    // permute as [2 (even|odd), N, T, 2 (q|k), H, D/2] which is compatible with assignment below
-    auto output_kv_even_odd = output.view({3, N, H, T, 2, D / 2}).slice(0, 0, 2).permute({4, 1, 3, 0, 2, 5});
+    // auto qk_evens = qkv.slice(2, 0, 2).slice(4, 0, D / 2);
+    // auto qk_odds = qkv.slice(2, 0, 2).slice(4, D / 2, D);
 
-    // Apply rotary embedding to Q and K
-    output_kv_even_odd[0] = cos_buf * qk_evens - sin_buf * qk_odds;
-    output_kv_even_odd[1] = sin_buf * qk_evens + cos_buf * qk_odds;
+    // // Allocate output tensor with memory layout as consumed by attention: 3NHTD
+    // auto output = torch::empty({3, N, H, T, D}, qkv.options());
+    // // View as [3 (q|k|v), N, H, T, 2 (even|odd), D/2], narrow first dim to 2 (q|k), then
+    // // permute as [2 (even|odd), N, T, 2 (q|k), H, D/2] which is compatible with assignment below
+    // auto output_kv_even_odd = output.view({3, N, H, T, 2, D / 2}).slice(0, 0, 2).permute({4, 1, 3, 0, 2, 5});
 
-    // Copy V to output
-    output.select(0, 2).permute({0, 2, 1, 3}) = qkv.select(2, 2);
+    // // Apply rotary embedding to Q and K
+    // output_kv_even_odd[0] = cos_buf * qk_evens - sin_buf * qk_odds;
+    // output_kv_even_odd[1] = sin_buf * qk_evens + cos_buf * qk_odds;
 
-    return output;
+    // // Copy V to output
+    // output.select(0, 2).permute({0, 2, 1, 3}) = qkv.select(2, 2);
+
+    // return output;
 }
 
 void RotaryEmbeddingImpl::assert_forward_dims(const torch::Tensor &qkv) const {
@@ -284,6 +337,24 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     //     exit(EXIT_FAILURE);
     // }
     // fclose(fp);
+
+    std::vector<char> f;
+    torch::IValue ival;
+    torch::Tensor pickle;
+
+    // q_ro
+    // f = get_the_bytes("../bonito/q_ro.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor().to(torch::kFloat).contiguous().cpu();
+    // numel = pickle.numel();
+    // fp = fopen("q_ro_full.blob", "w");
+    // F_CHK(fp, "q_ro_full.blob");
+    // if (fwrite(pickle.data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+    // exit(0);
     
     a = realtime();
     auto _wqkv = wqkv(x);
@@ -291,8 +362,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_mm += b-a;
 
-    fprintf(stderr, "wqkv: %zd %zd %zd | %zd\n", _wqkv.size(0), _wqkv.size(1), _wqkv.size(2), _wqkv.dim());
-    exit(0);
+    // fprintf(stderr, "wqkv: %zd %zd %zd | %zd\n", _wqkv.size(0), _wqkv.size(1), _wqkv.size(2), _wqkv.dim());
+    // exit(0);
     // numel = _wqkv.numel();
     // fp = fopen("wqkv.blob", "w");
     // F_CHK(fp, "wqkv.blob");
@@ -302,9 +373,36 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // }
     // fclose(fp);
 
-    std::vector<char> f;
-    torch::IValue ival;
-    torch::Tensor pickle;
+    
+
+    // qkv
+    // f = get_the_bytes("../bonito/qkv.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor().to(torch::kFloat).contiguous().cpu();
+    // numel = pickle.numel();
+    // fp = fopen("qkv_full.blob", "w");
+    // F_CHK(fp, "qkv_full.blob");
+    // if (fwrite(pickle.data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+    // exit(0);
+
+    // // qkv_out
+    // f = get_the_bytes("../bonito/qkv_out.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor().cpu().to(torch::kFloat).contiguous();
+    // numel = pickle.numel();
+    // fp = fopen("qkv_out.blob", "w");
+    // F_CHK(fp, "qkv_out.blob");
+    // if (fwrite(pickle.data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // exit(0);
 
     // sin
     // f = get_the_bytes("../bonito/sin_cached.pt");
@@ -321,8 +419,20 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     // f = get_the_bytes("../bonito/bonito_qkv.pt");
     // ival = torch::pickle_load(f);
-    // pickle = ival.toTensor().to("cuda:0")
-    // fprintf(stderr, "pickled: %zd %zd %zd %zd %zd | %zd\n", pickle.size(0), pickle.size(1), pickle.size(2), pickle.size(3), pickle.size(4), pickle.dim()).contiguous();
+    // pickle = ival.toTensor().to("cuda:0").to(torch::kHalf).contiguous();
+    // fprintf(stderr, "pickled: %zd %zd %zd %zd %zd | %zd\n", pickle.size(0), pickle.size(1), pickle.size(2), pickle.size(3), pickle.size(4), pickle.dim());
+    // qkv = pickle;
+    
+    // numel = pickle.numel();
+    // fp = fopen("qkv_full.blob", "w");
+    // F_CHK(fp, "qkv_full.blob");
+    // if (fwrite(pickle.cpu().to(torch::kFloat).contiguous().data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // exit(0);
 
     // auto qk = pickle.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(0, 2)}).reshape({N, T, -1, 64});
     // fprintf(stderr, "qk: %zd %zd %zd %zd | %zd\n", qk.size(0), qk.size(1), qk.size(2), qk.size(3),  qk.dim());
@@ -342,7 +452,6 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // fclose(fp);
     // exit(0);
 
-    qkv = _wqkv.view({N, T, 3, nhead, head_dim}).contiguous();
     // print tens
     // fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     // numel = qkv.numel();
@@ -355,26 +464,80 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // fclose(fp);
 
     a = realtime();
+    qkv = _wqkv.view({N, T, 3, nhead, head_dim});
     qkv = rotary_emb(qkv);
-    qkv = qkv.transpose(2, 3).contiguous();
+    // qkv = qkv.permute({1, 3, 0, 2, 4}).contiguous();
+    // const int batch_size = qkv.size(0);
+    // const int seqlen = qkv.size(1);
+    // const int nheads = qkv.size(3);
+    // const int head_dim = qkv.size(4);
+    // const int rotary_dim = 32;
+    // const int stride_rotary = 32;
+    // const int stride_batch = qkv.stride(0);
+    // const int stride_seq = qkv.stride(1);
+    // const int stride_c = qkv.stride(2);
+    // const int stride_head = qkv.stride(3);
+    // const int stride_head_dim = qkv.stride(4);
+
+    // openfish_rotary(
+    //     qkv.data_ptr(),
+    //     qkv.data_ptr(),
+    //     sin.data_ptr(),
+    //     cos.data_ptr(),
+    //     batch_size,
+    //     seqlen,
+    //     nheads,
+    //     head_dim,
+    //     rotary_dim,
+    //     stride_batch,
+    //     stride_seq,
+    //     stride_c,
+    //     stride_head,
+    //     stride_head_dim,
+    //     stride_rotary
+    // );
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_rotary_emb += b-a;
 
     // print tens
-    // fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
-
+    fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
+    // exit(0);
+    a = realtime();
     attn_output_ntc = torch::empty({N, T, C}, x.options()).contiguous();
     auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim});
     const auto win_upper = std::get<0>(attn_window);
     const auto win_lower = std::get<1>(attn_window);
 
-    a = realtime();
     // fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     // numel = qkv.numel();
-    // fp = fopen("slorado_qkv.blob", "w");
-    // F_CHK(fp, "slorado_qkv.blob");
-    // if (fwrite(qkv.to("cpu").data_ptr(), sizeof(int16_t), numel, fp) != numel) {
+    // fp = fopen("x.blob", "w");
+    // F_CHK(fp, "x.blob");
+    // if (fwrite(qkv.to("cpu").to(torch::kFloat32).contiguous().data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // numel = qkv.numel();
+    // fp = fopen("qkv_slorado.blob", "w");
+    // F_CHK(fp, "qkv_slorado.blob");
+    // if (fwrite(qkv.to("cpu").to(torch::kFloat32).contiguous().data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // exit(0);
+    
+    // bonito qkv
+    // f = get_the_bytes("../bonito/qkv.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor().cpu().to(torch::kFloat).contiguous();
+    // numel = pickle.numel();
+    // fp = fopen("bonito_qkv.blob", "w");
+    // F_CHK(fp, "bonito_qkv.blob");
+    // if (fwrite(pickle.data_ptr(), sizeof(float), numel, fp) != numel) {
     //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
     //     exit(EXIT_FAILURE);
     // }
@@ -389,8 +552,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
         attn_output.size(1),
         attn_output.size(2),
         attn_output.size(3),
+        qkv.stride(0),
         qkv.stride(1),
-        qkv.stride(2),
         qkv.stride(3),
         win_upper,
         win_lower
@@ -399,12 +562,38 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_sdp_attn += b-a;
 
+    // qkv
+    // f = get_the_bytes("../bonito/attn_output.pt");
+    // ival = torch::pickle_load(f);
+    // pickle = ival.toTensor();
+    // numel = pickle.numel();
+    // fp = fopen("attn_ntc_bonito.blob", "w");
+    // F_CHK(fp, "attn_ntc_bonito.blob");
+    // fprintf(stderr, "attn_ntc: %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.dim());
+    // if (fwrite(pickle.to(torch::kFloat32).contiguous().cpu().data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+    // exit(0);
+
     // print tens
-    // fprintf(stderr, "attn_ntc: %zd %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.size(3), attn_output_ntc.dim());
+    // fprintf(stderr, "attn_ntc: %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.dim());
     // numel = attn_output_ntc.numel();
-    // fp = fopen("attn_ntc_2.blob", "w");
-    // F_CHK(fp, "attn_ntc_2.blob");
-    // if (fwrite(attn_output_ntc.to("cpu").to(torch::kFloat32).data_ptr(), sizeof(float), numel, fp) != numel) {
+    // fp = fopen("slorado_attn_ntc.blob", "w");
+    // F_CHK(fp, "slorado_attn_ntc.blob");
+    // if (fwrite(attn_output_ntc.to(torch::kFloat32).contiguous().to("cpu").data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+    // exit(0);
+
+    // fprintf(stderr, "attn_ntc: %zd %zd %zd | %zd\n", attn_output_ntc.size(0), attn_output_ntc.size(1), attn_output_ntc.size(2), attn_output_ntc.dim());
+    // numel = attn_output_ntc.numel();
+    // fp = fopen("openfish_attn_ntc.blob", "w");
+    // F_CHK(fp, "openfish_attn_ntc.blob");
+    // if (fwrite(attn_output_ntc.to(torch::kFloat32).contiguous().to("cpu").data_ptr(), sizeof(float), numel, fp) != numel) {
     //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
     //     exit(EXIT_FAILURE);
     // }
