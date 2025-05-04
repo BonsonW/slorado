@@ -501,7 +501,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_rotary_emb += b-a;
 
     // print tens
-    fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
+    // fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     // exit(0);
     a = realtime();
     attn_output_ntc = torch::empty({N, T, C}, x.options()).contiguous();
