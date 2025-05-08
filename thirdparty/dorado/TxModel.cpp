@@ -110,14 +110,75 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_) : in_features
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
-    torch::Tensor t;
-    t = fc1(x);
-    const auto chunks = t.chunk(2, -1);
-    const auto &y = chunks[0];
-    const auto &gate = chunks[1];
-    t = functional::silu(gate).mul_(y);
+    // torch::Tensor d2;
+
+    FILE *fp;
+    size_t numel;
+
+    auto B = x.size(0) * x.size(1);
+    auto I = in_features;
+    auto H = hidden_features;
+
+    auto weights = fc1->weight;
+    auto w = weights.chunk(2, 0);
+
+    at::Tensor d0 = at::empty({x.size(0), x.size(1), H}, x.options()).contiguous();
+    at::Tensor d1 = at::empty({x.size(0), x.size(1), H}, x.options()).contiguous();
+    at::Tensor swiglu_out = at::empty({x.size(0), x.size(1), H}, x.options()).contiguous(); 
+
+    // fprintf(stderr, "B %zd, I %zd, H %zd\n", B, I, H);
+    openfish_swiglu(x.data_ptr(), w[0].data_ptr(), w[1].data_ptr(), d0.data_ptr(), d1.data_ptr(), swiglu_out.data_ptr(), B, I, H);
+
+    // fprintf(stderr, "x: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
+    // fprintf(stderr, "w: %zd %zd | %zd\n", w.size(0), w.size(1), w.dim());
+
+    // d2 = fc1(x);
+    // const auto chunks = d2.chunk(2, -1);
+    // const auto &y = chunks[0];
+    // const auto &gate = chunks[1];
+    // d2 = functional::silu(gate).mul_(y);
+
+    // fprintf(stderr, "t: %zd %zd %zd | %zd\n", t.size(0), t.size(1), t.size(2), t.dim());
+
+    // numel = x.numel();
+    // fp = fopen("x_slorado.blob", "w");
+    // F_CHK(fp, "x_slorado.blob");
+    // if (fwrite(x.to("cpu").contiguous().data_ptr(), sizeof(uint16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // numel = q[0].numel();
+    // fp = fopen("w0_slorado.blob", "w");
+    // F_CHK(fp, "w0_slorado.blob");
+    // if (fwrite(q[0].to("cpu").contiguous().data_ptr(), sizeof(uint16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // numel = q[1].numel();
+    // fp = fopen("w1_slorado.blob", "w");
+    // F_CHK(fp, "w1_slorado.blob");
+    // if (fwrite(q[1].to("cpu").contiguous().data_ptr(), sizeof(uint16_t), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // numel = d2.numel();
+    // fp = fopen("t_slorado.blob", "w");
+    // F_CHK(fp, "t_slorado.blob");
+    // if (fwrite(d2.to("cpu").to(torch::kFloat32).contiguous().data_ptr(), sizeof(float), numel, fp) != numel) {
+    //     fprintf(stderr, "error writing sequence file: %s\n", strerror(errno));
+    //     exit(EXIT_FAILURE);
+    // }
+    // fclose(fp);
+
+    // exit(0);
     
-    return fc2(t);
+    return fc2(swiglu_out);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
