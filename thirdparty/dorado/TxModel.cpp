@@ -95,6 +95,8 @@ torch::Tensor scaled_dot_product_attention_naive(
 
 RMSNormImpl::RMSNormImpl(int hidden_size_) : hidden_size(hidden_size_) {
     weight = torch::ones({hidden_size});
+    // fprintf(stderr, "%d\n", hidden_size);
+    // exit(0);
     register_parameter("weight", weight, false);
 }
 
@@ -373,9 +375,6 @@ torch::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size)
 
 torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     auto device_idx = options.device_index();
-
-    c10::cuda::CUDAGuard device_guard(device_idx);
-
     FILE *fp;
     size_t numel;
 
@@ -718,8 +717,13 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 
     double a, b;
 
-    auto run_norm = [&](RMSNorm norm, const torch::Tensor &in) {
-        x = norm(in + (x * deepnorm_alpha));
+    auto run_norm = [&](RMSNorm norm, const torch::Tensor &in, std::optional<at::Tensor> weight) {
+        auto k = in + (x * deepnorm_alpha);
+        // fprintf(stderr, "k: %zd %zd %zd | %zd\n", k.size(0), k.size(1), k.size(2), k.dim());
+        // auto eps = std::optional<double>(1e-5f);
+        // x = at::rms_norm(k, {k.size(2)}, weight, eps);
+        x = norm(k);
+        // fprintf(stderr, "x: %zd %zd %zd | %zd\n", x.size(0), x.size(1), x.size(2), x.dim());
     };
 
     // print tens
@@ -733,7 +737,8 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     // print tens
 
     a = realtime();
-    run_norm(norm1, attn);
+
+    run_norm(norm1, attn, std::optional<at::Tensor>(norm1->weight));
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_norm1 += b-a;
@@ -747,7 +752,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     // print tens
 
     a = realtime();
-    run_norm(norm2, f);
+    run_norm(norm2, f, std::optional<at::Tensor>(norm2->weight));
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_norm2 += b-a;
@@ -810,6 +815,7 @@ torch::Tensor TxModelImpl::forward(const torch::Tensor &chunk_NCT) {
     torch::Tensor h;
     double a, b;
     auto device_idx = m_options.device_index();
+    c10::cuda::CUDAGuard device_guard(device_idx);
     
     a = realtime();
     h = convs->forward(chunk_NCT);
