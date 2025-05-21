@@ -383,7 +383,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const int64_t C = x.size(2);
 
     torch::Tensor qkv;
-    torch::Tensor attn_output_ntc;
+    // torch::Tensor attn_output_ntc;
 
     double a, b;
     
@@ -564,10 +564,79 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // fprintf(stderr, "rotary_emb_qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     // exit(0);
     a = realtime();
-    attn_output_ntc = torch::empty({N, T, C}, x.options()).contiguous();
+    auto attn_output_ntc = torch::empty({N, T, C}, x.options()).contiguous();
     auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim});
     const auto win_upper = std::get<0>(attn_window);
     const auto win_lower = std::get<1>(attn_window);
+    // float softmax_scale = 1.0 / std::sqrt(head_dim);
+
+    // auto qkv_chunks = qkv.chunk(3, 2);
+    // auto q = qkv_chunks[0].squeeze();
+    // auto k = qkv_chunks[1].squeeze();
+    // auto v = qkv_chunks[2].squeeze();
+
+    
+    // auto flash_res = at::_flash_attention_forward(
+    //     q, k, v,
+    //     std::nullopt, std::nullopt, // cum_seq_qk
+    //     qkv.size(1), qkv.size(1), // size_qk
+    //     0.0, // dropout
+    //     false, // casual
+    //     false, // return debug mask
+    //     softmax_scale,
+    //     win_lower,
+    //     win_upper,
+    //     std::nullopt, // seqused k
+    //     std::nullopt // alibi slopes
+    // );
+
+    // attn_output_ntc = std::get<0>(flash_res);
+
+    // attn_output_ntc = attn_output_ntc.reshape({N, T, C});
+
+    // auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+    // const auto win_upper = std::get<0>(attn_window);
+    // const auto win_lower = std::get<1>(attn_window);
+    // // The MPS backend refuses to work on a span of the mask that doesn't have an
+    // // alignment of 4 elements, so pad the amount we process each loop to that.
+    // const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
+
+    // for (int i = 0; i < num_splits; ++i) {
+    //     const auto qb = i * elems_per_split;
+    //     if (qb >= T) {
+    //         break;
+    //     }
+    //     const auto qe = std::min(T, qb + elems_per_split);
+    //     const auto kvb = std::max<int64_t>(0, qb - win_lower);
+    //     const auto kve = std::min<int64_t>(T, qe + win_upper);
+    //     const auto q = qkv[0].slice(-2, qb, qe);
+    //     const auto k = qkv[1].slice(-2, kvb, kve);
+    //     const auto v = qkv[2].slice(-2, kvb, kve);
+    //     const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
+    //     c10::optional<torch::Tensor> opt_mask;
+    //     // Not using the mask gets us significantly better performance, at the cost of some
+    //     // accuracy. Accuracy loss is minimised by larger num_splits.
+    //     opt_mask = mask;
+    //     attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
+    // }
+
+    openfish_flash_fwd(
+        qkv.data_ptr(),
+        attn_output.data_ptr(),
+        attn_output.size(0),
+        attn_output.size(1),
+        attn_output.size(2),
+        attn_output.size(3),
+        qkv.stride(0),
+        qkv.stride(1),
+        qkv.stride(3),
+        win_upper,
+        win_lower
+    );
+
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_sdp_attn += b-a;
 
     // fprintf(stderr, "qkv: %zd %zd %zd %zd %zd | %zd\n", qkv.size(0), qkv.size(1), qkv.size(2), qkv.size(3), qkv.size(4), qkv.dim());
     // numel = qkv.numel();
@@ -604,23 +673,6 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     // fclose(fp);
 
     // exit(0);
-    
-    openfish_flash_fwd(
-        qkv.data_ptr(),
-        attn_output.data_ptr(),
-        attn_output.size(0),
-        attn_output.size(1),
-        attn_output.size(2),
-        attn_output.size(3),
-        qkv.stride(0),
-        qkv.stride(1),
-        qkv.stride(3),
-        win_upper,
-        win_lower
-    );
-    torch::cuda::synchronize(device_idx);
-    b = realtime();
-    model_stats->time_sdp_attn += b-a;
 
     // qkv
     // f = get_the_bytes("../bonito/attn_output.pt");
