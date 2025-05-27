@@ -28,9 +28,9 @@ LDFLAGS		+= zstd/lib/libzstd.a
 endif
 
 # https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
-ifeq ($(cxx11_abi),) #  cxx11_abi not defined
-CXXFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
-endif
+# ifeq ($(cxx11_abi),) #  cxx11_abi not defined
+# CXXFLAGS		+= -D_GLIBCXX_USE_CXX11_ABI=0
+# endif
 
 # change the tool name to what you want
 BINARY = slorado

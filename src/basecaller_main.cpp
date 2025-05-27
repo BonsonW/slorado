@@ -288,6 +288,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
         } else { // lstm
             lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
+            (void)model_stats;
             // fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
             // fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
             // fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
