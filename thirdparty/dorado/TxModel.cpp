@@ -111,33 +111,30 @@ torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
 
     auto qkv_chunks = qkv.chunk(3, 2);
     
-    openfish_rotary_emb(
-        qkv_chunks[0].data_ptr(),
-        sin_buf.data_ptr(),
-        cos_buf.data_ptr(),
-        batch_size,
-        seqlen,
-        nheads,
-        head_dim,
-        rotary_dim,
-        stride_batch,
-        stride_seq,
-        stride_head
+#ifdef USE_GPU
+    openfish_rotary_emb_gpu(
+        qkv_chunks[0].data_ptr(), sin_buf.data_ptr(), cos_buf.data_ptr(),
+        batch_size, seqlen, nheads, head_dim, rotary_dim,
+        stride_batch, stride_seq, stride_head
     );
-    
-    openfish_rotary_emb(
-        qkv_chunks[1].data_ptr(),
-        sin_buf.data_ptr(),
-        cos_buf.data_ptr(),
-        batch_size,
-        seqlen,
-        nheads,
-        head_dim,
-        rotary_dim,
-        stride_batch,
-        stride_seq,
-        stride_head
+    openfish_rotary_emb_gpu(
+        qkv_chunks[1].data_ptr(), sin_buf.data_ptr(), cos_buf.data_ptr(),
+        batch_size, seqlen, nheads, head_dim, rotary_dim,
+        stride_batch, stride_seq, stride_head
     );
+#else
+    const int nthreads = 8; // todo: determine dynamically
+    openfish_rotary_emb_cpu(
+        qkv_chunks[0].data_ptr(), sin_buf.data_ptr(), cos_buf.data_ptr(),
+        batch_size, seqlen, nheads, head_dim, rotary_dim,
+        stride_batch, stride_seq, stride_head, nthreads
+    );
+    openfish_rotary_emb_cpu(
+        qkv_chunks[1].data_ptr(), sin_buf.data_ptr(), cos_buf.data_ptr(),
+        batch_size, seqlen, nheads, head_dim, rotary_dim,
+        stride_batch, stride_seq, stride_head, nthreads
+    );
+#endif
     return qkv;
 }
 
