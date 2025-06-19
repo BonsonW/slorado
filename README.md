@@ -4,6 +4,8 @@ Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dora
 
 Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and may not be up-to-date with Dorado. For a feature-rich and up-to-date S/BLOW5-based basecaller for routine use, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel).
 
+[![GitHub Downloads](https://img.shields.io/github/downloads/BonsonW/slorado/total?logo=GitHub)](https://github.com/BonsonW/slorado/releases)
+
 ## Quick start
 
 We provide compiled binaries for [NVIDIA (cuda)](https://docs.nvidia.com/cuda) and [AMD (rocm)](https://rocm.docs.amd.com/en/latest) GPU accelerators on x86_64 CPUs for Linux. You can download the latest relevant binary release that includes the most recent supported basecalling models from [releases](https://github.com/BonsonW/slorado/releases) as below:
