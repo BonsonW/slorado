@@ -311,8 +311,12 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 
     double a, b;
 
-    auto run_norm = [&](RMSNorm norm, const torch::Tensor &in) {
-        x = norm(in + (x * deepnorm_alpha));
+    auto run_norm = [&](RMSNorm norm, const torch::Tensor &in, at::Tensor &weight) {
+        auto k = in + (x * deepnorm_alpha);
+        auto eps = 1e-5f;
+        auto t0 = at::_fused_rms_norm(k, {k.size(2)}, weight, eps);
+        x = std::get<0>(t0);
+        // x = norm(k);
     };
 
     a = realtime();
@@ -322,7 +326,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     model_stats->time_self_attn += b-a;
 
     a = realtime();
-    run_norm(norm1, attn);
+    run_norm(norm1, attn, norm1->weight);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_norm1 += b-a;
@@ -334,7 +338,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     model_stats->time_ff += b-a;
 
     a = realtime();
-    run_norm(norm2, f);
+    run_norm(norm2, f, norm2->weight);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_norm2 += b-a;
