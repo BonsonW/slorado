@@ -311,12 +311,15 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 
     double a, b;
 
-    auto run_norm = [&](RMSNorm norm, const torch::Tensor &in, at::Tensor &weight) {
+    auto run_norm = [&](RMSNorm &norm, const torch::Tensor &in, at::Tensor &weight) {
         auto k = in + (x * deepnorm_alpha);
+#ifdef USE_GPU
         auto eps = 1e-5f;
         auto t0 = at::_fused_rms_norm(k, {k.size(2)}, weight, eps);
         x = std::get<0>(t0);
-        // x = norm(k);
+#else
+        x = norm(k);
+#endif
     };
 
     a = realtime();
