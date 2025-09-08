@@ -47,6 +47,7 @@ SOFTWARE.
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
+#include <algorithm>
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
@@ -195,6 +196,10 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
         std::string sequence;
         std::string qstring;
         stitch_chunks(db->chunk_db, i, sequence, qstring);
+        
+        // reverse for RNA, TODO: check in toml if RNA
+        std::reverse(sequence.begin(), sequence.end());
+        std::reverse(qstring.begin(), qstring.end());
 
         (*db->sequence)[i] = strdup(sequence.c_str());
         assert((*db->sequence)[i] != NULL);
