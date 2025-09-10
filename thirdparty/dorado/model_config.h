@@ -164,6 +164,9 @@ struct ModelGeneralParams {
 struct RefinementParams {
     const bool do_rough_rescale;  ///< Whether to perform rough rescaling
     const size_t center_idx;      ///< The position in the kmer at which to check the levels
+
+    RefinementParams() : do_rough_rescale(false), center_idx(0) {}
+    RefinementParams(int center_idx_);
 };
 
 struct ModificationParams {
@@ -203,6 +206,11 @@ struct ContextParams {
                   int bases_after_,
                   bool reverse_,
                   bool base_start_justify_);
+
+    // Normalise `v` by `stride` strictly increasing the if needed.
+    static int64_t normalise(const int64_t v, const int64_t stride);
+    // Return the context params but normalised by a stride
+    ContextParams normalised(const int stride) const;
 };
 
 struct ModBaseModelConfig {

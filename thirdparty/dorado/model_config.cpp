@@ -706,6 +706,9 @@ ModelType get_modbase_model_type(const const char *path) {
     auto ret = model_type_from_string(type.u.s);
     free(type.u.s);
 
+    toml_free(config_toml);
+    free(cpath);
+
     return ret;
 }
 
@@ -1060,4 +1063,96 @@ ContextParams parse_context_params(const toml_table_t *config_toml) {
 
     return ContextParams(context_before, context_after, chunk_size, bases_before, bases_after,
                          reverse, base_start_justify);
+}
+
+int64_t ContextParams::normalise(const int64_t v, const int64_t stride) {
+    const int64_t remainder = v % stride;
+    if (remainder == 0) {
+        return v;
+    }
+    return v + stride - remainder;
+}
+
+ContextParams ContextParams::normalised(const int stride) const {
+    const int64_t sb = normalise(samples_before, stride);
+    const int64_t sa = normalise(samples_after, stride);
+    const int64_t cs = normalise(chunk_size, stride);
+
+    return ContextParams(sb, sa, cs, bases_before, bases_after, reverse, base_start_justify);
+}
+
+RefinementParams::RefinementParams(
+    int center_idx_
+) : do_rough_rescale(true),
+    center_idx(static_cast<size_t>(center_idx_))
+{
+    if (center_idx_ < 0) {
+        ERROR("%s", "refinement params: 'negative center index'.");
+    }
+}
+
+RefinementParams parse_refinement_params(const toml_table_t *config_toml) {
+    if (!toml_key_exists(config_toml, "refinement")) {
+        return RefinementParams{};
+    }
+
+    const auto segment = toml_table_in(config_toml, "refinement");
+    check_toml_table(segment);
+
+    const auto do_rough_rescale = toml_int_in(segment, "refine_do_rough_rescale");
+    if (do_rough_rescale.u.i != 1) {
+        return RefinementParams{};
+    }
+
+    const int center_index = get_int_in_range(segment, "refine_kmer_center_idx", 0, 19, REQUIRED);
+    return RefinementParams(center_index);
+}
+
+ModBaseModelConfig::ModBaseModelConfig(
+    const char *model_path_,
+    ModelGeneralParams general_,
+    ModificationParams mods_,
+    ContextParams context_,
+    RefinementParams refine_
+) : general(std::move(general_)),
+    mods(std::move(mods_)),
+    context(general_.model_type == ModelType::CONV_LSTM_V2 ? context_.normalised(general.stride) : std::move(context_)),
+    refine(std::move(refine_))
+{
+    // Kmer length is duplicated in modbase model configs - check they match
+    if (general.kmer_len != context.kmer_len) {
+        // auto kl_a = std::to_string(general.kmer_len);
+        // auto kl_b = std::to_string(context.kmer_len);
+        ERROR("%s", "config: 'inconsistent kmer_len'");
+    }
+}
+
+ModBaseModelConfig load_modbase_model_config(const const char *path) {
+    FILE* fp;
+    char errbuf[200];
+
+    char *cpath = (char *)malloc(strlen(path) + 100);
+    MALLOC_CHK(cpath);
+    sprintf(cpath, "%s/config.toml", path);
+
+    fp = fopen(cpath, "r");
+    if (!fp) {
+        ERROR("cannot open toml - %s: %s", cpath, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    toml_table_t *config_toml = toml_parse_file(fp, errbuf, sizeof(errbuf));
+    fclose(fp);
+    check_toml_table(config_toml);
+    
+
+    auto ret = ModBaseModelConfig {
+        path, parse_general_params(config_toml), parse_modification_params(config_toml),
+        parse_context_params(config_toml), parse_refinement_params(config_toml)
+    };
+
+    toml_free(config_toml);
+    free(cpath);
+
+    return ret;
 }
