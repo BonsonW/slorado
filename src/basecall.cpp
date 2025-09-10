@@ -256,3 +256,51 @@ void basecall_db(core_t* core, db_t* db) {
 
     core->time_sync += time_sync;
 }
+
+void mod_basecall_db(core_t* core, db_t* db) {
+    int32_t n_reads = (*db->chunk_db->chunks_res).size();
+    int32_t num_threads = (*core->runners).size();
+    int32_t step = (n_reads + num_threads - 1) / num_threads;
+
+    // create threads
+    pthread_t tids[num_threads];
+    model_thread_arg_t pt_args[num_threads];
+    int32_t t, ret;
+    int32_t i = 0;
+    // set the data structures
+    for (t = 0; t < num_threads; t++) {
+        pt_args[t].core = core;
+        pt_args[t].db = db;
+        pt_args[t].start = i;
+        pt_args[t].runner = t;
+        i += step;
+        if (i > n_reads) {
+            pt_args[t].end = n_reads;
+        } else {
+            pt_args[t].end = i;
+        }
+    }
+
+    // create threads
+    for (t = 0; t < num_threads; t++) {
+        ret = pthread_create(&tids[t], NULL, pthread_single_basecall,
+                                (void*)(&pt_args[t]));
+        NEG_CHK(ret);
+    }
+
+    double time_sync = 0;
+
+    // pthread joining
+    for (t = 0; t < num_threads; t++) {
+        int ret = pthread_join(tids[t], NULL);
+        NEG_CHK(ret);
+        if (t == 0) {
+            time_sync -= realtime();
+        }
+        if (t == num_threads-1) {
+            time_sync += realtime();
+        }
+    }
+
+    core->time_sync += time_sync;
+}

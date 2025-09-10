@@ -3,6 +3,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <optional>
 
 enum class Activation { SWISH, SWISH_CLAMP, TANH };
 
@@ -119,6 +120,105 @@ struct CRFModelConfig {
     std::string model_path;
 };
 
+enum ModelType { CONV_LSTM_V1, CONV_LSTM_V2, CONV_LSTM_V3, CONV_V1, UNKNOWN };
+
+struct LinearParams {
+    int in_size;
+    int out_size;
+};
+
+struct LSTMParams {
+    int size;
+    bool reverse;
+};
+
+struct ModulesParams {
+    std::vector<ConvParams> sequence_convs;
+    std::vector<ConvParams> signal_convs;
+    ConvParams merge_conv;
+    std::vector<LSTMParams> lstms;  //< LSTM sizes per layer
+    LinearParams linear;
+    std::optional<EncoderUpsampleParams> upsample;
+};
+
+struct ModelGeneralParams {
+    const ModelType model_type;
+    const int size;
+    const int kmer_len;
+    const int num_out;
+    const int stride;
+    const int sequence_stride;
+
+    // For conv_lstm_v3 models only
+    std::optional<ModulesParams> modules;
+
+    ModelGeneralParams(ModelType model_type_,
+                       int size_,
+                       int kmer_len_,
+                       int num_out_,
+                       int stride_,
+                       int sequence_stride_,
+                       std::optional<ModulesParams> modules_);
+};
+
+struct RefinementParams {
+    const bool do_rough_rescale;  ///< Whether to perform rough rescaling
+    const size_t center_idx;      ///< The position in the kmer at which to check the levels
+};
+
+struct ModificationParams {
+    const std::vector<std::string> codes;       ///< The modified bases codes (e.g 'h', 'm', CHEBI)
+    const std::vector<std::string> long_names;  ///< The long names of the modified bases.
+    const size_t count;                         ///< Number of mods
+
+    const std::string motif;    ///< The motif to look for modified bases within.
+    const size_t motif_offset;  ///< The position of the canonical base within the motif.
+
+    const char base;    ///< The canonical base 'ACGT'
+    const int base_id;  ///< The canonical base id 0-3
+
+    ModificationParams(std::vector<std::string> codes_,
+                       std::vector<std::string> long_names_,
+                       std::string motif_,
+                       const size_t motif_offset_);
+};
+
+struct ContextParams {
+    const int64_t samples_before;  ///< Number of context signal samples before a context hit.
+    const int64_t samples_after;   ///< Number of context signal samples after a context hit.
+    const int64_t samples;         ///< The total context samples (before + after)
+    const int64_t chunk_size;      ///< The total samples in a chunk
+
+    const int bases_before;  ///< Number of bases before the primary base of a kmer.
+    const int bases_after;   ///< Number of bases after the primary base of a kmer.
+    const int kmer_len;      ///< The kmer length given by `bases_before + bases_after + 1`
+
+    const bool reverse;             ///< Reverse model data before processing (rna model)
+    const bool base_start_justify;  ///< Justify the kmer encoding to start the context hit
+
+    ContextParams(int64_t samples_before_,
+                  int64_t samples_after_,
+                  int64_t chunk_size_,
+                  int bases_before_,
+                  int bases_after_,
+                  bool reverse_,
+                  bool base_start_justify_);
+};
+
+struct ModBaseModelConfig {
+    ModelGeneralParams general;        ///< General model params for legacy model architectures
+    ModificationParams mods;           ///< Params for the modifications being detected
+    ContextParams context;             ///< Params for the context over which mods are inferred
+    RefinementParams refine;           ///< Params for kmer refinement
+
+    ModBaseModelConfig(const char *model_path_,
+                       ModelGeneralParams general_,
+                       ModificationParams mods_,
+                       ContextParams context_,
+                       RefinementParams refine_);
+};
+
+ModBaseModelConfig load_modbase_model_config(const char *model_path);
 CRFModelConfig load_lstm_model_config(const char *path);
 CRFModelConfig load_tx_model_config(const char *path);
 

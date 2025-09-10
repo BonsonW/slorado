@@ -36,6 +36,12 @@ torch::Tensor quantile(const torch::Tensor t, const torch::Tensor q);
 // Only `interpolation='lower'` is currently implemented.
 torch::Tensor quantile_counting(const torch::Tensor t, const torch::Tensor q);
 
+std::vector<uint64_t> moves_to_map(
+    const std::vector<uint8_t>& moves,
+    size_t block_stride,
+    size_t signal_len
+);
+
 // temporary
 inline void module_load_state_dict(torch::nn::Module& module, const std::vector<torch::Tensor>& weights) {
     assert(weights.size() == module.parameters().size());
