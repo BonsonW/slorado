@@ -1,5 +1,5 @@
 #include "toml.h"
-#include "src/error.h"
+#include "error.h"
 #include "model_config.h"
 
 #include <unordered_map>
@@ -662,7 +662,8 @@ int get_int_in_range(
     return val;
 }
 
-ModelType model_type_from_string(char *model_type) {
+ModelType model_type_from_string(char *_model_type) {
+    auto model_type = std::string(_model_type);
     if (model_type == "conv_lstm") {
         return ModelType::CONV_LSTM_V1;
     }
@@ -678,7 +679,7 @@ ModelType model_type_from_string(char *model_type) {
     return ModelType::UNKNOWN;
 }
 
-ModelType get_modbase_model_type(const const char *path) {
+ModelType get_modbase_model_type(const char *path) {
     FILE* fp;
     char errbuf[200];
 
@@ -712,7 +713,7 @@ ModelType get_modbase_model_type(const const char *path) {
     return ret;
 }
 
-bool is_modbase_model(const const char *path) {
+bool is_modbase_model(const char *path) {
     return get_modbase_model_type(path) != ModelType::UNKNOWN;
 }
 
@@ -1127,7 +1128,7 @@ ModBaseModelConfig::ModBaseModelConfig(
     }
 }
 
-ModBaseModelConfig load_modbase_model_config(const const char *path) {
+ModBaseModelConfig load_modbase_model_config(const char *path) {
     FILE* fp;
     char errbuf[200];
 
