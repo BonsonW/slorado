@@ -214,11 +214,12 @@ struct ContextParams {
 };
 
 struct ModBaseModelConfig {
+    std::string model_path;
+
     ModelGeneralParams general;        ///< General model params for legacy model architectures
     ModificationParams mods;           ///< Params for the modifications being detected
     ContextParams context;             ///< Params for the context over which mods are inferred
     RefinementParams refine;           ///< Params for kmer refinement
-    std::string model_path;
 
     bool is_chunked_input_model() const {
         return (general.model_type == ModelType::CONV_LSTM_V2) ||
