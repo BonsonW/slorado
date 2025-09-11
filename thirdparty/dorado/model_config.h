@@ -130,5 +130,7 @@ struct CRFModelConfig {
 
 CRFModelConfig load_lstm_model_config(const char *path);
 CRFModelConfig load_tx_model_config(const char *path);
+SampleType get_sample_type_from_model_name(const std::string& model_name);
+bool is_rna(SampleType);
 
 bool is_tx_model_config(const char *path);

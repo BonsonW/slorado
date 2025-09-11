@@ -121,18 +121,18 @@ int determine_rna_adapter_pos(torch::Tensor &signal) {
     return break_point;
 }
 
-void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params) {
+void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params) {
     auto strategy = scaling_params.strategy;
     float scale = 1.0f;
     float shift = 0.0f;
     int trim_start = 0;
-    bool is_rna_model = true;
+    bool is_rna_model = is_rna(core->model_config->sample_type);
 
     if (is_rna_model) {
         const bool has_rna_based_adapters = false;
         if (!has_rna_based_adapters) {
             trim_start = determine_rna_adapter_pos(signal);
-            if (size_t(trim_start) < signal.size(0)) {
+            if (int64_t(trim_start) < signal.size(0)) {
                 signal = signal.index({Slice(trim_start, at::indexing::None)});
                 // read->read_common.rna_adapter_end_signal_pos = 0;
             } else {

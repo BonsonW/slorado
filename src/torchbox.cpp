@@ -269,7 +269,7 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
 
         torch::Tensor signal = tensor_from_record(rec);
 
-        scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
+        scale_signal(core, signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
         std::vector<chunk_res_t> chunks_res = create_chunks_res(signal.size(0), core->chunk_size, opt.overlap);
         (*db->chunk_db->chunks_res)[i] = chunks_res;
