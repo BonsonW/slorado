@@ -112,8 +112,13 @@ void free_core(core_t* core, opt_t opt) {
 
     slow5_close(core->sp);
     delete core->runners;
+    delete core->modbase_runners;
     delete core->runner_stats;
     delete core->model_config;
+
+    if (core->modbase_config != NULL) {
+        delete core->modbase_config;
+    }
     free(core);
 }
 

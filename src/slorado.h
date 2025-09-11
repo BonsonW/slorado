@@ -154,6 +154,7 @@ typedef struct {
     // create model runner
     // only one per GPU is used for now
     std::vector<runner_t *> *runners;
+    std::vector<runner_t *> *modbase_runners;
 
     // realtime0
     double realtime0;

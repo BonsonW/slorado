@@ -35,6 +35,7 @@ SOFTWARE.
 #include "dorado/tensor_chunk_utils.h"
 #include "dorado/CRFModel.h"
 #include "dorado/TxModel.h"
+#include "dorado/ModBaseModel.h"
 
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDAGuard.h>
@@ -90,7 +91,8 @@ void init_runner(
     const std::string &device,
     int batch_size,
     torch::ScalarType dtype,
-    int runner_idx
+    int runner_idx,
+    bool modbase
 ) {
     LOG_TRACE("initializing model runner for device %s", device.c_str());
     runner->device = device;
@@ -111,15 +113,20 @@ void init_runner(
     }
 
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
-    if (core->model_config->tx != NULL) {
-        tx_stats_t *model_stats = init_tx_stats();
-        runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats);
-        (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+    if (modbase == true) {
+        runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, core->opt.gpu_batch_size);
     } else {
-        lstm_stats_t *model_stats = init_lstm_stats();
-        runner->module = load_lstm_model(*core->model_config, runner->tensor_opts);
-        (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+        if (core->model_config->tx != NULL) {
+            tx_stats_t *model_stats = init_tx_stats();
+            runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats);
+            (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+        } else {
+            lstm_stats_t *model_stats = init_lstm_stats();
+            runner->module = load_lstm_model(*core->model_config, runner->tensor_opts);
+            (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+        }
     }
+    
     LOG_TRACE("%s", "model populated");
 
     runner->input_tensor = torch::zeros({batch_size, 1, (int64_t)core->chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
@@ -134,6 +141,7 @@ void init_runner_stat(runner_stat_t *time_stamps) {
 
 void init_runners(core_t* core, opt_t *opt, char *model) {
     core->runners = new std::vector<runner_t *>();
+    core->modbase_runners = new std::vector<runner_t *>();
     core->runner_stats = new std::vector<runner_stat_t *>();
     
     if (strcmp(opt->device, "cpu") == 0) {
@@ -142,7 +150,12 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
         init_runner_stat((*core->runner_stats).back());
 
         core->runners->push_back(new runner_t());
-        init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32, 0);
+        init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF32, 0, false);
+
+        if (core->modbase_config != NULL) {
+            core->modbase_runners->push_back(new runner_t());
+            init_runner(core, (*core->modbase_runners).back(), model, device, opt->gpu_batch_size, torch::kF32, 0, true);
+        }
     } else {
 #ifdef USE_GPU
         std::vector<std::string> devices;
@@ -154,11 +167,17 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
         }
 
         int runner_idx = 0;
+        int mod_runner_idx = 0;
         for (auto device: devices) {
             core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
             init_runner_stat((*core->runner_stats).back());
             core->runners->push_back(new runner_t());
-            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16, runner_idx++);
+            init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16, runner_idx++, false);
+
+            if (core->modbase_config != NULL) {
+                core->modbase_runners->push_back(new runner_t());
+                init_runner(core, (*core->modbase_runners).back(), model, device, opt->gpu_batch_size, torch::kF16, mod_runner_idx++, true);
+            }
         }
 #else
         ERROR("Invalid device: %s. Please compile again for GPU", opt->device);
@@ -193,6 +212,11 @@ void free_runners(core_t *core) {
 #endif
         }
         delete runner;
+
+        if (core->modbase_config != NULL) {
+            runner_t *mod_runner = (*core->modbase_runners)[i];
+            delete mod_runner;
+        }
     }
 
 }

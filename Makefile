@@ -47,6 +47,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/tensor_chunk_utils.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/TxModel.o \
+	  $(BUILD_DIR)/ModBaseModel.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
 
@@ -129,6 +130,9 @@ $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFMod
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp thirdparty/dorado/TxModel.h src/error.h thirdparty/dorado/tensor_chunk_utils.h
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/ModBaseModel.o: thirdparty/dorado/ModBaseModel.cpp thirdparty/dorado/ModBaseModel.h src/error.h thirdparty/dorado/tensor_chunk_utils.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp thirdparty/dorado/model_config.h src/error.h thirdparty/tomlc99
