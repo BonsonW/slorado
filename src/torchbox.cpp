@@ -113,7 +113,7 @@ void init_runner(
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
     if (core->model_config->tx != NULL) {
         tx_stats_t *model_stats = init_tx_stats();
-        runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats);
+        runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLS) != 0);
         (*core->runner_stats)[runner_idx]->model_stats = model_stats;
     } else {
         lstm_stats_t *model_stats = init_lstm_stats();

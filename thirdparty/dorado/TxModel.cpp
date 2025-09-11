@@ -172,8 +172,10 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     bool out_bias_,
     const std::pair<int, int> &attn_window_,
     const torch::TensorOptions &options_,
-    tx_stats_t *_model_stats
+    tx_stats_t *_model_stats,
+    bool use_flash_
 ) :
+    use_flash(use_flash_),
     d_model(d_model_),
     nhead(nhead_),
     head_dim(d_model_ / nhead_),
@@ -231,55 +233,57 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const auto win_upper = std::get<0>(attn_window);
     const auto win_lower = std::get<1>(attn_window);
 
-#ifdef USE_FLASH
-    float softmax_scale = 1.0 / std::sqrt(head_dim);
+    torch::Tensor attn_output_ntc;
+    if (use_flash) {
+        float softmax_scale = 1.0 / std::sqrt(head_dim);
 
-    auto qkv_chunks = qkv.chunk(3, 2);
-    auto q = qkv_chunks[0].squeeze();
-    auto k = qkv_chunks[1].squeeze();
-    auto v = qkv_chunks[2].squeeze();
-    
-    auto flash_res = at::_flash_attention_forward(
-        q, k, v,
-        std::nullopt, std::nullopt, // cum_seq_qk
-        qkv.size(1), qkv.size(1), // size_qk
-        0.0, // dropout
-        false, // casual
-        false, // return debug mask
-        softmax_scale,
-        win_lower,
-        win_upper,
-        std::nullopt, // seqused k
-        std::nullopt // alibi slopes
-    );
-    auto attn_output_ntc = std::get<0>(flash_res).reshape({N, T, C});
-#else
-    qkv = qkv.permute({2, 0, 3, 1, 4}); // N T 3 H D -> 3 N H T D
-    auto attn_output_ntc = torch::empty({N, T, C}, x.options());
-    auto attn_window_mask = get_attn_window_mask(T);
-    auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
-    // // The MPS backend refuses to work on a span of the mask that doesn't have an
-    // // alignment of 4 elements, so pad the amount we process each loop to that.
-    const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
-    for (int i = 0; i < num_splits; ++i) {
-        const auto qb = i * elems_per_split;
-        if (qb >= T) {
-            break;
+        auto qkv_chunks = qkv.chunk(3, 2);
+        auto q = qkv_chunks[0].squeeze();
+        auto k = qkv_chunks[1].squeeze();
+        auto v = qkv_chunks[2].squeeze();
+        
+        auto flash_res = at::_flash_attention_forward(
+            q, k, v,
+            std::nullopt, std::nullopt, // cum_seq_qk
+            qkv.size(1), qkv.size(1), // size_qk
+            0.0, // dropout
+            false, // casual
+            false, // return debug mask
+            softmax_scale,
+            win_lower,
+            win_upper,
+            std::nullopt, // seqused k
+            std::nullopt // alibi slopes
+        );
+        attn_output_ntc = std::get<0>(flash_res).reshape({N, T, C});
+    } else {
+        qkv = qkv.permute({2, 0, 3, 1, 4}); // N T 3 H D -> 3 N H T D
+        attn_output_ntc = torch::empty({N, T, C}, x.options());
+        auto attn_window_mask = get_attn_window_mask(T);
+        auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+        // // The MPS backend refuses to work on a span of the mask that doesn't have an
+        // // alignment of 4 elements, so pad the amount we process each loop to that.
+        const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
+        for (int i = 0; i < num_splits; ++i) {
+            const auto qb = i * elems_per_split;
+            if (qb >= T) {
+                break;
+            }
+            const auto qe = std::min(T, qb + elems_per_split);
+            const auto kvb = std::max<int64_t>(0, qb - win_lower);
+            const auto kve = std::min<int64_t>(T, qe + win_upper);
+            const auto q = qkv[0].slice(-2, qb, qe);
+            const auto k = qkv[1].slice(-2, kvb, kve);
+            const auto v = qkv[2].slice(-2, kvb, kve);
+            const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
+            c10::optional<torch::Tensor> opt_mask;
+            // Not using the mask gets us significantly better performance, at the cost of some
+            // accuracy. Accuracy loss is minimised by larger num_splits.
+            opt_mask = mask;
+            attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
         }
-        const auto qe = std::min(T, qb + elems_per_split);
-        const auto kvb = std::max<int64_t>(0, qb - win_lower);
-        const auto kve = std::min<int64_t>(T, qe + win_upper);
-        const auto q = qkv[0].slice(-2, qb, qe);
-        const auto k = qkv[1].slice(-2, kvb, kve);
-        const auto v = qkv[2].slice(-2, kvb, kve);
-        const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
-        c10::optional<torch::Tensor> opt_mask;
-        // Not using the mask gets us significantly better performance, at the cost of some
-        // accuracy. Accuracy loss is minimised by larger num_splits.
-        opt_mask = mask;
-        attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
     }
-#endif
+
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_sdp_attn += b-a;
@@ -293,8 +297,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats) : params(params_) {
-    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats));
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash) : params(params_) {
+    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats, use_flash));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
@@ -349,10 +353,10 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats) {
+TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
-        TxEncoder encoder(params, options, model_stats);
+        TxEncoder encoder(params, options, model_stats, use_flash);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
         layer_vec.push_back(encoder);
     }
@@ -388,9 +392,9 @@ torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats) : m_options(options) {
+TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash) : m_options(options) {
     convs = register_module("convs", ::ConvStack(config.convs));
-    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats));
+    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats, use_flash));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
     model_stats = _model_stats;
@@ -625,8 +629,8 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats) {
-    auto model = TxModel(model_config, options, model_stats);
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash) {
+    auto model = TxModel(model_config, options, model_stats, use_flash);
     auto state_dict = load_tx_model_weights(model_config.model_path);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());
