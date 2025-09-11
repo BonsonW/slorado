@@ -663,7 +663,8 @@ int get_int_in_range(
 }
 
 ModelType model_type_from_string(char *_model_type) {
-    auto model_type = std::string(_model_type);
+    auto model_type = std::string(_model_type
+    );
     if (model_type == "conv_lstm") {
         return ModelType::CONV_LSTM_V1;
     }
@@ -1115,7 +1116,8 @@ ModBaseModelConfig::ModBaseModelConfig(
     ModificationParams mods_,
     ContextParams context_,
     RefinementParams refine_
-) : general(std::move(general_)),
+) : model_path(std::string(model_path_)),
+    general(std::move(general_)),
     mods(std::move(mods_)),
     context(general_.model_type == ModelType::CONV_LSTM_V2 ? context_.normalised(general.stride) : std::move(context_)),
     refine(std::move(refine_))

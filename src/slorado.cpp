@@ -68,6 +68,11 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         exit(EXIT_FAILURE);
     }
 
+    // modbase stuff
+    auto modbase_type = std::string("5mCG_5hmCG@v2");
+    auto modbase_config_path = std::string(model) + "_" + modbase_type;
+    ModBaseModelConfig modbase_config = load_modbase_model_config(modbase_config_path.c_str());
+
     CRFModelConfig model_config;
     if (is_tx_model_config(model)) {
         model_config = load_tx_model_config(model);
@@ -84,6 +89,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->decoder_opts.q_scale = model_config.qscale;
 
     core->model_config = new CRFModelConfig(model_config);
+    core->modbase_config = new ModBaseModelConfig(modbase_config);
     LOG_TRACE("%s", "model config loaded");
 
     core->time_init_runners -= realtime();
