@@ -62,10 +62,6 @@ ifdef asan
 	LDFLAGS += -fsanitize=address -fno-omit-frame-pointer
 endif
 
-ifdef flash
-	CPPFLAGS += -DUSE_FLASH=1
-endif
-
 # make accel=1 enables the acceelerator (CUDA,OpenCL,FPGA etc if implemented)
 ifdef cuda
     CPPFLAGS += -DUSE_GPU=1

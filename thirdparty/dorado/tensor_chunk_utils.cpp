@@ -67,11 +67,84 @@ std::pair<float, float> med_mad(torch::Tensor &x, float factor=1.4826){
     return {med.item<float>(), mad.item<float>()};
 }
 
-void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params) {
+int determine_rna_adapter_pos(torch::Tensor &signal) {
+    assert(signal.dtype() == at::kShort);
+
+    const int kWindowSize = 250;
+    const int kStride = 50;
+    const int16_t kMedianDiff = 125;
+    const int16_t kMedianDiffForDiffOnlyCheck = 150;
+
+    const int16_t kMinMedianForRNASignal = 700;
+
+    int signal_len = static_cast<int>(signal.size(0));
+    const int16_t* signal_data_ptr = static_cast<int16_t*>(signal.data_ptr());
+
+    // Check the median value change over 5 windows.
+    std::array<int16_t, 5> medians = {0, 0, 0, 0, 0};
+    std::array<int32_t, 5> window_pos = {0, 0, 0, 0, 0};
+    int median_pos = 0;
+    int break_point = 0;
+    const int signal_start = 1000;
+    const int signal_end = 3 * signal_len / 4;
+    for (int i = signal_start; i < signal_end; i += kStride) {
+        auto slice = at::from_blob(const_cast<int16_t*>(&signal_data_ptr[i]),
+                                   {static_cast<int>(std::min(kWindowSize, signal_len - i))},
+                                   at::TensorOptions().dtype(at::kShort));
+        int16_t median = slice.median().item<int16_t>();
+        medians[median_pos % medians.size()] = median;
+        // Since the medians are stored in a circular buffer, we need
+        // to store the actual window positions for the median values
+        // as well to check that maximum median value came from a window
+        // after that of the minimum median value.
+        window_pos[median_pos % window_pos.size()] = median_pos;
+        auto minmax = std::minmax_element(medians.begin(), medians.end());
+        // The range of raw signal values is within the range of [-500, 3000] (TODO: they're
+        // likely are non-negative but need to confirm that). So the median values lie
+        // in the same range, and any difference between the median values
+        // will not result in an overflow with the int16_t data type.
+        int16_t min_median = *minmax.first;
+        int16_t max_median = *minmax.second;
+        auto min_pos = std::distance(medians.begin(), minmax.first);
+        auto max_pos = std::distance(medians.begin(), minmax.second);
+
+        if ((median_pos >= static_cast<int>(medians.size()) &&
+             window_pos[max_pos] > window_pos[min_pos]) &&
+            (((max_median > kMinMedianForRNASignal) && (max_median - min_median > kMedianDiff)) ||
+             (max_median - min_median > kMedianDiffForDiffOnlyCheck))) {
+            break_point = i;
+            break;
+        }
+        ++median_pos;
+    }
+
+    return break_point;
+}
+
+void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params) {
     auto strategy = scaling_params.strategy;
     float scale = 1.0f;
     float shift = 0.0f;
     int trim_start = 0;
+    bool is_rna_model = is_rna(core->model_config->sample_type);
+
+    if (is_rna_model) {
+        const bool has_rna_based_adapters = false;
+        if (!has_rna_based_adapters) {
+            trim_start = determine_rna_adapter_pos(signal);
+            if (int64_t(trim_start) < signal.size(0)) {
+                signal = signal.index({Slice(trim_start, at::indexing::None)});
+                // read->read_common.rna_adapter_end_signal_pos = 0;
+            } else {
+                // TODO: handle this case
+                // If RNA adapter isn't trimmed, track where the adapter signal is ending
+                // so it can be used during polyA estimation.
+                // read->read_common.rna_adapter_end_signal_pos = trim_start;
+                // Since we're not actualy trimming the signal, reset the trim value to 0.
+                trim_start = 0;
+            }
+        }
+    }
 
     if (strategy == ScalingStrategy::PA) {
         auto stdn = scaling_params.standarisation;
@@ -92,21 +165,23 @@ void scale_signal(torch::Tensor &signal, float scaling, float offset, SignalNorm
         signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
     }
 
-    if (trim_start == 0 && scaling_params.standarisation.standardise) {
-        trim_start = 10;
-    } else if (trim_start == 0) {
-        // 8000 value may be changed in future. Currently this is found to work well.
-        int max_samples = std::min(8000, (int)(signal.size(0) / 2));
-        trim_start = trim(
-            signal.index({Slice(torch::indexing::None, max_samples)}),
-            DEFAULT_TRIM_THRESHOLD,
-            DEFAULT_TRIM_WINDOW_SIZE,
-            DEFAULT_TRIM_MIN_ELEMENTS
-        );
-    }
+    if (!is_rna_model) {
+        if (trim_start == 0 && scaling_params.standarisation.standardise) {
+            trim_start = 10;
+        } else if (trim_start == 0) {
+            // 8000 value may be changed in future. Currently this is found to work well.
+            int max_samples = std::min(8000, (int)(signal.size(0) / 2));
+            trim_start = trim(
+                signal.index({Slice(torch::indexing::None, max_samples)}),
+                DEFAULT_TRIM_THRESHOLD,
+                DEFAULT_TRIM_WINDOW_SIZE,
+                DEFAULT_TRIM_MIN_ELEMENTS
+            );
+        }
 
-    if ((size_t)(trim_start) < (size_t)(signal.size(0))) {
-        signal = signal.index({Slice(trim_start, torch::indexing::None)});
+        if ((size_t)(trim_start) < (size_t)(signal.size(0))) {
+            signal = signal.index({Slice(trim_start, torch::indexing::None)});
+        }
     }
 }
 

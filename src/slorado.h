@@ -51,6 +51,7 @@ SOFTWARE.
 #define SLORADO_PRF 0x001 // cpu-profile mode
 #define SLORADO_ACC 0x002 // accelerator enable
 #define SLORADO_EFQ 0x004 // emit fastq enable
+#define SLORADO_FLS 0x008 // flash attention enable
 
 #define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 // stealing threshold

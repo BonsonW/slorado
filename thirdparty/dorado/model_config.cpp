@@ -1159,3 +1159,18 @@ ModBaseModelConfig load_modbase_model_config(const char *path) {
 
     return ret;
 }
+SampleType get_sample_type_from_model_name(const std::string& model_name) {
+    if (model_name.find("rna004") != std::string::npos) {
+        return SampleType::RNA004;
+    } else if (model_name.find("rna002") != std::string::npos) {
+        return SampleType::RNA002;
+    } else if (model_name.find("dna") != std::string::npos) {
+        return SampleType::DNA;
+    } else {
+        return SampleType::UNKNOWN;
+    }
+}
+
+bool is_rna(SampleType sample_type) {
+    return (sample_type == SampleType::RNA002 || sample_type == SampleType::RNA004);
+}
