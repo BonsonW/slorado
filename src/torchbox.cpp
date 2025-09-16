@@ -302,3 +302,23 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         (*db->chunk_db->chunks_sig)[i] = chunks_sig;
     }
 }
+
+void preprocess_signal_modbase(core_t *core, db_t *db, int32_t i) {
+    slow5_rec_t *rec = db->slow5_rec[i];
+    uint64_t len_raw_signal = rec->len_raw_signal;
+    opt_t opt = core->opt;
+
+    if (len_raw_signal > 0) {
+        auto signal_norm_params = core->model_config->signal_norm_params;
+
+        torch::Tensor signal = tensor_from_record(rec);
+
+        scale_signal(core, signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
+
+        std::vector<chunk_res_t> chunks_res = create_chunks_res(signal.size(0), core->chunk_size, opt.overlap);
+        (*db->chunk_db->chunks_res)[i] = chunks_res;
+
+        std::vector<chunk_sig_t> chunks_sig = create_chunks_sig(signal, chunks_res, core->chunk_size);
+        (*db->chunk_db->chunks_sig)[i] = chunks_sig;
+    }
+}

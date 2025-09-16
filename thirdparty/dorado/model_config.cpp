@@ -1174,3 +1174,55 @@ SampleType get_sample_type_from_model_name(const std::string& model_name) {
 bool is_rna(SampleType sample_type) {
     return (sample_type == SampleType::RNA002 || sample_type == SampleType::RNA004);
 }
+
+ModBaseInfo get_modbase_info(std::vector<ModBaseModelConfig>& base_mod_params) {
+    struct ModelInfo {
+        std::vector<std::string> long_names;
+        std::vector<std::string> alphabet;
+        std::string motif;
+        int motif_offset;
+        size_t base_counts = 1;
+    };
+
+    const std::string allowed_bases = "ACGT";
+    std::array<ModelInfo, 4> model_info;
+    for (int b = 0; b < 4; ++b) {
+        model_info[b].alphabet.emplace_back(1, allowed_bases[b]);
+    }
+
+    for (const auto& params_ref : base_mod_params) {
+        const auto& params = params_ref.mods;
+        auto base = params.motif[params.motif_offset];
+        if (allowed_bases.find(base) == std::string::npos) {
+            ERROR("%s", "Invalid base in modbase model metadata.");
+        }
+        auto& map_entry = model_info[BASE_IDS[base]];
+        map_entry.long_names = params.long_names;
+        map_entry.alphabet.insert(map_entry.alphabet.end(), params.codes.begin(),
+                                  params.codes.end());
+        map_entry.base_counts = params.count + 1;
+    }
+
+    ModBaseInfo result;
+    size_t index = 0;
+    for (const auto& info : model_info) {
+        for (const auto& name : info.long_names) {
+            if (!result.long_names.empty()) {
+                result.long_names += ' ';
+            }
+            result.long_names += name;
+        }
+        result.alphabet.insert(result.alphabet.end(), info.alphabet.begin(), info.alphabet.end());
+        result.base_counts[index++] = info.base_counts;
+    }
+
+    std::array<size_t, 4> offsets;
+    offsets[0] = 0;
+    offsets[1] = result.base_counts[0];
+    offsets[2] = offsets[1] + result.base_counts[1];
+    offsets[3] = offsets[2] + result.base_counts[2];
+
+    result.base_probs_offsets = offsets;
+
+    return result;
+}

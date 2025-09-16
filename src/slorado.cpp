@@ -73,6 +73,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     auto modbase_type = std::string("5mCG_5hmCG@v2");
     auto modbase_config_path = std::string(model) + "_" + modbase_type;
     ModBaseModelConfig modbase_config = load_modbase_model_config(modbase_config_path.c_str());
+    auto configs = std::vector({modbase_config});
+    ModBaseInfo modbase_info = get_modbase_info(configs);
 
     CRFModelConfig model_config;
     if (is_tx_model_config(model)) {
@@ -92,6 +94,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->model_config = new CRFModelConfig(model_config);
     core->modbase_config = new ModBaseModelConfig(modbase_config);
+    core->modbase_info = new ModBaseInfo(modbase_info);
     LOG_TRACE("%s", "model config loaded");
 
     core->time_init_runners -= realtime();
@@ -120,6 +123,7 @@ void free_core(core_t* core, opt_t opt) {
 
     if (core->modbase_config != NULL) {
         delete core->modbase_config;
+        delete core->modbase_info;
     }
     free(core);
 }

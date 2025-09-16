@@ -296,21 +296,3 @@ torch::Tensor quantile_counting(const torch::Tensor t, const torch::Tensor q) {
 
     return res;
 }
-
-// Convert a move table to an array of the indices of the start/end of each base in the signal
-std::vector<uint64_t> moves_to_map(
-    const std::vector<uint8_t>& moves,
-    size_t block_stride,
-    size_t signal_len
-) {
-    std::vector<uint64_t> seq_to_sig_map;
-
-    for (size_t i = 0; i < moves.size(); ++i) {
-        if (moves[i] == 1) {
-            seq_to_sig_map.push_back(i * block_stride);
-        }
-    }
-
-    seq_to_sig_map.push_back(signal_len);
-    return seq_to_sig_map;
-}

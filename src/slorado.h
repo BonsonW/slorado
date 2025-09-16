@@ -149,6 +149,7 @@ typedef struct {
     openfish_opt_t decoder_opts;
     CRFModelConfig *model_config;
     ModBaseModelConfig *modbase_config = NULL;
+    ModBaseInfo *modbase_info = NULL;
     size_t model_stride;
     size_t chunk_size;
 

@@ -242,6 +242,20 @@ struct ModBaseModelConfig {
                        RefinementParams refine_);
 };
 
+struct ModBaseInfo {
+    ModBaseInfo() = default;
+    ModBaseInfo(std::vector<std::string> alphabet_, std::string long_names_, std::string context_)
+            : alphabet(std::move(alphabet_)),
+              long_names(std::move(long_names_)),
+              context(std::move(context_)) {}
+    std::vector<std::string> alphabet;
+    std::string long_names;
+    std::string context;
+    std::array<size_t, 4> base_counts{};
+    std::array<size_t, 4> base_probs_offsets{};
+};
+
+ModBaseInfo get_modbase_info(std::vector<ModBaseModelConfig>& base_mod_params);
 ModBaseModelConfig load_modbase_model_config(const char *model_path);
 CRFModelConfig load_lstm_model_config(const char *path);
 CRFModelConfig load_tx_model_config(const char *path);

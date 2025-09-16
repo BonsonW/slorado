@@ -13,6 +13,7 @@ struct chunk_res {
     std::string seq;
     std::string qstring;
     std::vector<uint8_t> moves;
+    std::vector<uint8_t> base_mod_probs;
 };
 
 // raw signal of a chunk

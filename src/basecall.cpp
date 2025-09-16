@@ -45,6 +45,45 @@ SOFTWARE.
 #include <c10/hip/HIPGuard.h>
 #endif
 
+const std::vector<int> BASE_IDS = []() {
+    std::vector<int> base_ids(256, -1);
+    base_ids['A'] = 0;
+    base_ids['C'] = 1;
+    base_ids['G'] = 2;
+    base_ids['T'] = 3;
+    return base_ids;
+}();
+
+std::vector<uint64_t> moves_to_map(
+    const std::vector<uint8_t>& moves,
+    size_t block_stride,
+    size_t signal_len
+) {
+    std::vector<uint64_t> seq_to_sig_map;
+
+    for (size_t i = 0; i < moves.size(); ++i) {
+        if (moves[i] == 1) {
+            seq_to_sig_map.push_back(i * block_stride);
+        }
+    }
+
+    seq_to_sig_map.push_back(signal_len);
+    return seq_to_sig_map;
+}
+
+void initialise_base_mod_probs(const core_t *core, chunk_res_t *chunk_res) {
+    auto num_states = 4;
+    chunk_res->base_mod_probs.resize(chunk_res->seq.size() * num_states, 0);
+    for (size_t i = 0; i < chunk_res->seq.size(); ++i) {
+        // init what corresponds to 100% canonical base for each position (one-hot encoding)
+        int base_id = BASE_IDS.at(chunk_res->seq[i]);
+        if (base_id < 0) {
+            ERROR("%s", "invalid char");
+        }
+        chunk_res->base_mod_probs[i * num_states + core->modbase_info->base_probs_offsets.at(base_id)] = 1;
+    }
+}
+
 typedef struct {
     core_t* core;
     db_t* db;
@@ -155,6 +194,37 @@ static void call_chunks(
     free(qstring);
 }
 
+static void mod_call_chunks(
+    const core_t* core,
+    const std::vector<chunk_res_t *> &results,
+    const int runner_idx
+) {
+    torch::InferenceMode guard;
+    runner_t* runner = (*core->modbase_runners)[runner_idx];
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+
+    LOG_DEBUG("%s", "basecalling chunks");
+    ts->time_infer -= realtime();
+    auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
+#ifdef USE_GPU
+    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
+#endif
+    ts->time_infer += realtime();
+
+    auto scores_TNC = scores;
+    // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
+    scores_TNC = scores_TNC.transpose(0, 1).contiguous();
+#ifdef USE_GPU
+    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
+#endif
+
+    const int T = scores_TNC.size(0);
+    const int N = scores_TNC.size(1);
+    const int C = scores_TNC.size(2);
+    const int state_len = core->model_config->state_len;
+    int nthreads = core->opt.num_thread / core->runners->size();
+}
+
 static void basecall_chunks(
     const core_t* core,
     const int runner_idx,
@@ -209,6 +279,58 @@ static void* pthread_single_basecall(void* voidargs) {
     pthread_exit(0);
 }
 
+static void mod_basecall_chunks(
+    const core_t* core,
+    const int runner_idx,
+    const std::vector<chunk_sig_t *> &signals,
+    const std::vector<chunk_res_t *> &results
+) {
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx * 2 + 1];
+    for (size_t i = 0; i < results.size(); ++i) {
+        initialise_base_mod_probs(core, results[i]);
+    }
+
+    ts->time_basecall -= realtime();
+    mod_call_chunks(core, results, runner_idx);
+    ts->time_basecall += realtime();
+}
+
+static void* pthread_single_mod_basecall(void* voidargs) {
+    model_thread_arg_t* args = (model_thread_arg_t*)voidargs;
+    db_t* db = args->db;
+    core_t* core = args->core;
+    const size_t runner_idx = args->runner;
+    const size_t start = args->start;
+    const size_t end = args->end;
+    opt_t opt = core->opt;
+
+    std::vector<chunk_res_t *> results;
+    std::vector<chunk_sig_t *> signals;
+
+    for (size_t read_idx = start; read_idx < end; ++read_idx) {
+        auto& chunks_res = (*db->chunk_db->chunks_res)[read_idx];
+        auto& chunks_sig = (*db->chunk_db->chunks_sig)[read_idx];
+
+        for (size_t chunk_idx = 0; chunk_idx < chunks_res.size(); ++chunk_idx) {
+            results.push_back(&chunks_res[chunk_idx]);
+            signals.push_back(&chunks_sig[chunk_idx]);
+
+            if (results.size() == (size_t)opt.gpu_batch_size) {
+                mod_basecall_chunks(core, runner_idx, signals, results);
+                results.clear();
+                signals.clear();
+            }
+        }
+    }
+
+    // leftover chunks
+    if (results.size() > 0) {
+        mod_basecall_chunks(core, runner_idx, signals, results);
+    }
+
+    pthread_exit(0);
+}
+
 void basecall_db(core_t* core, db_t* db) {
     int32_t n_reads = (*db->chunk_db->chunks_res).size();
     int32_t num_threads = (*core->runners).size();
@@ -255,35 +377,11 @@ void basecall_db(core_t* core, db_t* db) {
     }
 
     core->time_sync += time_sync;
-}
 
-void mod_basecall_db(core_t* core, db_t* db) {
-    int32_t n_reads = (*db->chunk_db->chunks_res).size();
-    int32_t num_threads = (*core->runners).size();
-    int32_t step = (n_reads + num_threads - 1) / num_threads;
-
-    // create threads
-    pthread_t tids[num_threads];
-    model_thread_arg_t pt_args[num_threads];
-    int32_t t, ret;
-    int32_t i = 0;
-    // set the data structures
-    for (t = 0; t < num_threads; t++) {
-        pt_args[t].core = core;
-        pt_args[t].db = db;
-        pt_args[t].start = i;
-        pt_args[t].runner = t;
-        i += step;
-        if (i > n_reads) {
-            pt_args[t].end = n_reads;
-        } else {
-            pt_args[t].end = i;
-        }
-    }
-
+    // modbase call
     // create threads
     for (t = 0; t < num_threads; t++) {
-        ret = pthread_create(&tids[t], NULL, pthread_single_basecall,
+        ret = pthread_create(&tids[t], NULL, pthread_single_mod_basecall,
                                 (void*)(&pt_args[t]));
         NEG_CHK(ret);
     }
