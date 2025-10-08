@@ -92,7 +92,7 @@ See the [Pawsey GPU documentation](https://pawsey.atlassian.net/wiki/spaces/US/p
 
 ### Note 2
 
-On Pawsey, I could install and use blue-crab using a virtual environment as follows:
+On Pawsey, You can install and use blue-crab using a virtual environment as follows:
 ```
 # First install
 python3.11 -m venv ./blue-crab-venv
@@ -120,5 +120,81 @@ wget "https://github.com/hasindu2008/slow5tools/releases/download/$VERSION/slow5
 ./slow5tools
 ```
 
+### Note 3
 
-   
+Advanced users can launch array jobs to basecall multiple BLOW5 files at once on Pawsey. We've provided two scripts that automatically configure these jobs for you:
+
+This is a helper script that you can simply copy into a file called `slorado_arr.sh`. You should not edit anything in this script unless you know what you are doing.
+You will also need to keep this script in the same directory you are running `slorado_arr_launch.sh` (the scecond script provided) from.
+```
+#!/bin/bash --login
+#SBATCH --job-name=slorado_batch
+#SBATCH --partition=gpu
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gres=gpu:8
+#SBATCH --time=24:00:00
+#SBATCH --err="slorado_batch_%A_%a.err"
+#SBATCH --output="slorado_batch_%A_%a.log"
+
+###################################################################
+
+# DO NOT EDIT OR RUN THIS SCRIPT DIRECTLY UNLESS YOU KNOW WHAT YOU ARE DOING
+
+###################################################################
+
+INPUTS=($(find ${IN} -name "*.blow5"))
+BLOW5=${INPUTS[$SLURM_ARRAY_TASK_ID]}
+FASTQ="${OUT}/${SLURM_ARRAY_TASK_ID}.fastq"
+
+###################################################################
+
+srun -N 1 -n 1 -c 64 /usr/bin/time --verbose ${SLORADO} basecaller -K20000 -B1G -t ${THREADS} -C ${BATCH_SIZE} ${MODEL} ${BLOW5} -o ${FASTQ}
+```
+
+This is the actual script you will be running to launch the array job. You can copy this into a file called `slorado_arr_launch.sh` and run it like: `./slorado_arr_launch.sh`.
+Remember to edit the parameters in the top section to suit you job.
+```
+#!/bin/bash --login
+
+SLORADO="/path/to/slorado/slorado"
+
+# config
+IN="/path/to/input/directory/of/blow5s"
+OUT="/path/to/output/directoy"
+MODEL="/path/to/model/directory"
+BATCH_SIZE=200 # 2000 for fast, 500 for hac, 200 for sup
+THREADS=64
+
+###################################################################
+
+# terminate script
+die() {
+    echo "$1" >&2
+    exit 1
+}
+
+###################################################################
+
+test -e ${SLORADO} || die "path to slorado does not exist"
+test -x ${SLORADO} || die "path to slorado does not have execute permissions"
+test -d ${IN} || die "path to input does not exist"
+test -d ${MODEL} || die "path to model does not exist"
+test -d ${OUT} && die "path to output already exists"
+
+mkdir ${OUT} || die "could not create output directory"
+
+###################################################################
+
+ARRMAX=$(find ${IN} -name "*.blow5" | wc -l)
+
+test ${ARRMAX} -gt 0 || die "invalid amount of BLOW5(s) in input dir ${IN}"
+
+ARRMAX=$((ARRMAX-1))
+
+###################################################################
+
+sbatch --array=0-${ARRMAX} --account=${PAWSEY_PROJECT}-gpu --export=IN=${IN},OUT=${OUT},MODEL=${MODEL},BATCH_SIZE=${BATCH_SIZE},THREADS=${THREADS},SLORADO=${SLORADO} slorado_arr.sh
+```
+After providing your own parameters to this script, running it will take all the BLOW5 files from the directory defined in `IN`, and output the fastqs into the directory defined in `OUT`.
+The script will allocate an entire `gpu` node on Pawsey for each BLOW5 file to basecall on. Each file will be given 24 hours (max wall time) to complete basecalling.
