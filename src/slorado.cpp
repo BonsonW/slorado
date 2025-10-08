@@ -47,6 +47,7 @@ SOFTWARE.
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
+#include <algorithm>
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
@@ -75,6 +76,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         model_config = load_lstm_model_config(model);
     }
     model_config.model_path = std::string(model);
+    model_config.sample_type = get_sample_type_from_model_name(model_config.model_path);
 
     core->model_stride = static_cast<size_t>(model_config.stride);
     core->chunk_size = opt.chunk_size - (opt.chunk_size % core->model_stride);
@@ -195,6 +197,11 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
         std::string sequence;
         std::string qstring;
         stitch_chunks(db->chunk_db, i, sequence, qstring);
+        
+        if (is_rna(core->model_config->sample_type)) {
+            std::reverse(sequence.begin(), sequence.end());
+            std::reverse(qstring.begin(), qstring.end());
+        }
 
         (*db->sequence)[i] = strdup(sequence.c_str());
         assert((*db->sequence)[i] != NULL);

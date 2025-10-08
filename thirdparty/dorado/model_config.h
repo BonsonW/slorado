@@ -9,6 +9,13 @@ enum class Activation { SWISH, SWISH_CLAMP, TANH };
 enum class ScalingStrategy { MED_MAD, QUANTILE, PA };
 ScalingStrategy scaling_strategy_from_string(const char *strategy);
 
+enum class SampleType {
+    DNA,
+    RNA002,
+    RNA004,
+    UNKNOWN,
+};
+
 struct StandardisationScalingParams {
     bool standardise = false;
     float mean = 0.0f;
@@ -117,9 +124,13 @@ struct CRFModelConfig {
     TxParams *tx = NULL;
 
     std::string model_path;
+
+    SampleType sample_type;
 };
 
 CRFModelConfig load_lstm_model_config(const char *path);
 CRFModelConfig load_tx_model_config(const char *path);
+SampleType get_sample_type_from_model_name(const std::string& model_name);
+bool is_rna(SampleType);
 
 bool is_tx_model_config(const char *path);

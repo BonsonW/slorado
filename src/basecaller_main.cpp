@@ -60,6 +60,7 @@ static struct option long_options[] = {
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
     {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
     {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
+    {"flash", required_argument, 0, 0},             //16 toggles flash attention when possible
     {0, 0, 0, 0}};
 
 
@@ -84,6 +85,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
     // fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
+    fprintf(fp_help, "  --flash=yes|no          use flash attention\n");
 }
 
 int basecaller_main(int argc, char* argv[]) {
@@ -162,8 +164,10 @@ int basecaller_main(int argc, char* argv[]) {
             opt.debug_break = atoi(optarg);
         } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
-        } else if (c == 0 && longindex == 14) { // sectional benchmark todo : warning for gpu mode
+        } else if (c == 0 && longindex == 14) { // emit fastq
             yes_or_no(&opt.flag, SLORADO_EFQ, long_options[longindex].name, optarg, 1);
+        } else if (c == 0 && longindex == 16) { // flash attention
+            yes_or_no(&opt.flag, SLORADO_FLS, long_options[longindex].name, optarg, 1);
         }
     }
 
@@ -288,6 +292,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
         } else { // lstm
             lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
+            (void)model_stats;
             // fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
             // fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
             // fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
