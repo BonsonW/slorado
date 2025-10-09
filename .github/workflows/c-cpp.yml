@@ -121,7 +121,7 @@ jobs:
       image: ubuntu:20.04
     steps:
     - name: install packages
-      run: apt-get update && apt-get install zlib1g-dev wget datamash unzip bzip2 make g++ bc git gnupg software-properties-common -y
+      run: export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install zlib1g-dev wget datamash unzip bzip2 make g++ bc git gnupg software-properties-common -y
     - uses: actions/checkout@v2
       with:
         submodules: recursive
