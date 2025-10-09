@@ -99,13 +99,15 @@ jobs:
       run: export DEVICE=cpu && make test
   ubuntu_20:
     name: Ubuntu 20
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:20.04
     steps:
+    - name: install packages
+      run: apt-get update && apt-get install zlib1g-dev wget datamash unzip bzip2 make g++ bc git -y
     - uses: actions/checkout@v2
       with:
         submodules: recursive
-    - name: install packages
-      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
     - name: torch
       run: scripts/install-torch2.sh cpu
     - name: build
@@ -114,24 +116,26 @@ jobs:
       run: export DEVICE=cpu && make test
   ubuntu_20_cuda:
     name: Ubuntu 20 CUDA
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:20.04
     steps:
+    - name: install packages
+      run: export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install zlib1g-dev wget datamash unzip bzip2 make g++ bc git gnupg software-properties-common -y
     - uses: actions/checkout@v2
       with:
         submodules: recursive
-    - name: install packages
-      run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
     - name: cuda
       run: |
         export DEBIAN_FRONTEND=noninteractive
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.0-1_all.deb
-        sudo dpkg -i cuda-keyring_1.0-1_all.deb
+        dpkg -i cuda-keyring_1.0-1_all.deb
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
-        sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
-        sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
-        sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
-        sudo apt-get update
-        sudo apt-get -y install cuda-11-1
+        mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
+        add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
+        apt-get update
+        apt-get -y install cuda-11-1
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
