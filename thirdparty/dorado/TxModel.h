@@ -98,6 +98,8 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;
 
+    bool use_flash;
+
     const int d_model, nhead, head_dim, num_splits;
     const std::pair<int, int> attn_window;
     const torch::TensorOptions options;
@@ -109,8 +111,6 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     RotaryEmbedding rotary_emb{nullptr};
 
     tx_stats_t *model_stats;
-
-    bool use_flash;
 };
 
 TORCH_MODULE(MultiHeadAttention);

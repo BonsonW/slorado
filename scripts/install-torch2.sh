@@ -21,7 +21,7 @@ if [ ${DEV} = cuda ]; then
 elif [ ${DEV} = cpu ]; then
     LINK="https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-2.0.0%2Bcpu.zip"
 elif [ ${DEV} = rocm ]; then
-    LINK="https://download.pytorch.org/libtorch/rocm5.7/libtorch-shared-with-deps-2.2.0%2Brocm5.7.zip"
+    LINK="https://download.pytorch.org/libtorch/rocm6.4/libtorch-shared-with-deps-2.9.0%2Brocm6.4.zip"
 fi
 
 wget ${LINK} -O torch.zip || die "Could not download torch"
