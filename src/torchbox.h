@@ -30,6 +30,12 @@ struct runner {
     torch::Tensor input_tensor;
     torch::TensorOptions tensor_opts;
     torch::nn::ModuleHolder<torch::nn::AnyModule> module{nullptr};
+    torch::Tensor chunks;
+    torch::Tensor chunk_results;
+    torch::Tensor aux;
+    torch::Tensor path;
+    torch::Tensor moves_sequence_qstring;
+    bool initialized{false};
 #ifdef USE_GPU
     int64_t device_idx;
     openfish_gpubuf_t *gpubuf;

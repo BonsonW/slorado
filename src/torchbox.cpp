@@ -96,18 +96,18 @@ void init_runner(
     runner->device = device;
 
     if (device != "cpu") {
-#ifdef USE_GPU
-        int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
-        runner->device_idx = device_idx;
+// #ifdef USE_GPU
+//         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
+//         runner->device_idx = device_idx;
 
-#ifdef HAVE_CUDA
-        c10::cuda::CUDAGuard device_guard(device_idx);
-#endif
-#ifdef HAVE_ROCM
-        c10::hip::HIPGuard device_guard(device_idx);
-#endif
-        runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
-#endif        
+// #ifdef HAVE_CUDA
+//         c10::cuda::CUDAGuard device_guard(device_idx);
+// #endif
+// #ifdef HAVE_ROCM
+//         c10::hip::HIPGuard device_guard(device_idx);
+// #endif
+//         runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
+// #endif        
     }
 
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
@@ -182,15 +182,15 @@ void free_runners(core_t *core) {
     for (size_t i = 0; i < core->runners->size(); ++i) {
         runner_t *runner = (*core->runners)[i];
         if (runner->device != "cpu") {
-#ifdef USE_GPU
-#ifdef HAVE_CUDA
-            c10::cuda::CUDAGuard device_guard(runner->device_idx);
-#endif
-#ifdef HAVE_ROCM
-            c10::hip::HIPGuard device_guard(runner->device_idx);
-#endif
-            openfish_gpubuf_free(runner->gpubuf);
-#endif
+// #ifdef USE_GPU
+// #ifdef HAVE_CUDA
+//             c10::cuda::CUDAGuard device_guard(runner->device_idx);
+// #endif
+// #ifdef HAVE_ROCM
+//             c10::hip::HIPGuard device_guard(runner->device_idx);
+// #endif
+//             openfish_gpubuf_free(runner->gpubuf);
+// #endif
         }
         delete runner;
     }

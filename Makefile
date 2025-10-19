@@ -69,8 +69,9 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
+	CPPFLAGS += -I thirdparty/koi_lib/include
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
-	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
+	LDFLAGS += thirdparty/koi_lib/lib/libkoi.a -L $(CUDA_LIB)/ -lcudart_static -lcublas_static -lcublasLt_static $(CUDA_LIB)/libculibos.a -lrt -ldl
 else ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1 -DHAVE_ROCM=1 -D__HIP_PLATFORM_AMD__
 	ROCM_ROOT ?= /opt/rocm
