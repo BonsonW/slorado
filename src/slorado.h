@@ -130,6 +130,7 @@ typedef struct {
     double time_accept;
     double time_basecall;
     double time_infer;
+    double time_copy;
     double time_decode;
 
     void *model_stats;

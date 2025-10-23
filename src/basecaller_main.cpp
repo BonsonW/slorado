@@ -299,6 +299,7 @@ int basecaller_main(int argc, char* argv[]) {
             // fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
             // fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
         }
+        fprintf(stderr, "\n[%s]                 - copy: %.3f sec", __func__, runner_stats[i]->time_copy);
         fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
         // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
     }

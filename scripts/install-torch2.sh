@@ -17,7 +17,7 @@ test -d torch && rm -r torch
 mkdir thirdparty/torch || die "Could not create directory thirdparty/torch"
 
 if [ ${DEV} = cuda ]; then
-    LINK="https://download.pytorch.org/libtorch/cu118/libtorch-shared-with-deps-2.0.0%2Bcu118.zip"
+    LINK="https://download.pytorch.org/libtorch/cu126/libtorch-shared-with-deps-2.9.0%2Bcu126.zip"
 elif [ ${DEV} = cpu ]; then
     LINK="https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-2.0.0%2Bcpu.zip"
 elif [ ${DEV} = rocm ]; then
