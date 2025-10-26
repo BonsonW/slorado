@@ -252,8 +252,8 @@ std::tuple<std::string, std::string> generate_sequence(const std::vector<uint8_t
         baseProbs[i] = 1.0f - (baseProbs[i] / totalProbs[i]);
         baseProbs[i] = -10.0f * log10f(baseProbs[i]);
         float qscore = baseProbs[i] * scale + shift;
-        qscore = std::min(90.0f, qscore);
-        qscore = std::max(1.0f, qscore);
+        if (qscore > 50.0f) qscore = 50.0f;
+        if (qscore < 1.0f) qscore = 1.0f;
         qstring[i] = char(33.5f + qscore);
     }
 
@@ -506,6 +506,8 @@ float beam_search(const T* const scores,
     // Write out sequence bases and move table
     moves.resize(num_blocks);
     states.resize(num_blocks);
+    const int num_base_bits = 2;
+    const int num_state_bits = (int)log2(num_states);
 
     // Note that we don't emit the seed state at the front of the beam, hence the -1 offset when copying the path
     uint8_t element_index = 0;
@@ -517,49 +519,60 @@ float beam_search(const T* const scores,
     }
     moves[0] = 1;  // Always step in the first event
 
-    int hp_states[4] = {0, 0, 0,
-                        0};  // What state index are the four homopolymers (A is always state 0)
-    hp_states[3] = int(num_states) - 1;  // homopolymer T is always the last state. (11b per base)
-    hp_states[1] = hp_states[3] / 3;     // calculate hp C from hp T (01b per base)
-    hp_states[2] = hp_states[1] * 2;     // calculate hp G from hp C (10b per base)
+    int shifted_states[2 * num_bases];
 
-    // Compute per-base qual data
-    for (size_t block_idx = 0; block_idx < num_blocks; block_idx++) {
+    // compute per-base qual data
+    for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
         int state = states[block_idx];
         states[block_idx] = states[block_idx] % num_bases;
         int base_to_emit = states[block_idx];
 
-        // Compute a probability for this block, based on the path kmer. See the following explanation:
-        // https://git.oxfordnanolabs.local/machine-learning/notebooks/-/blob/master/bonito-basecaller-qscores.ipynb
-        const float* timestep_posts = posts + ((block_idx + 1) * num_states);
+        // compute a probability for this block, based on the path kmer
+        const float *const timestep_posts = posts + ((block_idx + 1) << num_state_bits);
 
-        // For states which are homopolymers, we don't want to count the states more than once
-        bool is_hp = state == hp_states[0] || state == hp_states[1] || state == hp_states[2] ||
-                     state == hp_states[3];
-        float block_prob = float(timestep_posts[state]) * (is_hp ? -1.0f : 1.0f);
+        float block_prob = (float)(timestep_posts[state]) * 1.0f;
 
-        // Add in left-shifted kmers
-        int l_shift_idx = state / num_bases;
-        int msb = int(num_states) / num_bases;
-        for (int shift_base = 0; shift_base < num_bases; shift_base++) {
-            block_prob += float(timestep_posts[l_shift_idx + msb * shift_base]);
+        // get indices of left- and right-shifted kmers
+        int l_shift_idx = state >> num_base_bits;
+        int r_shift_idx = (state << num_base_bits) % num_states;
+        int msb = ((int)num_states) >> num_base_bits;
+        int l_shift_state, r_shift_state;
+        for (int shift_base = 0; shift_base < num_bases; ++shift_base) {
+            l_shift_state = l_shift_idx + msb * shift_base;
+            shifted_states[2 * shift_base] = l_shift_state;
+
+            r_shift_state = r_shift_idx + shift_base;
+            shifted_states[2 * shift_base + 1] = r_shift_state;
         }
 
-        // Add in the right-shifted kmers
-        int r_shift_idx = (state * num_bases) % num_states;
-        for (int shift_base = 0; shift_base < num_bases; shift_base++) {
-            block_prob += float(timestep_posts[r_shift_idx + shift_base]);
+        // add probabilities for unique states
+        int candidate_state;
+        for (size_t state_idx = 0; state_idx < 2 * num_bases; ++state_idx) {
+            candidate_state = shifted_states[state_idx];
+            // don't double-count this shifted state if it matches the current state
+            bool count_state = (candidate_state != state);
+            // or any other shifted state that we've seen so far
+            if (count_state) {
+                for (size_t inner_state = 0; inner_state < state_idx; ++inner_state) {
+                    if (shifted_states[inner_state] == candidate_state) {
+                        count_state = false;
+                        break;
+                    }
+                }
+            }
+            if (count_state) {
+                block_prob += (float)(timestep_posts[candidate_state]) * 1.0f;
+            }
         }
-        if (block_prob < 0.0f) block_prob = 0.0f;
-        else if (block_prob > 1.0f) block_prob = 1.0f;\
-        block_prob = powf(block_prob, 0.4f);  // Power fudge factor
+        if (block_prob > 1.0f) block_prob = 1.0f;
+        else if (block_prob < 0.0f) block_prob = 0.0f;
+        block_prob = powf(block_prob, 0.4f); // power fudge factor
 
-        // Calculate a placeholder qscore for the "wrong" bases
-        float wrong_base_prob = (1.0f - block_prob) / 3.0f;
+        // calculate a placeholder qscore for the "wrong" bases
+        const float wrong_base_prob = (1.0f - block_prob) / 3.0f;
 
         for (size_t base = 0; base < num_bases; base++) {
-            qual_data[block_idx * num_bases + base] =
-                    (int(base) == base_to_emit ? block_prob : wrong_base_prob);
+            qual_data[block_idx * num_bases + base] = ((int)base == base_to_emit ? block_prob : wrong_base_prob);
         }
     }
 
@@ -727,17 +740,12 @@ void beam_search_cpu(
                     using Slice = torch::indexing::Slice;
                     auto t_scores = scores_cpu.index({Slice(), Slice(t_first_chunk, t_first_chunk + t_num_chunks)});
 
-                    torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
-                    bwd = bwd.transpose(0, 1).contiguous();
                     torch::Tensor fwd = forward_scores(t_scores, options.blank_score);
-                    fwd = fwd.transpose(0, 1).contiguous();
-                    auto N = fwd.sizes()[0];
-                    auto T = fwd.sizes()[1];
-                    auto C = fwd.sizes()[2];
+                    torch::Tensor bwd = backward_scores(t_scores, options.blank_score);
                     torch::Tensor posts = torch::softmax(fwd + bwd, -1);
 
                     t_scores = t_scores.transpose(0, 1);
-                    
+                    bwd = bwd.transpose(0, 1).contiguous();
                     posts = posts.transpose(0, 1).contiguous();
 
                     for (int i = 0; i < t_num_chunks; i++) {
