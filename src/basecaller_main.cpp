@@ -276,6 +276,8 @@ int basecaller_main(int argc, char* argv[]) {
         fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_stats[i]->time_accept);
         fprintf(stderr, "\n[%s]             - basecall: %.3f sec", __func__, runner_stats[i]->time_basecall);
         fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_stats[i]->time_infer);
+        fprintf(stderr, "\n[%s]                 - copy: %.3f sec", __func__, runner_stats[i]->time_copy);
+        fprintf(stderr, "\n[%s]                 - cast: %.3f sec", __func__, runner_stats[i]->time_cast);
         if (core->model_config->tx != NULL) { // tx
             tx_stats_t *model_stats = (tx_stats_t *)runner_stats[i]->model_stats;
             fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);

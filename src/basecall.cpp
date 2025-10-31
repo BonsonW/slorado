@@ -77,10 +77,20 @@ static void call_chunks(
 
     auto scores_TNC = scores;
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
-    scores_TNC = scores_TNC.transpose(0, 1).contiguous();
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
+
+    ts->time_copy -= realtime();
+    scores_TNC = scores_TNC.to(torch::kCPU);
+#ifdef USE_GPU
+    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
+#endif
+    ts->time_copy += realtime();
+
+    ts->time_cast -= realtime();
+    scores_TNC = scores_TNC.transpose(0, 1).contiguous().to(torch::kF32);
+    ts->time_cast += realtime();
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
@@ -95,22 +105,23 @@ static void call_chunks(
     LOG_DEBUG("%s", "decoding scores");
 
     ts->time_decode -= realtime();
-    if (runner->device == "cpu") {
-        openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
-    } else {
-#ifdef USE_GPU
-#ifdef HAVE_CUDA
-    c10::cuda::CUDAGuard device_guard(runner->device_idx);
-#endif
-#ifdef HAVE_ROCM
-    c10::hip::HIPGuard device_guard(runner->device_idx);
-#endif
-        openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
-#else
-        ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
-        exit(EXIT_FAILURE);
-#endif
-    }
+//     if (runner->device == "cpu") {
+//         openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
+//     } else {
+// #ifdef USE_GPU
+// #ifdef HAVE_CUDA
+//     c10::cuda::CUDAGuard device_guard(runner->device_idx);
+// #endif
+// #ifdef HAVE_ROCM
+//     c10::hip::HIPGuard device_guard(runner->device_idx);
+// #endif
+//         openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+// #else
+//         ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
+//         exit(EXIT_FAILURE);
+// #endif
+//     }
+    openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
 
     LOG_DEBUG("%s", "writing to chunks");
 
