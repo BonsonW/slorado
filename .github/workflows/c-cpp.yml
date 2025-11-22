@@ -55,8 +55,13 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: recursive
+    - name: setup compiler
+      id: install_cc
+      uses: rlalik/setup-cpp-compiler@master
+      with:
+        compiler: gcc-9
     - name: install packages
-      run: apt-get update && add-apt-repository ppa:ubuntu-toolchain-r/test -y && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make gcc-9 g++-9 apt-transport-https && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-9 && update-alternatives --config gcc
+      run: apt-get update && add-apt-repository ppa:ubuntu-toolchain-r/test -y && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make apt-transport-https
     - name: cuda
       run: |
         export DEBIAN_FRONTEND=noninteractive
