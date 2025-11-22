@@ -61,7 +61,7 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
-        mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
         wget -q -O - http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub |  apt-key add -
         add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /"
         apt-get update
