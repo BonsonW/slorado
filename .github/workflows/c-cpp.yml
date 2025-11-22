@@ -161,10 +161,13 @@ jobs:
     name: Ubuntu 24 ROCm
     runs-on: ubuntu-24.04
     steps:
+    - name: Maximize build space
+      uses: AdityaGarg8/remove-unwanted-software@v5
+      with:
+          remove-android: 'true'
     - uses: actions/checkout@v2
       with:
         submodules: recursive
-        remove-android: 'true'
     - name: install packages
       run: sudo apt-get update && sudo apt-get install zlib1g-dev wget datamash unzip bzip2
     - name: rocm
