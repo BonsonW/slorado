@@ -157,9 +157,9 @@ jobs:
       run: export DEVICE=cpu && make test
     - name: valgrind
       run: export DEVICE=cpu && test/test.sh mem
-  ubuntu_22_rocm:
-    name: Ubuntu 22 ROCm
-    runs-on: ubuntu-22.04
+  ubuntu_24_rocm:
+    name: Ubuntu 24 ROCm
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v2
       with:
