@@ -164,7 +164,7 @@ jobs:
     - name: Maximize build space
       uses: AdityaGarg8/remove-unwanted-software@v5
       with:
-          remove-android: 'true'
+        remove-android: 'true'
     - uses: actions/checkout@v2
       with:
         submodules: recursive
