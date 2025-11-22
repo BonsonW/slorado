@@ -179,7 +179,7 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh rocm
     - name: build
-      run: make rocm=1 -j2
+      run: make rocm=1 -j2 cxx11_abi=1
   ubuntu_24:
     name: Ubuntu 24
     runs-on: ubuntu-24.04
