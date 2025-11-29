@@ -62,8 +62,6 @@ jobs:
         update-alternatives --set gcc /usr/bin/gcc-11
         gcc --version
         g++ --version
-        c++ --version
-        cc --version
         export TORCH_NVCC_FLAGS="-ccbin /usr/bin/g++-11"
     - name: cuda
       run: |
