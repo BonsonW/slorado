@@ -56,7 +56,12 @@ jobs:
       with:
         submodules: recursive
     - name: install packages
-      run: apt-get update && add-apt-repository ppa:ubuntu-toolchain-r/test -y && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make gcc-9 g++-9 apt-transport-https && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 100 && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 100 && update-alternatives --set g++ /usr/bin/g++-9 && update-alternatives --set gcc /usr/bin/gcc-9
+      run: |
+        apt-get update && add-apt-repository ppa:ubuntu-toolchain-r/test -y && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make gcc-9 g++-9 apt-transport-https && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 100 && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 100
+        update-alternatives --set g++ /usr/bin/g++-9
+        update-alternatives --set gcc /usr/bin/gcc-9
+        gcc --version
+        g++ --version
     - name: cuda
       run: |
         export DEBIAN_FRONTEND=noninteractive
