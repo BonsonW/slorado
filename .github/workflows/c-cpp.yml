@@ -64,10 +64,6 @@ jobs:
         add-apt-repository ppa:ubuntu-toolchain-r/test -y
         apt-get update
         apt-get install gcc-11 g++-11 -y
-        update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 || true
-        update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100 || true
-        update-alternatives --set gcc /usr/bin/gcc-11 || true
-        update-alternatives --set g++ /usr/bin/g++-11 || true
         gcc --version
         g++ --version
     - name: cuda
@@ -83,6 +79,10 @@ jobs:
       run: scripts/install-torch2.sh
     - name: build cuda=1
       run: |
+        update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 || true
+        update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100 || true
+        update-alternatives --set gcc /usr/bin/gcc-11 || true
+        update-alternatives --set g++ /usr/bin/g++-11 || true
         gcc --version
         g++ --version
         export TORCH_NVCC_FLAGS="-ccbin /usr/bin/g++-11"
