@@ -57,11 +57,15 @@ jobs:
         submodules: recursive
     - name: install packages
       run: |
-        apt-get update && add-apt-repository ppa:ubuntu-toolchain-r/test -y && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make gcc-11 g++-11 apt-transport-https && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
-        update-alternatives --set g++ /usr/bin/g++-11
-        update-alternatives --set gcc /usr/bin/gcc-11
-        ln -sf /usr/bin/g++-11 /usr/bin/c++
-        ln -sf /usr/bin/gcc-11 /usr/bin/cc
+        apt-get update && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make apt-transport-https
+    - name: Install GCC 11
+      run: |
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+        sudo apt-get update
+        sudo apt-get install gcc-11 g++-11 -y
+    - name: Set GCC 11 as default
+      run: |
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 && --slave /usr/bin/g++ g++ /usr/bin/g++-11
         gcc --version
         g++ --version
     - name: cuda
@@ -76,7 +80,10 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
-      run: make cuda=1 -j2 cxx11_abi=1
+      run: |
+        gcc --version
+        g++ --version
+        make cuda=1 -j2 cxx11_abi=1
   ubuntu_18:
     name: Ubuntu 18
     runs-on: ubuntu-24.04
