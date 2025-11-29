@@ -74,7 +74,7 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
-      run: make cuda=1 -j2
+      run: make cuda=1 -j2 cxx11_abi=1
   ubuntu_18:
     name: Ubuntu 18
     runs-on: ubuntu-24.04
