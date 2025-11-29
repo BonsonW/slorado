@@ -78,7 +78,7 @@ jobs:
         wget -q -O - http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub |  apt-key add -
         add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /"
         apt-get update
-        apt-get -y --allow-unauthenticated install cuda
+        apt-get -y --allow-unauthenticated install cuda-toolkit-11-8
     - name: torch
       run: scripts/install-torch2.sh
     - name: build cuda=1
