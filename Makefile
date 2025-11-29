@@ -1,5 +1,5 @@
-CC       = cc
-CXX		 = c++
+CC       = gcc
+CXX		 = g++
 
 LIBTORCH_DIR ?= thirdparty/torch/libtorch
 CPPFLAGS += -I slow5lib/include/ \
