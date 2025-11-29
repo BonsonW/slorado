@@ -60,10 +60,14 @@ jobs:
         apt-get update && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make apt-transport-https
     - name: install gcc
       run: |
+        set -xe
         add-apt-repository ppa:ubuntu-toolchain-r/test -y
         apt-get update
         apt-get install gcc-11 g++-11 -y
-        update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 && --slave /usr/bin/g++ g++ /usr/bin/g++-11
+        update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 || true
+        update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100 || true
+        update-alternatives --set gcc /usr/bin/gcc-11 || true
+        update-alternatives --set g++ /usr/bin/g++-11 || true
         gcc --version
         g++ --version
     - name: cuda
@@ -81,7 +85,8 @@ jobs:
       run: |
         gcc --version
         g++ --version
-        make cuda=1 -j2 cxx11_abi=1
+        export TORCH_NVCC_FLAGS="-ccbin /usr/bin/g++-11"
+        make cuda=1 -j2
   ubuntu_18:
     name: Ubuntu 18
     runs-on: ubuntu-24.04
