@@ -62,6 +62,8 @@ jobs:
         update-alternatives --set gcc /usr/bin/gcc-11
         gcc --version
         g++ --version
+        /usr/bin/c++ --version
+        /usr/bin/cc --version
     - name: cuda
       run: |
         export DEBIAN_FRONTEND=noninteractive
