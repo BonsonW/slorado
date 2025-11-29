@@ -58,14 +58,12 @@ jobs:
     - name: install packages
       run: |
         apt-get update && apt-get update -y && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make apt-transport-https
-    - name: Install GCC 11
+    - name: install gcc
       run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
-        sudo apt-get update
-        sudo apt-get install gcc-11 g++-11 -y
-    - name: Set GCC 11 as default
-      run: |
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 && --slave /usr/bin/g++ g++ /usr/bin/g++-11
+        add-apt-repository ppa:ubuntu-toolchain-r/test -y
+        apt-get update
+        apt-get install gcc-11 g++-11 -y
+        update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 && --slave /usr/bin/g++ g++ /usr/bin/g++-11
         gcc --version
         g++ --version
     - name: cuda
