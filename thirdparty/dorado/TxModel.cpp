@@ -287,7 +287,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
             // accuracy. Accuracy loss is minimised by larger num_splits.
             opt_mask = mask;
 #if TORCH_VERSION_MAJOR < 2
-            attn_output.slice(-2, qb, qe) = scaled_dot_product_attention_naive(q, k, v, opt_mask);
+            attn_output.slice(-2, qb, qe) = scaled_dot_product_attention_naive(q, k, v, mask);
 #else
             attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
 #endif
