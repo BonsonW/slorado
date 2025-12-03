@@ -9,7 +9,10 @@
 #include <torch/version.h>
 
 #include <cmath>
+#if TORCH_VERSION_MAJOR >= 2
 #include <ATen/ops/scaled_dot_product_attention.h>
+#endif
+
 
 #include <stdexcept>
 #include <string>
