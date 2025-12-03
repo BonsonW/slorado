@@ -283,7 +283,11 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
             // Not using the mask gets us significantly better performance, at the cost of some
             // accuracy. Accuracy loss is minimised by larger num_splits.
             opt_mask = mask;
+#if TORCH_VERSION_MAJOR < 2
+            attn_output.slice(-2, qb, qe) = scaled_dot_product_attention_naive(q, k, v, opt_mask);
+#else
             attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
+#endif
         }
     }
 
