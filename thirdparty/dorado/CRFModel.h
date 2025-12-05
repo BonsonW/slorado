@@ -44,7 +44,6 @@ struct LSTMStackImpl : torch::nn::Module {
     std::vector<torch::nn::LSTM> rnns;
 #ifdef HAVE_CUDA
     FlashRNNFuncFused *fused_rnn_0;
-    torch::Tensor s0;
 #endif
 };
 

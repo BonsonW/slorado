@@ -85,40 +85,42 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
         auto rnn = rnns[i];
 #ifdef HAVE_CUDA
         if (i == 0) {
-            x = x.matmul(rnn->named_parameters()["weight_ih_l0"]) + rnn->named_parameters()["bias_ih_l0"];
-            x = x.transpose(0, 1).to(torch::kBFloat16).contiguous();
-            auto recurrent_kernel = rnn->named_parameters()["weight_hh_l0"];
-            auto bias = rnn->named_parameters()["bias_hh_l0"];
+            auto batch_size = x.size(0);
+            auto seqlen = x.size(1);
+            auto nheads = 1;
+            auto ngates = 4;
+            auto num_states = 2;
+            auto head_dim = 96; // hidden size
 
-            exit(0);
-
-            auto batch_size = x.size(1);
-            auto seqlen = x.size(0);
-            auto nheads = recurrent_kernel.size(0);
-            auto head_dim = recurrent_kernel.size(1);
+            // B = batch, T time/sequence dim, N num heads, S state dimension, P previous D dimension (R matrix)
+            // D head dim or hidden dim, G gates
+            // x = x.matmul(rnn->named_parameters()["weight_ih_l0"]) + rnn->named_parameters()["bias_ih_l0"];
+            x = x.reshape({-1, head_dim});
+            x = at::addmm(rnn->named_parameters()["bias_ih_l0"], x, rnn->named_parameters()["weight_ih_l0"].t());
+            x = x.view({batch_size, seqlen, ngates, nheads, head_dim}).permute({1, 0, 3, 4, 2}).to(torch::kBFloat16).contiguous();
+            auto recurrent_kernel = rnn->named_parameters()["weight_hh_l0"].view({ngates, nheads, head_dim, head_dim}).permute({1, 2, 0, 3}).contiguous();
+            auto bias = rnn->named_parameters()["bias_hh_l0"].view({ngates, nheads, head_dim}).permute({1, 2, 0}).contiguous();
+            
             auto options = x.options();
-            auto hidden_size = 96;
 
-            torch::Tensor states = torch::empty({FLASHRNN_NUM_STATES, seqlen + 1, batch_size, nheads, head_dim}, options.dtype(torch::kBFloat16));
-            torch::Tensor gate_cache_i = torch::empty({}, options.dtype(torch::kBFloat16));
-            torch::Tensor gate_cache_r = torch::empty({seqlen, batch_size, nheads, head_dim, FLASHRNN_NUM_GATES_R}, options.dtype(torch::kBFloat16));
+            torch::Tensor s0 = torch::zeros({num_states, batch_size, 1, nheads, head_dim}, options.dtype(torch::kBFloat16)).contiguous();
+            torch::Tensor states = torch::empty({FLASHRNN_NUM_STATES, seqlen + 1, batch_size, nheads, head_dim}, options.dtype(torch::kBFloat16)).contiguous();
+            torch::Tensor gate_cache_i = torch::empty({}, options.dtype(torch::kBFloat16)).contiguous();
+            torch::Tensor gate_cache_r = torch::empty({seqlen, batch_size, nheads, head_dim, FLASHRNN_NUM_GATES_R}, options.dtype(torch::kBFloat16)).contiguous();
             torch::Tensor gate_buffer = torch::ones({
                 FLASHRNN_FORWARD_RECURRENT_TILING_COUNT_HIDDEN *
                 FLASHRNN_FORWARD_BLOCK_TILING_COUNT_BATCH *
                 FLASHRNN_FORWARD_WARP_TILING_COUNT_BATCH *
                 FLASHRNN_FORWARD_WARP_LOOPING_COUNT_BATCH *
                 FLASHRNN_FORWARD_WARP_TILING_DIM_BATCH,
-                FLASHRNN_NUM_GATES_R * hidden_size
-            }, options.dtype(torch::kFloat32));
+                FLASHRNN_NUM_GATES_R * head_dim
+            }, options.dtype(torch::kFloat32)).contiguous();
 
             cudaStream_t stream = at::cuda::getCurrentCUDAStream();
             cublasHandle_t cublas_handle;
             cublasCreate(&cublas_handle);
             cublasSetStream(cublas_handle, stream);
-
-            for (uint i = 0; i < FLASHRNN_NUM_STATES; i++) {
-                states[i][0] = s0[i];
-            }
+            fprintf(stderr, "%s", "before forward\n");
 
             fused_rnn_0->forward(
                 false, // training
@@ -138,10 +140,8 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
             );
 
             cublasDestroy(cublas_handle);
-            
-            s0 = states[0];
-            
-            exit(0);
+
+            x = states.index({torch::indexing::Slice(), torch::indexing::Slice(1, torch::indexing::None)}).permute({0, 2, 1, 3, 4})[0].reshape({batch_size, seqlen, head_dim}).contiguous().to(torch::kFloat16);
         } else
 #endif  
         {
