@@ -63,7 +63,20 @@ LSTMStackImpl::LSTMStackImpl(int num_layers, int size) : layer_size(size) {
         auto label = std::string("rnn") + std::to_string(i + 1);
         rnns.emplace_back(register_module(label, LSTM(lstm_opts)));
     }
+#ifdef HAVE_CUDA
+    auto training = false;
+    auto batch_size = 1;
+    auto hidden_size = size;
+    auto num_heads = 4;
+    fused_rnn_0 = new FlashRNNFuncFused(training, batch_size, hidden_size, num_heads);
+#endif
 };
+
+LSTMStackImpl::~LSTMStackImpl() {
+#ifdef HAVE_CUDA
+    delete fused_rnn_0;
+#endif
+}
 
 torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
     // Input is [N, T, C], contiguity optional

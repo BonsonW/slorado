@@ -1,5 +1,5 @@
 CC       = cc
-CXX		 = c++
+CXX		 = g++
 
 LIBTORCH_DIR ?= thirdparty/torch/libtorch
 CPPFLAGS += -I slow5lib/include/ \
@@ -70,7 +70,7 @@ ifdef cuda
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
-	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
+	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl -lcublas
 else ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1 -DHAVE_ROCM=1 -D__HIP_PLATFORM_AMD__
 	ROCM_ROOT ?= /opt/rocm

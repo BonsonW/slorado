@@ -2,6 +2,7 @@
 #define CRF_MODEL_H
 
 #include <torch/torch.h>
+#include <openfish/openfish.h>
 
 #include <vector>
 
@@ -37,9 +38,13 @@ struct LinearCRFImpl : torch::nn::Module {
 
 struct LSTMStackImpl : torch::nn::Module {
     LSTMStackImpl(int num_layers, int size);
+    ~LSTMStackImpl();
     torch::Tensor forward(torch::Tensor x);
     int layer_size;
     std::vector<torch::nn::LSTM> rnns;
+#ifdef HAVE_CUDA
+    FlashRNNFuncFused *fused_rnn_0;
+#endif
 };
 
 struct ClampImpl : torch::nn::Module {

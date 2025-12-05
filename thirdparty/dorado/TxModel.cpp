@@ -111,7 +111,7 @@ torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
 
     auto qkv_chunks = qkv.chunk(3, 2);
     
-    openfish_rotary_emb(
+    openfish_rotary_emb_gpu(
         qkv_chunks[0].data_ptr(),
         sin_buf.data_ptr(),
         cos_buf.data_ptr(),
@@ -125,7 +125,7 @@ torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
         stride_head
     );
     
-    openfish_rotary_emb(
+    openfish_rotary_emb_gpu(
         qkv_chunks[1].data_ptr(),
         sin_buf.data_ptr(),
         cos_buf.data_ptr(),
