@@ -4,6 +4,7 @@
 #include "CRFModel.h"
 #include "error.h"
 #include "tensor_chunk_utils.h"
+#include <ATen/cuda/CUDAContext.h>
 
 using namespace torch::nn;
 
@@ -80,8 +81,72 @@ LSTMStackImpl::~LSTMStackImpl() {
 
 torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
     // Input is [N, T, C], contiguity optional
-    for (auto &rnn : rnns) {
-        x = std::get<0>(rnn(x.flip(1)));
+    for (uint i = 0; i < rnns.size(); ++i) {
+        auto rnn = rnns[i];
+#ifdef HAVE_CUDA
+        if (i == 0) {
+            x = x.matmul(rnn->named_parameters()["weight_ih_l0"]) + rnn->named_parameters()["bias_ih_l0"];
+            x = x.transpose(0, 1).to(torch::kBFloat16).contiguous();
+            auto recurrent_kernel = rnn->named_parameters()["weight_hh_l0"];
+            auto bias = rnn->named_parameters()["bias_hh_l0"];
+
+            exit(0);
+
+            auto batch_size = x.size(1);
+            auto seqlen = x.size(0);
+            auto nheads = recurrent_kernel.size(0);
+            auto head_dim = recurrent_kernel.size(1);
+            auto options = x.options();
+            auto hidden_size = 96;
+
+            torch::Tensor states = torch::empty({FLASHRNN_NUM_STATES, seqlen + 1, batch_size, nheads, head_dim}, options.dtype(torch::kBFloat16));
+            torch::Tensor gate_cache_i = torch::empty({}, options.dtype(torch::kBFloat16));
+            torch::Tensor gate_cache_r = torch::empty({seqlen, batch_size, nheads, head_dim, FLASHRNN_NUM_GATES_R}, options.dtype(torch::kBFloat16));
+            torch::Tensor gate_buffer = torch::ones({
+                FLASHRNN_FORWARD_RECURRENT_TILING_COUNT_HIDDEN *
+                FLASHRNN_FORWARD_BLOCK_TILING_COUNT_BATCH *
+                FLASHRNN_FORWARD_WARP_TILING_COUNT_BATCH *
+                FLASHRNN_FORWARD_WARP_LOOPING_COUNT_BATCH *
+                FLASHRNN_FORWARD_WARP_TILING_DIM_BATCH,
+                FLASHRNN_NUM_GATES_R * hidden_size
+            }, options.dtype(torch::kFloat32));
+
+            cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+            cublasHandle_t cublas_handle;
+            cublasCreate(&cublas_handle);
+            cublasSetStream(cublas_handle, stream);
+
+            for (uint i = 0; i < FLASHRNN_NUM_STATES; i++) {
+                states[i][0] = s0[i];
+            }
+
+            fused_rnn_0->forward(
+                false, // training
+                x.data_ptr(), // W_ih * x + b_ih
+                s0.data_ptr(),
+                recurrent_kernel.data_ptr(), // W_hh
+                bias.data_ptr(), // b_hh
+                states.data_ptr(),
+                gate_cache_r.data_ptr(),
+                gate_cache_i.data_ptr(),
+                gate_buffer.data_ptr(),
+                seqlen,
+                batch_size,
+                nheads,
+                head_dim,
+                (void *)cublas_handle
+            );
+
+            cublasDestroy(cublas_handle);
+            
+            s0 = states[0];
+            
+            exit(0);
+        } else
+#endif  
+        {
+            x = std::get<0>(rnn(x.flip(1)));
+        }
     }
 
     // Output is [N, T, C], contiguous
