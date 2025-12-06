@@ -6,6 +6,7 @@
 #include "tensor_chunk_utils.h"
 #include <ATen/cuda/CUDAContext.h>
 
+using namespace torch::indexing;
 using namespace torch::nn;
 
 ConvStackImpl::ConvStackImpl(const std::vector<ConvParams> &layer_params) {
@@ -79,6 +80,10 @@ LSTMStackImpl::~LSTMStackImpl() {
 #endif
 }
 
+int round_to_multiple(int n, int m) {
+    return ((n + m - 1) / m) * m;
+}
+
 torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
     // Input is [N, T, C], contiguity optional
     for (uint i = 0; i < rnns.size(); ++i) {
@@ -90,7 +95,13 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
             auto nheads = 1;
             auto ngates = 4;
             auto num_states = 2;
-            auto head_dim = 96; // hidden size
+            auto head_dim = rnn->options.hidden_size();
+            fprintf(stderr, "batch_size: %ld\n", batch_size);
+            fprintf(stderr, "seqlen: %ld\n", seqlen);
+            fprintf(stderr, "nheads: %d\n", nheads);
+            fprintf(stderr, "ngates: %d\n", ngates);
+            fprintf(stderr, "num_states: %d\n", num_states);
+            fprintf(stderr, "head_dim: %ld\n", head_dim);
 
             // B = batch, T time/sequence dim, N num heads, S state dimension, P previous D dimension (R matrix)
             // D head dim or hidden dim, G gates
@@ -105,7 +116,7 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
             auto options = x.options();
 
             torch::Tensor s0 = torch::zeros({num_states, batch_size, 1, nheads, head_dim}, options.dtype(torch::kBFloat16)).contiguous();
-            s0 = s0.index({torch::indexing::Slice(), 0});
+            s0 = s0.index({Slice(), 0});
             torch::Tensor states = torch::empty({FLASHRNN_NUM_STATES, seqlen + 1, batch_size, nheads, head_dim}, options.dtype(torch::kBFloat16)).contiguous();
             torch::Tensor gate_cache_i = torch::empty({}, options.dtype(torch::kBFloat16)).contiguous();
             torch::Tensor gate_cache_r = torch::empty({seqlen, batch_size, nheads, head_dim, FLASHRNN_NUM_GATES_R}, options.dtype(torch::kBFloat16)).contiguous();
@@ -117,7 +128,26 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
                 FLASHRNN_FORWARD_WARP_TILING_DIM_BATCH,
                 FLASHRNN_NUM_GATES_R * head_dim
             }, options.dtype(torch::kFloat32)).contiguous();
-            
+
+            // auto gates_w = x.size(4);
+            // auto round_batch_size = round_to_multiple(batch_size, 8);
+            // fprintf(stderr, "round batch size: %ld\n", round_batch_size);
+            // auto bs_pad = round_batch_size * (
+            //     (batch_size + round_batch_size - 1)
+            // );
+            // auto inp = torch::ones({seqlen, bs_pad, nheads, head_dim, gates_w}, options);
+            // auto stat = torch::ones({num_states, bs_pad, nheads, head_dim}, options);
+
+            // inp.index_put_(
+            //     {Slice(), Slice(None, batch_size)},
+            //     x.index({Slice(), Slice(None, batch_size)})
+            // );
+
+            // stat.index_put_(
+            //     {Slice(), Slice(None, batch_size)},
+            //     s0.index({Slice(), Slice(None, batch_size)})
+            // );
+
             for (uint i = 0; i < FLASHRNN_NUM_STATES; i++) {
                 states[i][0] = s0[i];
             }
@@ -145,7 +175,12 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
 
             cublasDestroy(cublas_handle);
 
-            x = states.index({torch::indexing::Slice(), torch::indexing::Slice(1, torch::indexing::None)}).permute({0, 2, 1, 3, 4})[0].reshape({batch_size, seqlen, head_dim}).contiguous().to(torch::kFloat16);
+            x = states
+                .index({Slice(), Slice(1, None)})[0]
+                .permute({1, 0, 2, 3})
+                .reshape({batch_size, seqlen, head_dim})
+                .contiguous()
+                .to(torch::kFloat16);
         } else
 #endif  
         {
