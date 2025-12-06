@@ -95,6 +95,7 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
             // B = batch, T time/sequence dim, N num heads, S state dimension, P previous D dimension (R matrix)
             // D head dim or hidden dim, G gates
             // x = x.matmul(rnn->named_parameters()["weight_ih_l0"]) + rnn->named_parameters()["bias_ih_l0"];
+            x = x.flip(1);
             x = x.reshape({-1, head_dim});
             x = at::addmm(rnn->named_parameters()["bias_ih_l0"], x, rnn->named_parameters()["weight_ih_l0"].t());
             x = x.view({batch_size, seqlen, ngates, nheads, head_dim}).permute({1, 0, 3, 4, 2}).to(torch::kBFloat16).contiguous();
@@ -104,6 +105,7 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
             auto options = x.options();
 
             torch::Tensor s0 = torch::zeros({num_states, batch_size, 1, nheads, head_dim}, options.dtype(torch::kBFloat16)).contiguous();
+            s0 = s0.index({torch::indexing::Slice(), 0});
             torch::Tensor states = torch::empty({FLASHRNN_NUM_STATES, seqlen + 1, batch_size, nheads, head_dim}, options.dtype(torch::kBFloat16)).contiguous();
             torch::Tensor gate_cache_i = torch::empty({}, options.dtype(torch::kBFloat16)).contiguous();
             torch::Tensor gate_cache_r = torch::empty({seqlen, batch_size, nheads, head_dim, FLASHRNN_NUM_GATES_R}, options.dtype(torch::kBFloat16)).contiguous();
@@ -115,13 +117,15 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
                 FLASHRNN_FORWARD_WARP_TILING_DIM_BATCH,
                 FLASHRNN_NUM_GATES_R * head_dim
             }, options.dtype(torch::kFloat32)).contiguous();
+            
+            for (uint i = 0; i < FLASHRNN_NUM_STATES; i++) {
+                states[i][0] = s0[i];
+            }
 
             cudaStream_t stream = at::cuda::getCurrentCUDAStream();
             cublasHandle_t cublas_handle;
             cublasCreate(&cublas_handle);
             cublasSetStream(cublas_handle, stream);
-            fprintf(stderr, "%s", "before forward\n");
-
             fused_rnn_0->forward(
                 false, // training
                 x.data_ptr(), // W_ih * x + b_ih
