@@ -234,6 +234,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const auto win_lower = std::get<1>(attn_window);
 
     torch::Tensor attn_output_ntc;
+#ifdef HAVE_GPU
     if (use_flash) {
         float softmax_scale = 1.0 / std::sqrt(head_dim);
 
@@ -256,7 +257,9 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
             std::nullopt // alibi slopes
         );
         attn_output_ntc = std::get<0>(flash_res).reshape({N, T, C});
-    } else {
+    } else
+#endif
+    {
         qkv = qkv.permute({2, 0, 3, 1, 4}); // N T 3 H D -> 3 N H T D
         attn_output_ntc = torch::empty({N, T, C}, x.options());
         auto attn_window_mask = get_attn_window_mask(T);
@@ -317,7 +320,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 
     auto run_norm = [&](RMSNorm &norm, const torch::Tensor &in, at::Tensor &weight) {
         auto k = in + (x * deepnorm_alpha);
-#ifdef USE_GPU
+#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 9) || TORCH_VERSION_MAJOR >= 3)
         auto eps = 1e-5f;
         auto t0 = at::_fused_rms_norm(k, {k.size(2)}, weight, eps);
         x = std::get<0>(t0);
