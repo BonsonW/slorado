@@ -106,12 +106,38 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
             // B = batch, T time/sequence dim, N num heads, S state dimension, P previous D dimension (R matrix)
             // D head dim or hidden dim, G gates
             // x = x.matmul(rnn->named_parameters()["weight_ih_l0"]) + rnn->named_parameters()["bias_ih_l0"];
+            // elif self.backend == "cuda_fused":
+            //     self._internal_input_shape = "TBHDG"
+            //     self._internal_recurrent_shape = "HDGP"
+            //     self._internal_bias_shape = "HDG"
+            //     self._internal_output_shape = "STBHD"
+
             x = x.flip(1);
-            x = x.reshape({-1, head_dim});
-            x = at::addmm(rnn->named_parameters()["bias_ih_l0"], x, rnn->named_parameters()["weight_ih_l0"].t());
-            x = x.view({batch_size, seqlen, ngates, nheads, head_dim}).permute({1, 0, 3, 4, 2}).to(torch::kBFloat16).contiguous();
-            auto recurrent_kernel = rnn->named_parameters()["weight_hh_l0"].view({ngates, nheads, head_dim, head_dim}).permute({1, 2, 0, 3}).contiguous();
-            auto bias = rnn->named_parameters()["bias_hh_l0"].view({ngates, nheads, head_dim}).permute({1, 2, 0}).contiguous();
+
+            auto bih = rnn->named_parameters()["bias_ih_l0"];
+            auto wih = rnn->named_parameters()["weight_ih_l0"];
+
+            auto linear = torch::nn::Linear(head_dim, head_dim);
+            // You MUST clone + detach when overwriting parameters
+            linear->weight = wih.clone().detach();
+            linear->bias   = bih.clone().detach();
+
+            auto torch_out = linear->forward(x);
+
+            // int64_t in_f  = x.size(2);
+            // TORCH_CHECK(wih.size(1) == in_f, "Weight in_features mismatch");
+            // // Flatten batch & seq for matmul: [batch*seq, in_features]
+            // auto x2d = x.reshape({batch_size * seqlen, in_f});
+            // auto my_out = at::addmm(bih, x2d, wih.t());
+            
+            // auto diff = torch::max(torch::abs(torch_out.flatten() - my_out.flatten())).item<float>();
+            // std::cerr << "Max abs diff: " << diff << "\n";
+            // exit(0);
+            
+            x = torch_out.view({batch_size, seqlen, ngates, nheads, head_dim}).permute({0, 1, 3, 4, 2}).to(torch::kBFloat16).contiguous();
+            // fprintf(stderr, "0: %ld, 1: %ld, 2: %ld, 3: %ld, 4: %ld\n", x.size(0), x.size(1), x.size(2), x.size(3), x.size(4));
+            auto recurrent_kernel = rnn->named_parameters()["weight_hh_l0"].view({ngates, nheads, head_dim, head_dim}).permute({1, 2, 0, 3}).to(torch::kBFloat16).contiguous();
+            auto bias = rnn->named_parameters()["bias_hh_l0"].view({ngates, nheads, head_dim}).permute({1, 2, 0}).to(torch::kBFloat16).contiguous();
             
             auto options = x.options();
 
@@ -128,25 +154,6 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
                 FLASHRNN_FORWARD_WARP_TILING_DIM_BATCH,
                 FLASHRNN_NUM_GATES_R * head_dim
             }, options.dtype(torch::kFloat32)).contiguous();
-
-            // auto gates_w = x.size(4);
-            // auto round_batch_size = round_to_multiple(batch_size, 8);
-            // fprintf(stderr, "round batch size: %ld\n", round_batch_size);
-            // auto bs_pad = round_batch_size * (
-            //     (batch_size + round_batch_size - 1)
-            // );
-            // auto inp = torch::ones({seqlen, bs_pad, nheads, head_dim, gates_w}, options);
-            // auto stat = torch::ones({num_states, bs_pad, nheads, head_dim}, options);
-
-            // inp.index_put_(
-            //     {Slice(), Slice(None, batch_size)},
-            //     x.index({Slice(), Slice(None, batch_size)})
-            // );
-
-            // stat.index_put_(
-            //     {Slice(), Slice(None, batch_size)},
-            //     s0.index({Slice(), Slice(None, batch_size)})
-            // );
 
             for (uint i = 0; i < FLASHRNN_NUM_STATES; i++) {
                 states[i][0] = s0[i];
