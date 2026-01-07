@@ -171,6 +171,13 @@ int basecaller_main(int argc, char* argv[]) {
         }
     }
 
+    size_t max_input_tensor_len = 10000 * 6000; // 10k chunk len, 6k gpu batch size
+
+    if ((size_t)opt.chunk_size * opt.gpu_batch_size > max_input_tensor_len) {
+        ERROR("Your input tensor size: %zu (chunk_size * gpu_batch_size) exceeds maximum allowed size: %zu", (size_t)opt.chunk_size * opt.gpu_batch_size, max_input_tensor_len);
+        exit(EXIT_FAILURE);
+    }
+
     if ((size_t)opt.overlap >= opt.chunk_size) {
         ERROR("Your overlap: %d should be lesser than chunk size: %ld", opt.overlap, opt.chunk_size);
         exit(EXIT_FAILURE);
