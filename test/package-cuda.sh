@@ -5,7 +5,7 @@ die() {
     exit 1
 }
 
-source /opt/rh/devtoolset-8/enable || die "Enable devtoolset-8 failed"
+source /opt/rh/devtoolset-9/enable || die "Enable devtoolset-8 failed"
 
 git submodule update || die "Update failed"
 
@@ -35,6 +35,10 @@ rm -r slorado-$VERSION/share/cmake
 rm -r slorado-$VERSION/lib/*.a
 rm -f slorado-$VERSION/lib/libtorch_cuda_linalg.so slorado-$VERSION/lib/libnvrtc-builtins-*
 rm -f slorado-$VERSION/lib/libcudnn_cnn_train.so.8 slorado-$VERSION/lib/libcudnn_ops_train.so.8 slorado-$VERSION/lib/libcudnn_adv_train.so.8
+
+for f in lib/*.so*; do
+   patchelf --force-rpath  --set-rpath '$ORIGIN' $f || die "Failed to patchelf $f"
+done
 
 ./slorado-$VERSION/bin/slorado --version || die "Test failed"
 tar cJf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz slorado-$VERSION || die "Tar failed"
