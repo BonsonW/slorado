@@ -42,7 +42,7 @@ Compilation instructions differ based on the system. Please pick one of the foll
 
 ### Running
 
-We have tested this slorado v0.3.0-beta on basecalling models `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0`, `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0` and `dna_r10.4.1_e8.2_400bps_sup@v5.0.0`. You can download them using the provided script (the binary releases already include these):
+We have tested slorado on a limited number of basecalling models listed [below](#tested-model). You can download them using the provided script (the binary releases already include these):
 
 ```
 scripts/download-models.sh
@@ -57,6 +57,7 @@ Now run on a test dataset:
 ```
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
+
 
 ## Testing
 
@@ -101,6 +102,15 @@ All options supported by slorado basecaller are detailed below:
 ## Batchsizes
 
 A large batch size (-K and -B) may take up significant RAM during run-time. Similarly, your GPU batch size (-C) will determine how much GPU memory is used. Slorado currently does not implement automatic batch size selection based on available memory. Thus, if you see an out-of-RAM error, reduce the batch size using -K or -B. If you see an out-of-GPU memory error, reduce the GPU batch size using the -C option.
+
+## Tested model
+
+| slorado version | Tested models |
+| ---             | ---           |
+| 0.4.0           |               |
+| 0.3.0           | `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0`, `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0` and `dna_r10.4.1_e8.2_400bps_sup@v5.0.0` |
+| 0.2.0           | `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0` |
+
 
 ## Acknowledgement
 

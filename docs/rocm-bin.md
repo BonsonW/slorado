@@ -47,7 +47,3 @@ It should print the mean identity score, median identity score and the number of
 | 0.2.0     |  2.28          | SUSE Linux 15 - Instinct MI250X;  Ubuntu 20 - Instinct MI50/MI60, MI100, MI210; Ubuntu 22 - Instinct MI210 |
 
 
-slorado v0.2.0, we have tested these binaries on following systems:
-1. O/S: SUSE Linux Enterprise Server 15; GPU: Instinct MI250X
-2. O/S: Ubuntu 20; GPUs: Instinct MI50/MI60, Instinct MI100 and Instinct MI210
-3. O/S:
