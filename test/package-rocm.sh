@@ -5,7 +5,7 @@ die() {
     exit 1
 }
 
-scl enable gcc-toolset-9 bash || die "Enable devtoolset-9 failed"
+source /opt/rh/gcc-toolset-9/enable || die "Enable devtoolset-9 failed"
 
 git submodule update || die "Update failed"
 
