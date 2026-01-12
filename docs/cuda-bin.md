@@ -37,8 +37,8 @@ It should print the mean identity score, median identity score and the number of
 ### Tested versions and requirements
 
 | Slorado binary version | minimum GLIBC | tested systems |
-|---              | ---             | ---         |
-| 0.4.0           | X           | xzzz        |
+|---             | ---             | ---         |
+| 0.4.0-beta     | 2.17           | ...        |
 ||||
-| 0.3.0     | 2.17          | -    |
-| 0.2.0     | 2.17          | Ubuntu 22 - Tesla V100 & A100;   Ubuntu 22 through WSL2 - GeForce RTX 4070 (laptop)  |
+| 0.3.0-beta     | 2.17          | ...    |
+| 0.2.0-beta     | 2.17          | Ubuntu 22 - Tesla V100 & A100;   Ubuntu 22 through WSL2 - GeForce RTX 4070 (laptop)  |

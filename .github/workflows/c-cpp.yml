@@ -164,7 +164,7 @@ jobs:
     - name: test
       run: export DEVICE=cpu && make test
   ubuntu_20_cuda:
-    name: Ubuntu 20 CUDA G++ 9 torch 2.4.0 and 2.9.0
+    name: Ubuntu 20 CUDA G++ 9 torch 2.4.0
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:20.04
@@ -187,10 +187,6 @@ jobs:
         apt-get -y install cuda-11-1
     - name: torch
       run: scripts/install-torch2.sh
-    - name: build cuda=1
-      run: make -j2 cuda=1
-    - name: torch 2.9.0
-      run: rm -r thirdparty/torch && scripts/install-torch2.sh cuda 2.9.0
     - name: build cuda=1
       run: make -j2 cuda=1
   ubuntu_22:

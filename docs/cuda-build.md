@@ -25,7 +25,7 @@
     ```
 
     This will download the torch version marked default in table [below](#tested-versions-and-requirements).
-    You can specify a different torch version in this table, for example `scripts/install-torch2.sh cuda 2.0.0`/
+    You can specify a different torch version in this table, for example `scripts/install-torch2.sh cuda 2.0.0`.
 
 5. Invoke make
 
@@ -33,7 +33,7 @@
     make cuda=1 -j
     ```
 
-    Note that if the table [below](#tested-versions-and-requirements) states "yes" for cxx11_abi, you should invoke as `make cuda=1 -j cxx11_abi=1`
+    Note that if the particular torch version in table [below](#tested-versions-and-requirements) states "yes" for cxx11_abi, you should invoke as `make cuda=1 -j cxx11_abi=1`
 
 6. See the slorado version
 
@@ -72,7 +72,7 @@ Note that we have tested compilation on a limited number of combinations and the
 |---              | ---             | ---         | ---          | ---      | ---      |
 | 0.4.0-beta           | 2.0.0           | 11        | 5.4          | no | Flash Attention unsupported for SUP >= v5.0.0         |
 | 0.4.0-beta           | 2.4.0 (default)           | 11        | 9            | no | Fused RMSNorm unsupported for SUP >= v5.0.0           |
-| 0.4.0-beta           | 2.9.0           | 12        | ?            | yes|           |
+| 0.4.0-beta           | 2.9.0           | 12        | 9            | yes |           |
 ||||
 | 0.2.0-beta,0.3.0-beta     | 2.0.0           | 10,11,12    | 5.4         | no |  |
 

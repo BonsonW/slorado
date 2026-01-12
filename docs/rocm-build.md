@@ -23,12 +23,16 @@
     ```
     scripts/install-torch2.sh rocm
     ```
+    This will download the torch version marked default in table [below](#tested-versions-and-requirements).
+    You can specify a different torch version in this table, for example `scripts/install-torch2.sh rocm 2.2.0`.
 
 5. Call make
 
     ```
-    make rocm=1 -j
+    make rocm=1 -j cxx11_abi=1
     ```
+
+    Note that if the particular torch version in table [below](#tested-versions-and-requirements) states "no" for cxx11_abi, you should invoke as `make cuda=1 -j`
 
 6. See the slorado version
 
@@ -65,8 +69,8 @@ Note that we have tested compilation on a limited number of combinations and the
 
 | Slorado version | tested libtorch | tested ROCM | minimum g++ (approximate) | cxx11_abi | comments |
 |---              | ---             | ---         | ---         | ---      | ---      |
-| 0.4.0           | 2.2.0           | 5.7.x        | 8.5         | no | Flash Attention and Fused RMSNorm layer unsupported for SUP >= v5.0.0         |
-| 0.4.0           | 2.9.0           | 6.3.0        | 9         | yes | |
+| 0.4.0-beta           | 2.2.0           | 5.7        | 8.5         | no | Flash Attention and Fused RMSNorm layer unsupported for SUP >= v5.0.0         |
+| 0.4.0-beta           | 2.9.0 (default)           | 6.3        | 9         | yes | |
 ||||
-| 0.3.0-beta,0.2.0-beta     | 2.2.0           | [5.7.x](https://rocm.docs.amd.com/en/docs-5.7.1/deploy/linux/os-native/install.html)   | 8.5  | no         |
+| 0.3.0-beta,0.2.0-beta     | 2.2.0           | [5.7](https://rocm.docs.amd.com/en/docs-5.7.1/deploy/linux/os-native/install.html)   | 8.5  | no         |
 
