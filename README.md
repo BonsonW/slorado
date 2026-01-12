@@ -42,7 +42,7 @@ Compilation instructions differ based on the system. Please pick one of the foll
 
 ### Running
 
-We have tested this slorado v0.3.0-beta on basecalling models `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0`, `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0` and `dna_r10.4.1_e8.2_400bps_sup@v5.0.0`. You can download them using the provided script (the binary releases already include these):
+We have tested slorado on a limited number of basecalling models listed [below](#tested-model). You can download them using the provided script (the binary releases already include these):
 
 ```
 scripts/download-models.sh
@@ -57,6 +57,7 @@ Now run on a test dataset:
 ```
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
+
 
 ## Testing
 
@@ -97,14 +98,28 @@ All options supported by slorado basecaller are detailed below:
 | -h                | shows help message and exits                          | -              |
 | --verbose INT     | verbosity level                                       | 4              |
 | --version         | print version                                         |                |
+| --flash yes|no    | enable flash attention                                | No             |
 
 ## Batchsizes
 
 A large batch size (-K and -B) may take up significant RAM during run-time. Similarly, your GPU batch size (-C) will determine how much GPU memory is used. Slorado currently does not implement automatic batch size selection based on available memory. Thus, if you see an out-of-RAM error, reduce the batch size using -K or -B. If you see an out-of-GPU memory error, reduce the GPU batch size using the -C option.
 
+## Flash Attention
+
+Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v5.0.0 when compiled with Cuda Torch >= v2.4.0 and ROCm Torch >= 2.9.0. This is not guaranteed to work on every device, so it must be enabled with the option `--flash yes`.
+
+## Tested model
+
+| slorado version | Tested models |
+| ---             | ---           |
+| 0.4.0           | `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0`, `dna_r10.4.1_e8.2_400bps_sup@v5.0.0`,  `rna004_130bps_fast@v5.1.0`, `rna004_130bps_hac@v5.1.0`, `rna004_130bps_sup@v5.1.0`,|
+| 0.3.0           | `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0`, `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0` and `dna_r10.4.1_e8.2_400bps_sup@v5.0.0` |
+| 0.2.0           | `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0` |
+
+
 ## Acknowledgement
 
-- A lot of code is coming from [Dorado](https://github.com/nanoporetech/dorado) which is licensed under [Oxford Nanopore Technologies PLC. Public License Version 1.0](thirdparty/dorado/LICENCE). Those files are located at [thirdparty/dorado](thirdparty/dorado).
+- Slorado uses code from [Dorado](https://github.com/nanoporetech/dorado) which is licensed under [Oxford Nanopore Technologies PLC. Public License Version 1.0](thirdparty/dorado/LICENCE). Those files are located at [thirdparty/dorado](thirdparty/dorado) and thus not covered by the MIT Licence.
 - [tomlc99](https://github.com/cktan/tomlc99) library under [thirdparty/tomlc99](thirdparty/tomlc99), is licensed under [MIT license](thirdparty/tomlc99/LICENSE).
 - Some code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
 

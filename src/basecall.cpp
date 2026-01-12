@@ -128,20 +128,23 @@ static void call_chunks(
         results[chunk]->seq = std::string(sequence + idx, num_bases);
         results[chunk]->qstring = std::string(qstring + idx, num_bases);
 
-        if (results[chunk]->seq.size() == 0) {
+        size_t seq_size = strlen(results[chunk]->seq.c_str());
+        size_t qstr_size = strlen(results[chunk]->qstring.c_str());
+
+        if (seq_size == 0) {
             ERROR("%s", "empty sequence returned by decoder");
             exit(EXIT_FAILURE);
         }
 
-        if (results[chunk]->qstring.size() == 0) {
+        if (qstr_size == 0) {
             ERROR("%s", "empty qstring returned by decoder");
             exit(EXIT_FAILURE);
         }
-
-        size_t seq_size = results[chunk]->seq.size();
-        size_t qstr_size = results[chunk]->qstring.size();
+        
         if (seq_size != qstr_size) {
             ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
+            ERROR("seq: %s", results[chunk]->seq.c_str());
+            ERROR("qstring: %s", results[chunk]->qstring.c_str());
             exit(EXIT_FAILURE);
         }
     }

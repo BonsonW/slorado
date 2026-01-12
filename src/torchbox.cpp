@@ -48,7 +48,7 @@ std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     std::vector<std::string> devices;
 
     if (device_arg == "cuda:all" || device_arg == "cuda:auto") {
-        for (size_t i = 0; i < torch::cuda::device_count(); i++) {
+        for (int8_t i = 0; i < (int8_t)torch::cuda::device_count(); i++) {
             devices.push_back("cuda:" + std::to_string(i));
         }
         return devices;
@@ -113,7 +113,7 @@ void init_runner(
     runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
     if (core->model_config->tx != NULL) {
         tx_stats_t *model_stats = init_tx_stats();
-        runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats);
+        runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLS) != 0);
         (*core->runner_stats)[runner_idx]->model_stats = model_stats;
     } else {
         lstm_stats_t *model_stats = init_lstm_stats();
@@ -269,7 +269,7 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
 
         torch::Tensor signal = tensor_from_record(rec);
 
-        scale_signal(signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
+        scale_signal(core, signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
 
         std::vector<chunk_res_t> chunks_res = create_chunks_res(signal.size(0), core->chunk_size, opt.overlap);
         (*db->chunk_db->chunks_res)[i] = chunks_res;

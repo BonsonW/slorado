@@ -18,10 +18,18 @@ download_model () {
     rm -f $1.zip || die "Removing the model failed"
 }
 
+# download_model dna_r10.4.1_e8.2_400bps_fast@v5.2.0
+# download_model dna_r10.4.1_e8.2_400bps_hac@v5.2.0
+# download_model dna_r10.4.1_e8.2_400bps_sup@v5.2.0
+
 download_model dna_r10.4.1_e8.2_400bps_fast@v5.0.0
 download_model dna_r10.4.1_e8.2_400bps_hac@v5.0.0
 download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0
 
-download_model dna_r10.4.1_e8.2_400bps_fast@v4.2.0
-download_model dna_r10.4.1_e8.2_400bps_hac@v4.2.0
-download_model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
+# download_model dna_r10.4.1_e8.2_400bps_fast@v4.2.0
+# download_model dna_r10.4.1_e8.2_400bps_hac@v4.2.0
+# download_model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
+
+download_model rna004_130bps_fast@v5.1.0
+download_model rna004_130bps_hac@v5.1.0
+download_model rna004_130bps_sup@v5.1.0

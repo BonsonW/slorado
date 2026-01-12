@@ -1,6 +1,9 @@
 # Basecalling on AMD GPUs
 
-With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some compiled binaries which should work on Linux if you have GLIBC >= 2.28 (invoke `ldd --version` to check). You should also have the GPU driver installed. Currently, we have tested the binaries only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
+With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some compiled binaries which should work on Linux if you have at least the minimum GLIBC listed [below](#tested-versions-and-requirements). Invoke `ldd --version` to check your GLIB version. You should also have the GPU driver installed.  Note that we have done testing on limited number of GPU systems listed [below](#tested-versions-and-requirements). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
+
+
+GLIBC >= (invoke `ldd --version` to check). You should also have the GPU driver installed. Currently, we have tested the binaries only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
 
 
 ## Getting Started
@@ -34,9 +37,13 @@ It should print the mean identity score, median identity score and the number of
 0.94113261325097        0.9771185       24768
 ```
 
-### Note 1
+### Tested versions and requirements
 
-Currently, we have tested these binaries on following systems:
-1. O/S: SUSE Linux Enterprise Server 15; GPU: Instinct MI250X
-2. O/S: Ubuntu 20; GPUs: Instinct MI50/MI60, Instinct MI100 and Instinct MI210
-3. O/S: Ubuntu 22; GPU: Instinct MI210
+| Slorado binary version | minimum GLIBC | tested systems |
+|---              | ---             | ---         |
+| 0.4.0           | 2.28           | ...        |
+||||
+| 0.3.0     |  2.28          |  ...   |
+| 0.2.0     |  2.28          | SUSE Linux 15 - Instinct MI250X;  Ubuntu 20 - Instinct MI50/MI60, MI100, MI210; Ubuntu 22 - Instinct MI210 |
+
+

@@ -14,6 +14,14 @@
 #include <stdexcept>
 #include <string>
 
+#ifdef HAVE_CUDA
+#include <c10/cuda/CUDAGuard.h>
+#endif
+
+#ifdef HAVE_ROCM
+#include <c10/hip/HIPGuard.h>
+#endif
+
 using namespace torch::nn;
 using Slice = torch::indexing::Slice;
 
@@ -81,64 +89,56 @@ RotaryEmbeddingImpl::RotaryEmbeddingImpl(
     theta(theta_),
     options(options_)
 {
-    const torch::Tensor inv_freq = get_inv_freqs();
+    auto inv_freq = torch::pow(theta, torch::arange(0, dim, 2, options) / dim).reciprocal();
+    torch::Tensor freqs = torch::arange(max_seq_len, options).outer(inv_freq);
 
-    // freqs.shape := {max_seq_len, 1, 1, dim/2}
-    const torch::Tensor freqs = torch::arange(max_seq_len, options).reshape({max_seq_len, 1, 1, 1}) * inv_freq;
-
-    register_buffer("cos_freqs", torch::cos(freqs).to(options));
-    register_buffer("sin_freqs", torch::sin(freqs).to(options));
+    auto cos = torch::cos(freqs).to(torch::kFloat32).contiguous();
+    auto sin = torch::sin(freqs).to(torch::kFloat32).contiguous();
+    cos_buf = cos;
+    sin_buf = sin;
 };
 
-torch::Tensor RotaryEmbeddingImpl::get_inv_freqs() const {
-    // Torch2.0 does not have support for ATen::pow in the MPS(apple) backend.
-    // Use a vector and std::pow from cmath instead and cast to a tensor
-
-    // Equivalent to:
-    // const torch::Tensor inv_freq =
-    //         torch::pow(theta, torch::arange(0, dim, 2, options) / dim).reciprocal();
-
-    // TODO: Remove when updating to torch2.1+
-    std::vector<double> vec;
-    vec.reserve(dim / 2);
-    for (float i = 0; i < dim; i += 2) {
-        vec.push_back(std::pow(static_cast<double>(theta), static_cast<double>(i / (float)dim)));
-    }
-    torch::Tensor inv_freq = torch::from_blob(vec.data(), vec.size(), torch::TensorOptions().dtype(torch::kDouble))
-        .to(options)
-        .reciprocal();
-    return inv_freq;
-}
-
 torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
-    // Input is NT3HD
     assert_forward_dims(qkv);
-    const int64_t N = qkv.size(0);
-    const int64_t T = qkv.size(1);
-    const int64_t H = qkv.size(3);
-    const int64_t D = qkv.size(4);
+    const int batch_size = qkv.size(0);
+    const int seqlen = qkv.size(1);
+    const int nheads = qkv.size(3);
+    const int head_dim = qkv.size(4);
+    const int rotary_dim = 32;
+    const int stride_batch = qkv.stride(0);
+    const int stride_seq = qkv.stride(1);
+    const int stride_head = qkv.stride(3);
 
-    auto buffers = named_buffers();
-    const torch::Tensor cos_buf = buffers["cos_freqs"].narrow(0, 0, T);
-    const torch::Tensor sin_buf = buffers["sin_freqs"].narrow(0, 0, T);
-
-    auto qk_evens = qkv.slice(2, 0, 2).slice(4, 0, D / 2);
-    auto qk_odds = qkv.slice(2, 0, 2).slice(4, D / 2, D);
-
-    // Allocate output tensor with memory layout as consumed by attention: 3NHTD
-    auto output = torch::empty({3, N, H, T, D}, qkv.options());
-    // View as [3 (q|k|v), N, H, T, 2 (even|odd), D/2], narrow first dim to 2 (q|k), then
-    // permute as [2 (even|odd), N, T, 2 (q|k), H, D/2] which is compatible with assignment below
-    auto output_kv_even_odd = output.view({3, N, H, T, 2, D / 2}).slice(0, 0, 2).permute({4, 1, 3, 0, 2, 5});
-
-    // Apply rotary embedding to Q and K
-    output_kv_even_odd[0] = cos_buf * qk_evens - sin_buf * qk_odds;
-    output_kv_even_odd[1] = sin_buf * qk_evens + cos_buf * qk_odds;
-
-    // Copy V to output
-    output.select(0, 2).permute({0, 2, 1, 3}) = qkv.select(2, 2);
-
-    return output;
+    auto qkv_chunks = qkv.chunk(3, 2);
+    
+    openfish_rotary_emb_gpu(
+        qkv_chunks[0].data_ptr(),
+        sin_buf.data_ptr(),
+        cos_buf.data_ptr(),
+        batch_size,
+        seqlen,
+        nheads,
+        head_dim,
+        rotary_dim,
+        stride_batch,
+        stride_seq,
+        stride_head
+    );
+    
+    openfish_rotary_emb_gpu(
+        qkv_chunks[1].data_ptr(),
+        sin_buf.data_ptr(),
+        cos_buf.data_ptr(),
+        batch_size,
+        seqlen,
+        nheads,
+        head_dim,
+        rotary_dim,
+        stride_batch,
+        stride_seq,
+        stride_head
+    );
+    return qkv;
 }
 
 void RotaryEmbeddingImpl::assert_forward_dims(const torch::Tensor &qkv) const {
@@ -172,8 +172,10 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     bool out_bias_,
     const std::pair<int, int> &attn_window_,
     const torch::TensorOptions &options_,
-    tx_stats_t *_model_stats
+    tx_stats_t *_model_stats,
+    bool use_flash_
 ) :
+    use_flash(use_flash_),
     d_model(d_model_),
     nhead(nhead_),
     head_dim(d_model_ / nhead_),
@@ -212,14 +214,11 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const int64_t T = x.size(1);
     const int64_t C = x.size(2);
 
-    torch::Tensor qkv;
-    torch::Tensor attn_output_ntc;
-
     double a, b;
     auto device_idx = options.device_index();
     
     a = realtime();
-    qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
+    auto qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_mm += b-a;
@@ -230,34 +229,64 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     b = realtime();
     model_stats->time_rotary_emb += b-a;
 
-    attn_output_ntc = torch::empty({N, T, C}, x.options());
-    auto attn_window_mask = get_attn_window_mask(T);
-    auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+    a = realtime();
     const auto win_upper = std::get<0>(attn_window);
     const auto win_lower = std::get<1>(attn_window);
-    // The MPS backend refuses to work on a span of the mask that doesn't have an
-    // alignment of 4 elements, so pad the amount we process each loop to that.
-    const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
 
-    a = realtime();
-    for (int i = 0; i < num_splits; ++i) {
-        const auto qb = i * elems_per_split;
-        if (qb >= T) {
-            break;
+    torch::Tensor attn_output_ntc;
+#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
+    if (use_flash) {
+        float softmax_scale = 1.0 / std::sqrt(head_dim);
+
+        auto qkv_chunks = qkv.chunk(3, 2);
+        auto q = qkv_chunks[0].squeeze();
+        auto k = qkv_chunks[1].squeeze();
+        auto v = qkv_chunks[2].squeeze();
+        
+        auto flash_res = at::_flash_attention_forward(
+            q, k, v,
+            std::nullopt, std::nullopt, // cum_seq_qk
+            qkv.size(1), qkv.size(1), // size_qk
+            0.0, // dropout
+            false, // casual
+            false, // return debug mask
+            softmax_scale,
+            win_lower,
+            win_upper,
+            std::nullopt, // seqused k
+            std::nullopt // alibi slopes
+        );
+        attn_output_ntc = std::get<0>(flash_res).reshape({N, T, C});
+    } else
+#endif
+    {
+        qkv = qkv.permute({2, 0, 3, 1, 4}); // N T 3 H D -> 3 N H T D
+        attn_output_ntc = torch::empty({N, T, C}, x.options());
+        auto attn_window_mask = get_attn_window_mask(T);
+        auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+        // // The MPS backend refuses to work on a span of the mask that doesn't have an
+        // // alignment of 4 elements, so pad the amount we process each loop to that.
+        const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
+        for (int i = 0; i < num_splits; ++i) {
+            const auto qb = i * elems_per_split;
+            if (qb >= T) {
+                break;
+            }
+            const auto qe = std::min(T, qb + elems_per_split);
+            const auto kvb = std::max<int64_t>(0, qb - win_lower);
+            const auto kve = std::min<int64_t>(T, qe + win_upper);
+            const auto q = qkv[0].slice(-2, qb, qe);
+            const auto k = qkv[1].slice(-2, kvb, kve);
+            const auto v = qkv[2].slice(-2, kvb, kve);
+            const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
+            c10::optional<torch::Tensor> opt_mask;
+            // Not using the mask gets us significantly better performance, at the cost of some
+            // accuracy. Accuracy loss is minimised by larger num_splits.
+            opt_mask = mask;
+            attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
         }
-        const auto qe = std::min(T, qb + elems_per_split);
-        const auto kvb = std::max<int64_t>(0, qb - win_lower);
-        const auto kve = std::min<int64_t>(T, qe + win_upper);
-        const auto q = qkv[0].slice(-2, qb, qe);
-        const auto k = qkv[1].slice(-2, kvb, kve);
-        const auto v = qkv[2].slice(-2, kvb, kve);
-        const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
-        c10::optional<torch::Tensor> opt_mask;
-        // Not using the mask gets us significantly better performance, at the cost of some
-        // accuracy. Accuracy loss is minimised by larger num_splits.
-        opt_mask = mask;
-        attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
     }
+
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_sdp_attn += b-a;
@@ -271,8 +300,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats) : params(params_) {
-    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats));
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash) : params(params_) {
+    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats, use_flash));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
@@ -289,8 +318,15 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 
     double a, b;
 
-    auto run_norm = [&](RMSNorm norm, const torch::Tensor &in) {
-        x = norm(in + (x * deepnorm_alpha));
+    auto run_norm = [&](RMSNorm &norm, const torch::Tensor &in, at::Tensor &weight) {
+        auto k = in + (x * deepnorm_alpha);
+#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 9) || TORCH_VERSION_MAJOR >= 3)
+        auto eps = 1e-5f;
+        auto t0 = at::_fused_rms_norm(k, {k.size(2)}, weight, eps);
+        x = std::get<0>(t0);
+#else
+        x = norm(k);
+#endif
     };
 
     a = realtime();
@@ -300,7 +336,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     model_stats->time_self_attn += b-a;
 
     a = realtime();
-    run_norm(norm1, attn);
+    run_norm(norm1, attn, norm1->weight);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_norm1 += b-a;
@@ -312,7 +348,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     model_stats->time_ff += b-a;
 
     a = realtime();
-    run_norm(norm2, f);
+    run_norm(norm2, f, norm2->weight);
     torch::cuda::synchronize(device_idx);
     b = realtime();
     model_stats->time_norm2 += b-a;
@@ -320,10 +356,10 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats) {
+TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
-        TxEncoder encoder(params, options, model_stats);
+        TxEncoder encoder(params, options, model_stats, use_flash);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
         layer_vec.push_back(encoder);
     }
@@ -359,9 +395,9 @@ torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats) : m_options(options) {
+TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash) : m_options(options) {
     convs = register_module("convs", ::ConvStack(config.convs));
-    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats));
+    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats, use_flash));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
     model_stats = _model_stats;
@@ -371,7 +407,16 @@ torch::Tensor TxModelImpl::forward(const torch::Tensor &chunk_NCT) {
     torch::Tensor h;
     double a, b;
     auto device_idx = m_options.device_index();
-    
+
+#ifdef USE_GPU
+#ifdef HAVE_CUDA
+    c10::cuda::CUDAGuard device_guard(device_idx);
+#endif
+#ifdef HAVE_ROCM
+    c10::hip::HIPGuard device_guard(device_idx);
+#endif
+#endif
+
     a = realtime();
     h = convs->forward(chunk_NCT);
     torch::cuda::synchronize(device_idx);
@@ -587,13 +632,19 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats) {
-    auto model = TxModel(model_config, options, model_stats);
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash) {
+    auto model = TxModel(model_config, options, model_stats, use_flash);
     auto state_dict = load_tx_model_weights(model_config.model_path);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());
     model->to(options.device());
     model->eval();
+
+    if (use_flash) {
+        fprintf(stderr, "%s\n", "using flash");
+    } else {
+        fprintf(stderr, "%s\n", "not using flash attention");
+    }
 
     auto module = AnyModule(model);
     auto holder = ModuleHolder<AnyModule>(module);

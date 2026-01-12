@@ -1,6 +1,6 @@
 # Basecalling on NVIDIA GPUs
 
-We have some compiled binaries which should work On Linux if you have GLIBC >= 2.17 (invoke `ldd --version` to check).  We have tested them only on systems in [Note 1](#note-1). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
+We have some compiled binaries which should work On Linux if you have at least the minimum GLIBC listed [below](#tested-versions-and-requirements). Invoke `ldd --version` to check your GLIB version. You should also have the GPU driver installed. Also, note that we have done testing on limited number of GPU systems listed [below](#tested-versions-and-requirements). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
 
 
 ## Getting Started
@@ -34,9 +34,11 @@ It should print the mean identity score, median identity score and the number of
 0.94328430832131        0.978048       27027
 ```
 
-### Note 1
+### Tested versions and requirements
 
-Currently, we have tested these binaries on following systems:
-1. O/S: Ubuntu 22; GPU: Tesla V100
-2. O/S: Ubuntu 22; GPU: Tesla A100
-2. O/S: Ubuntu 22 through Windows Subsystem for Linux (WSL2); GPU: GeForce RTX 4070 (laptop)
+| Slorado binary version | minimum GLIBC | tested systems |
+|---             | ---             | ---         |
+| 0.4.0-beta     | 2.17           | ...        |
+||||
+| 0.3.0-beta     | 2.17          | ...    |
+| 0.2.0-beta     | 2.17          | Ubuntu 22 - Tesla V100 & A100;   Ubuntu 22 through WSL2 - GeForce RTX 4070 (laptop)  |

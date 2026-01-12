@@ -42,7 +42,7 @@ SOFTWARE.
 
 #include "dorado/model_config.h"
 
-#define SLORADO_VERSION "0.3.0-beta"
+#define SLORADO_VERSION "0.4.0-beta"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *
@@ -51,6 +51,7 @@ SOFTWARE.
 #define SLORADO_PRF 0x001 // cpu-profile mode
 #define SLORADO_ACC 0x002 // accelerator enable
 #define SLORADO_EFQ 0x004 // emit fastq enable
+#define SLORADO_FLS 0x008 // flash attention enable
 
 #define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 // stealing threshold
