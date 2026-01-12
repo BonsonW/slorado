@@ -63,11 +63,10 @@
 
 Note that we have tested compilation on a limited number of combinations and the minimum g++ requirements are as below.
 
-| Slorado version | tested libtorch | tested ROCM | minimum g++ | comments |
-|---              | ---             | ---         | ---         | ---      |
-| 0.4.0           | 2.0.0           | 5.7.0        | 5.4         | Flash Attention and Fused RMSNorm layer unsupported for SUP >= v5.0.0         |
-| 0.4.0           | 2.9.0           | 6.3.0        | x.x         | |
+| Slorado version | tested libtorch | tested ROCM | minimum g++ (approximate) | cxx11_abi | comments |
+|---              | ---             | ---         | ---         | ---      | ---      |
+| 0.4.0           | 2.0.0           | 5.7.0        | 5.4         | no | Flash Attention and Fused RMSNorm layer unsupported for SUP >= v5.0.0         |
+| 0.4.0           | 2.9.0           | 6.3.0        | x.x         | yes | |
 ||||
-| 0.3.0     | 2.2.0           | [5.7.x](https://rocm.docs.amd.com/en/docs-5.7.1/deploy/linux/os-native/install.html)   | 9           |
-| 0.2.0     | 2.x.0           |    | 5.4      |
+| 0.3.0-beta,0.2.0-beta     | 2.2.0           | [5.7.x](https://rocm.docs.amd.com/en/docs-5.7.1/deploy/linux/os-native/install.html)   | 9  | no         |
 
