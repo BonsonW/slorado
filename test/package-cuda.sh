@@ -5,7 +5,7 @@ die() {
     exit 1
 }
 
-source /opt/rh/devtoolset-9/enable || die "Enable devtoolset-8 failed"
+source /opt/rh/devtoolset-9/enable || die "Enable devtoolset-9 failed"
 
 git submodule update || die "Update failed"
 
@@ -36,10 +36,26 @@ rm -r slorado-$VERSION/lib/*.a
 rm -f slorado-$VERSION/lib/libtorch_cuda_linalg.so slorado-$VERSION/lib/libnvrtc-builtins-*
 rm -f slorado-$VERSION/lib/libcudnn_cnn_train.so.8 slorado-$VERSION/lib/libcudnn_ops_train.so.8 slorado-$VERSION/lib/libcudnn_adv_train.so.8
 
-for f in lib/*.so*; do
+for f in slorado-$VERSION/lib/*.so*; do
    patchelf --force-rpath  --set-rpath '$ORIGIN' $f || die "Failed to patchelf $f"
 done
 
 ./slorado-$VERSION/bin/slorado --version || die "Test failed"
 tar cJf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz slorado-$VERSION || die "Tar failed"
 rm -rf slorado-$VERSION
+
+#ldd ./sloraodo-$VERSION/bin/slorado | grep -v hasindu
+        # linux-vdso.so.1 =>  (0x00007fffed6f5000)
+        # libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007f628ac10000)
+        # libz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x00007f622ff30000)
+        # librt.so.1 => /lib/x86_64-linux-gnu/librt.so.1 (0x00007f622fd20000)
+        # libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007f622fb00000)
+        # libstdc++.so.6 => /usr/lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f622f770000)
+        # libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f622f460000)
+        # libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f622f230000)
+        # libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f622ee60000)
+        # /lib64/ld-linux-x86-64.so.2 (0x00007f62a3800000)
+
+
+
+

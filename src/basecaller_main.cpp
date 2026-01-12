@@ -79,13 +79,13 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
+    fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLS) ? "yes" : "no");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
-    fprintf(fp_help, "\nadvanced options:\n");
+    fprintf(fp_help, "\ndebug options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
     // fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
-    fprintf(fp_help, "  --flash=yes|no          use flash attention\n");
 }
 
 int basecaller_main(int argc, char* argv[]) {

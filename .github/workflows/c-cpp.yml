@@ -36,6 +36,40 @@ jobs:
       run: make -j2
     - name: test
       run: export DEVICE=cpu && make test
+  ubuntu_16_cuda:
+    name: Ubuntu 16 CUDA
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:16.04
+      volumes:
+        - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
+    steps:
+    - name: install git
+      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+    - name: nodejs
+      run: |
+        apt-get install -y wget xz-utils
+        wget https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+        tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: install packages
+      run: apt-get update && apt-get install -y zlib1g-dev wget datamash unzip bzip2 make g++ apt-transport-https
+    - name: cuda
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-ubuntu1604.pin
+        mv cuda-ubuntu1604.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        wget -q -O - http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/3bf863cc.pub |  apt-key add -
+        add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/ /"
+        apt-get update
+        apt-get -y --allow-unauthenticated install cuda
+    - name: torch
+      run: scripts/install-torch2.sh cuda 2.0.0
+    - name: build cuda=1
+      run: make cuda=1 -j2
   ubuntu_18_cuda:
     name: Ubuntu 18 CUDA
     runs-on: ubuntu-24.04

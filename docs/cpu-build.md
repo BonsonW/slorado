@@ -1,6 +1,6 @@
 # Building CPU-only version of slorado on x84_64
 
-1. For slorado versions 0.2.0 to 0.4.0, a minimum g++ version of 5.4 is required due to libtorch v2.0.0 we use currently. This is by default available on Ubuntu 16.04 or higher. You can check your g++ version as `g++ --version`.
+1. For slorado CPU version, a minimum g++ version of 5.4 (available by default in Ubuntu 16) is required due to libtorch v2.0.0 we use currently. This is by default available on Ubuntu 16.04 or higher. You can check your g++ version as `g++ --version`.
 
 2. Install zlib development files needed for slow5lib:
 
