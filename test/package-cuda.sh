@@ -11,6 +11,7 @@ git submodule update || die "Update failed"
 
 VERSION=`git describe --tags`
 [ -z "$VERSION" ] && VERSION=`git rev-parse --short HEAD`
+# VERSION=v0.4.0-beta
 
 rm -rf slorado-$VERSION slorado-*.tar.gz models/
 scripts/download-models.sh || die "Download models failed"
@@ -21,7 +22,6 @@ test -d thirdparty/torch/libtorch || scripts/install-torch2.sh cuda || die "Inst
 mkdir -p slorado-$VERSION
 mkdir -p slorado-$VERSION/bin slorado-$VERSION/lib slorado-$VERSION/share
 
-# roc-obj-ls libtorch_hip.so  | awk '{print $2}' | sort -u
 make clean
 make cuda=1 zstd_local=../zstd/lib || die "Build failed"
 cp -r thirdparty/torch/libtorch/* slorado-$VERSION/|| die "Copy failed"
