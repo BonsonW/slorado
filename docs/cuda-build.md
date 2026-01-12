@@ -65,9 +65,9 @@ Note that we have tested compilation on a limited number of combinations and the
 
 | Slorado version | tested libtorch | tested CUDA | minimum g++ | comments |
 |---              | ---             | ---         | ---         | ---      |
-| 0.4.0           | 2.0.0           | xzzz        | 5.4         | XX feature will be not used          |
-| 0.4.0           | 2.4.0           | xzzz        | 9           | XX feature will be not used          |
-| 0.4.0           | 2.9.0           | xzzz        | x.x         | XX feature will be not used          |
+| 0.4.0           | 2.0.0           | 11.8        | 5.4         | Flash Attention unsupported          |
+| 0.4.0           | 2.4.0           | 11.8        | 9           | Fused RMSNorm unsupported          |
+| 0.4.0           | 2.9.0           | 12.6        | xx         |           |
 ||||
 | 0.2.0-0.3.0     | 2.0.0           | 10,11,12    | 5.4         | |
 
