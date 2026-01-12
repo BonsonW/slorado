@@ -234,7 +234,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const auto win_lower = std::get<1>(attn_window);
 
     torch::Tensor attn_output_ntc;
-#ifdef HAVE_GPU
+#ifdef USE_GPU
     if (use_flash) {
         float softmax_scale = 1.0 / std::sqrt(head_dim);
 
@@ -639,6 +639,12 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
     model->to(options.dtype().toScalarType());
     model->to(options.device());
     model->eval();
+
+    if (use_flash) {
+        fprintf(stderr, "%s\n", "using flash");
+    } else {
+        fprintf(stderr, "%s\n", "not using flash attention");
+    }
 
     auto module = AnyModule(model);
     auto holder = ModuleHolder<AnyModule>(module);

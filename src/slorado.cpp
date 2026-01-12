@@ -60,6 +60,7 @@ void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::s
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)calloc(1, sizeof(core_t));
     MALLOC_CHK(core);
+    core->opt = opt;
 
     core->realtime0 = realtime0;
 
@@ -95,8 +96,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->sum_bytes=0;
     core->total_reads=0; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
-
-    core->opt = opt;
 
     return core;
 }
