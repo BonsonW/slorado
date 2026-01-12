@@ -65,9 +65,8 @@ Note that we have tested compilation on a limited number of combinations and the
 
 | Slorado version | tested libtorch | tested ROCM | minimum g++ | comments |
 |---              | ---             | ---         | ---         | ---      |
-| 0.4.0           | 2.0.0           | xzzz        | 5.4         | XX feature will be not used          |
-| 0.4.0           | 2.4.0           | xzzz        | x.x         | XX feature will be not used          |
-| 0.4.0           | 2.9.0           | xzzz        | x.x         | XX feature will be not used          |
+| 0.4.0           | 2.0.0           | 5.7.0        | 5.4         | Flash Attention and Fused RMSNorm layer unsupported for SUP >= v5.0.0         |
+| 0.4.0           | 2.9.0           | 6.4.0        | x.x         | |
 ||||
 | 0.3.0     | 2.2.0           | [5.7.x](https://rocm.docs.amd.com/en/docs-5.7.1/deploy/linux/os-native/install.html)   | 9           |
 | 0.2.0     | 2.x.0           |    | 5.4      |
