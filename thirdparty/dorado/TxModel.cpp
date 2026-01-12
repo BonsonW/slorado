@@ -234,7 +234,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const auto win_lower = std::get<1>(attn_window);
 
     torch::Tensor attn_output_ntc;
-#ifdef USE_GPU
+#ifdef USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
     if (use_flash) {
         float softmax_scale = 1.0 / std::sqrt(head_dim);
 
