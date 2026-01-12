@@ -189,6 +189,10 @@ jobs:
       run: scripts/install-torch2.sh
     - name: build cuda=1
       run: make -j2 cuda=1
+    - name: torch 2.9.0
+      run: scripts/install-torch2.sh cuda 2.9.0
+    - name: build cuda=1 cxx11_abi=1
+      run: make -j2 cuda=1
   ubuntu_22:
     name: Ubuntu 22
     runs-on: ubuntu-22.04
