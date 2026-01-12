@@ -10,7 +10,7 @@ on:
 
 jobs:
   ubuntu_16:
-    name: Ubuntu 16
+    name: Ubuntu 16 CPU G++ 5 torch 2.0.0
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:16.04
@@ -37,7 +37,7 @@ jobs:
     - name: test
       run: export DEVICE=cpu && make test
   ubuntu_16_cuda:
-    name: Ubuntu 16 CUDA
+    name: Ubuntu 16 CUDA G++ 5 torch 2.0.0
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:16.04
@@ -71,7 +71,7 @@ jobs:
     - name: build cuda=1
       run: make cuda=1 -j2
   ubuntu_18_cuda:
-    name: Ubuntu 18 CUDA
+    name: Ubuntu 18 CUDA G++ 11 torch 2.4.0
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:18.04
@@ -120,7 +120,7 @@ jobs:
         export TORCH_NVCC_FLAGS="-ccbin /usr/bin/g++-11"
         make cuda=1 -j2
   ubuntu_18:
-    name: Ubuntu 18
+    name: Ubuntu 18 CPU G++ 7 torch 2.0.0
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:18.04
@@ -147,7 +147,7 @@ jobs:
     - name: test
       run: export DEVICE=cpu && make test
   ubuntu_20:
-    name: Ubuntu 20
+    name: Ubuntu 20 CPU G++ 9 torch 2.0.0
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:20.04
@@ -164,7 +164,7 @@ jobs:
     - name: test
       run: export DEVICE=cpu && make test
   ubuntu_20_cuda:
-    name: Ubuntu 20 CUDA
+    name: Ubuntu 20 CUDA G++ 9 torch 2.4.0 and 2.9.0
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:20.04
@@ -194,7 +194,7 @@ jobs:
     - name: build cuda=1
       run: make -j2 cuda=1
   ubuntu_22:
-    name: Ubuntu 22
+    name: Ubuntu 22 CPU G++ torch 2.0.0
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v2
@@ -211,9 +211,13 @@ jobs:
     - name: valgrind
       run: export DEVICE=cpu && test/test.sh mem
   ubuntu_22_rocm:
-    name: Ubuntu 22 ROCm
+    name: Ubuntu 22 ROCm G++ torch 2.2.0
     runs-on: ubuntu-22.04
     steps:
+    - name: Maximize build space
+      uses: AdityaGarg8/remove-unwanted-software@v5
+      with:
+        remove-android: 'true'
     - uses: actions/checkout@v2
       with:
         submodules: recursive
@@ -230,7 +234,7 @@ jobs:
     - name: build
       run: make rocm=1 -j2
   ubuntu_24_rocm:
-    name: Ubuntu 24 ROCm
+    name: Ubuntu 24 ROCm G++ torch 2.9.0
     runs-on: ubuntu-24.04
     steps:
     - name: Maximize build space
@@ -253,7 +257,7 @@ jobs:
     - name: build
       run: make rocm=1 -j2 cxx11_abi=1
   ubuntu_24:
-    name: Ubuntu 24
+    name: Ubuntu 24 CPU G++ torch 2.0.0
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v2
