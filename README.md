@@ -2,7 +2,7 @@
 
 Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dorado) built on top of [S/BLOW5 format](https://www.nature.com/articles/s41587-021-01147-4). Slorado is an extremely lean basecaller with fewer external dependencies and is thus relatively easier to compile than Dorado.  Slorado is developed using C/C++ and depends on [torchlib](https://pytorch.org/cppdocs/). Currently, slorado only supports the Linux operating system (or Windows through WSL). slorado can **utilise NVIDIA or AMD GPU accelerators** on x86_64 CPUs. Slorado also works on ARM64-based NVIDIA Jetson devices.
 
-Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and may not be up-to-date with Dorado. For a feature-rich and up-to-date S/BLOW5-based basecaller for routine use, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel).
+Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and may not be up-to-date with Dorado. For a feature-rich and up-to-date S/BLOW5-based basecaller for routine use on NVIDIA GPUs, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel) or [slow5-dorado](https://github.com/hiruna72/slow5-dorado/releases).
 
 [![GitHub Downloads](https://img.shields.io/github/downloads/BonsonW/slorado/total?logo=GitHub)](https://github.com/BonsonW/slorado/releases)
 
@@ -84,7 +84,6 @@ Slorado does not currently support demultiplexing. You can demultiplex reads gen
 
 All options supported by slorado basecaller are detailed below:
 
-
 | Option:           | Decription:                                           | Default Value: |
 |-------------------|-------------------------------------------------------|----------------|
 | -t INT            | number of processing threads                          | 8              |
@@ -98,7 +97,7 @@ All options supported by slorado basecaller are detailed below:
 | -h                | shows help message and exits                          | -              |
 | --verbose INT     | verbosity level                                       | 4              |
 | --version         | print version                                         |                |
-| --flash yes|no    | enable flash attention                                | No             |
+| --flash yes|no    | enable flash attention (from v0.4.0-beta)             | No             |
 
 ## Batchsizes
 
@@ -106,15 +105,15 @@ A large batch size (-K and -B) may take up significant RAM during run-time. Simi
 
 ## Flash Attention
 
-Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v5.0.0 when compiled with Cuda Torch >= v2.4.0 and ROCm Torch >= 2.9.0. This is not guaranteed to work on every device, so it must be enabled with the option `--flash yes`.
+Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v5.0.0 when compiled with CUDA Torch >= v2.4.0 and ROCm Torch >= 2.9.0. This is not guaranteed to work on older GPUs, so we have kept it disabled by default for maximum compatibility. For best runtime performance on modern GPUs, enable Flash Attention with the option `--flash yes`.
 
 ## Tested model
 
 | slorado version | Tested models |
 | ---             | ---           |
-| 0.4.0           | `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0`, `dna_r10.4.1_e8.2_400bps_sup@v5.0.0`,  `rna004_130bps_fast@v5.1.0`, `rna004_130bps_hac@v5.1.0`, `rna004_130bps_sup@v5.1.0`,|
-| 0.3.0           | `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0`, `dna_r10.4.1_e8.2_400bps_fast@v5.0.0`, `dna_r10.4.1_e8.2_400bps_hac@v5.0.0` and `dna_r10.4.1_e8.2_400bps_sup@v5.0.0` |
-| 0.2.0           | `dna_r10.4.1_e8.2_400bps_fast@v4.2.0`, `dna_r10.4.1_e8.2_400bps_hac@v4.2.0`, `dna_r10.4.1_e8.2_400bps_sup@v4.2.0` |
+| 0.4.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; rna004_130bps v5.1.0 |
+| 0.3.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 and v5.0.0 |
+| 0.2.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 |
 
 
 ## Acknowledgement

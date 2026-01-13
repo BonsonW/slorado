@@ -41,9 +41,9 @@ It should print the mean identity score, median identity score and the number of
 
 | Slorado binary version | minimum GLIBC | tested systems |
 |---              | ---             | ---         |
-| 0.4.0           | 2.28           | ...        |
+| 0.4.0-beta           | 2.28           | ...        |
 ||||
-| 0.3.0     |  2.28          |  ...   |
-| 0.2.0     |  2.28          | SUSE Linux 15 - Instinct MI250X;  Ubuntu 20 - Instinct MI50/MI60, MI100, MI210; Ubuntu 22 - Instinct MI210 |
+| 0.3.0-beta     |  2.28          | SUSE Linux 15 - Instinct MI250X   |
+| 0.2.0-beta     |  2.28          | SUSE Linux 15 - Instinct MI250X;  Ubuntu 20 - Instinct MI50/MI60, MI100, MI210; Ubuntu 22 - Instinct MI210 |
 
 
