@@ -43,7 +43,7 @@ It should print the mean identity score, median identity score and the number of
 |---              | ---             | ---         |
 | 0.4.0-beta           | 2.28           | ...        |
 ||||
-| 0.3.0-beta     |  2.28          | SUSE Linux 15 - Instinct MI250X   |
+| 0.3.0-beta     |  2.28          | SUSE Linux 15 - Instinct MI250X; Rocky Linux 9.6 - Instinct MI300X; Ubuntu 22 - RX 7900XTX |
 | 0.2.0-beta     |  2.28          | SUSE Linux 15 - Instinct MI250X;  Ubuntu 20 - Instinct MI50/MI60, MI100, MI210; Ubuntu 22 - Instinct MI210 |
 
 
