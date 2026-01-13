@@ -229,19 +229,19 @@ echo "********************************************************************"
 # accuracy check RNA
 echo "GPU - FAST RNA model - 20k reads"
 ex $SLORADO basecaller models/$FAST_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $FAST_BATCH > tmp.fastq || die "Running the tool failed"
-check_acc_rna $FAST
+check_acc_rna $FAST_RNA
 echo ""
 echo "********************************************************************"
 
 echo "GPU - HAC RNA model - 20k reads"
 ex $SLORADO basecaller models/$HAC_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.fastq || die "Running the tool failed"
-check_acc_rna $HAC
+check_acc_rna $HAC_RNA
 echo ""
 echo "********************************************************************"
 
 echo "GPU - SUP RNA model - 20k reads"
 ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq || die "Running the tool failed"
-check_acc_rna $SUP
+check_acc_rna $SUP_RNA
 echo ""
 echo "********************************************************************"
 
@@ -255,7 +255,7 @@ if [ $flash -eq 1 ]; then
 
     echo "GPU - SUP RNA model (flash) - 20k reads"
     ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq || die "Running the tool failed"
-    check_acc_rna $SUP
+    check_acc_rna $SUP_RNA
     echo ""
     echo "********************************************************************"
 fi
