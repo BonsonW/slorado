@@ -105,7 +105,7 @@ A large batch size (-K and -B) may take up significant RAM during run-time. Simi
 
 ## Flash Attention
 
-Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v5.0.0 when compiled with CUDA Torch >= v2.4.0 and ROCm Torch >= 2.9.0. This is not guaranteed to work on older GPUs, so we have kept it disabled by default for maximum compatibility. For best runtime performance on modern GPUs, enable Flash Attention with the option `--flash yes`.
+Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v5.0.0 when compiled with CUDA Torch >= v2.4.0 and ROCm Torch >= 2.9.0. This is not guaranteed to work on older GPUs, so we have kept it disabled by default for maximum compatibility. For best runtime performance on modern GPUs (Ampere GPUs or newer on NVIDIA, AMD CDNA 2 or RDNA-based GPU (RX 7900 XTX or newer)), enable Flash Attention with the option `--flash yes`. Other older GPUs maybe supported but are not tested yet.
 
 ## Tested model
 
