@@ -156,7 +156,8 @@ fi
 
 # download minimap2
 test -e $MINIMAP2 || download_minimap2
-$DATAMASH --version > /dev/null || die "datamash not found in PATH"
+$DATAMASH --version > /dev/null || die "datamash is missing"
+$SLORADO --version > /dev/null || die "slorado is missing"
 
 # download models
 test -d models/$FAST || download_model $FAST
@@ -259,3 +260,5 @@ if [ $flash -eq 1 ]; then
     echo ""
     echo "********************************************************************"
 fi
+
+echo "all tests passed!"
