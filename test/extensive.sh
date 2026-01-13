@@ -2,8 +2,8 @@
 
 # =========================================================================================================
 
-# run like: ./test/extensive_500.sh
-# if you want to check flash attention too: ./test/extensive_500.sh flash
+# run like: ./test/extensive.sh
+# if you want to check flash attention too: ./test/extensive.sh flash
 
 # =========================================================================================================
 # change these
