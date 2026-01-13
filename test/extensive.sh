@@ -203,7 +203,7 @@ fi
 if [ $RUN_500K -eq 1 ]; then
     echo "GPU - HAC model - 500k reads"
     ex $SLORADO basecaller models/$HAC $SUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.fastq || die "Running the tool failed"
-    check_accuracy $HAC $MEDIAN
+    check_accuracy_dna $HAC
     echo ""
     echo "********************************************************************"
 fi
