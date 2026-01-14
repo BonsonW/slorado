@@ -5,11 +5,11 @@ We have some compiled binaries which should work On Linux if you have at least t
 
 ## Getting Started
 
-First, download and extract the slorado cuda Linux binaries tar ball. Note that this is for testing only and the link will not be persistent!!!!
+First, download and extract the slorado cuda Linux binaries tarball.
 
 ```
 VERSION=v0.4.0-beta
-wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz"
+wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz"
 tar xvf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz
 cd slorado-$VERSION
 bin/slorado --help

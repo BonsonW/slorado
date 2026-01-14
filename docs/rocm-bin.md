@@ -12,7 +12,7 @@ First, download and extract the slorado rocm Linux binaries tarball.
 
 ```
 VERSION=v0.4.0-beta
-wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz"
+wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-rocm-linux-binaries.tar.xz"
 tar xvf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.xz
 cd slorado-$VERSION
 bin/slorado --help
