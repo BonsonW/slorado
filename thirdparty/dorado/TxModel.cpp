@@ -62,20 +62,40 @@ torch::Tensor RMSNormImpl::forward(torch::Tensor x) {
     return x;
 }
 
-GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_) : in_features(in_features_), hidden_features(hidden_features_) {
+GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_, tx_stats_t *_model_stats) : in_features(in_features_), hidden_features(hidden_features_) {
     fc1 = register_module("fc1", Linear(LinearOptions(in_features, 2 * hidden_features).bias(false)));
     fc2 = register_module("fc2", Linear(LinearOptions(hidden_features, in_features).bias(false)));
+    model_stats = _model_stats;
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
+    double a, b;
+    auto device_idx = x.options().device_index();
+
+    a = realtime();
     t = fc1(x);
-    const auto chunks = t.chunk(2, -1);
-    const auto &y = chunks[0];
-    const auto &gate = chunks[1];
-    t = functional::silu(gate).mul_(y);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_fc1 += b-a;
+
+    a = realtime();
+    auto M = t.size(0) * t.size(1);
+    auto K = t.size(2) / 2;
+    auto o = torch::empty({t.size(0), t.size(1), K}, x.options());
+    silu_mul_gpu(t.data_ptr(), o.data_ptr(), M, K);
+    t = o;
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_silu += b-a;
+
+    a = realtime();
+    t = fc2(t);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_fc2 += b-a;
     
-    return fc2(t);
+    return t;
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -302,7 +322,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
 TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash) : params(params_) {
     self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats, use_flash));
-    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
+    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward, _model_stats));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
     device_idx = options.device_index();

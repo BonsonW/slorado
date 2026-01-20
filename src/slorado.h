@@ -123,6 +123,10 @@ typedef struct {
     double time_rotary_emb;
     double time_sdp_attn;
     double time_out_proj;
+
+    double time_fc1;
+    double time_fc2;
+    double time_silu;
 } tx_stats_t;
 
 /* time stamps */

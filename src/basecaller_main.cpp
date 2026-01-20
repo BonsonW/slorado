@@ -294,6 +294,9 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                             - out_proj: %.3f sec", __func__, model_stats->time_out_proj);
             fprintf(stderr, "\n[%s]                         - norm1: %.3f sec", __func__, model_stats->time_norm1);
             fprintf(stderr, "\n[%s]                         - ff: %.3f sec", __func__, model_stats->time_ff);
+            fprintf(stderr, "\n[%s]                             - fc1: %.3f sec", __func__, model_stats->time_fc1);
+            fprintf(stderr, "\n[%s]                             - silu: %.3f sec", __func__, model_stats->time_silu);
+            fprintf(stderr, "\n[%s]                             - fc2: %.3f sec", __func__, model_stats->time_fc2);
             fprintf(stderr, "\n[%s]                         - norm2: %.3f sec", __func__, model_stats->time_norm2);
             fprintf(stderr, "\n[%s]                     - tx_decoder: %.3f sec", __func__, model_stats->time_tx_decoder);
             fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);

@@ -39,13 +39,14 @@ struct RMSNormImpl : torch::nn::Module {
 TORCH_MODULE(RMSNorm);
 
 struct GatedMLPImpl : torch::nn::Module {
-    GatedMLPImpl(int in_features, int hidden_features);
+    GatedMLPImpl(int in_features, int hidden_features, tx_stats_t *_model_stats);
 
     torch::Tensor forward(const torch::Tensor &x);
 
     bool features_interleaved = false;
     int in_features;
     int hidden_features;
+    tx_stats_t *model_stats;
     torch::nn::Linear fc1{nullptr}, fc2{nullptr};
 };
 
