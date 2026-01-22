@@ -56,8 +56,8 @@ inline tensor_quant quantize_tensor(const at::Tensor &x, int dim) {
     auto quant_max = i_range - 1;
     auto x_quant = (x * quant_scale.unsqueeze(dim)).round().clip(-quant_max, quant_max);
     return tensor_quant {
-        x_quant.to(torch::kInt8),
-        quant_scale.to(torch::kFloat32).reciprocal_()
+        x_quant.to(torch::kInt8).contiguous(),
+        quant_scale.to(torch::kFloat32).reciprocal_().contiguous()
     };
 }
 

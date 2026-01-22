@@ -42,6 +42,7 @@ struct GatedMLPImpl : torch::nn::Module {
     GatedMLPImpl(int in_features, int hidden_features, tx_stats_t *_model_stats);
 
     torch::Tensor forward(const torch::Tensor &x);
+    torch::Tensor forward_quant(tensor_quant &x_quant);
 
     bool features_interleaved = false;
     int in_features;
@@ -98,6 +99,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     );
 
     torch::Tensor forward(torch::Tensor x);
+    torch::Tensor forward_quant(tensor_quant &x);
 
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;
@@ -108,6 +110,9 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     const std::pair<int, int> attn_window;
     const torch::TensorOptions options;
     bool wqkv_transposed = false;
+
+    bool init = false;
+    tensor_quant wqkv_quant;
 
     std::unordered_map<MaskKey, torch::Tensor, MaskKeyHash> mask_cache{};
 
@@ -123,6 +128,7 @@ struct TxEncoderImpl : torch::nn::Module {
     TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash);
 
     torch::Tensor forward(torch::Tensor x);
+    void forward_quant(tensor_quant &x_quant);
 
     TxEncoderParams params;
     

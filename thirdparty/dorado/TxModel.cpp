@@ -68,54 +68,56 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_, tx_stats_t *_
     model_stats = _model_stats;
 };
 
+torch::Tensor GatedMLPImpl::forward_quant(tensor_quant &x_quant) {
+    torch::Tensor t;
+    double a, b;
+    auto device_idx = x_quant.tensor.options().device_index();
+
+    a = realtime();
+    if (!init) {
+        fc1w_quant = quantize_tensor(fc1->weight, -1);
+        init = true;
+    }
+    auto fc1_o = torch::empty({x_quant.tensor.size(0), x_quant.tensor.size(1), fc1->weight.size(0)}, x_quant.tensor.options().dtype(at::kHalf));
+    quant_gemm_gpu(
+        x_quant.tensor.data_ptr(),
+        fc1w_quant.tensor.data_ptr(),
+        x_quant.scale.data_ptr(),
+        fc1w_quant.scale.data_ptr(),
+        fc1_o.data_ptr(),
+        x_quant.tensor.size(0) * x_quant.tensor.size(1),
+        fc1->weight.size(0),
+        fc1->weight.size(1)
+    );
+    t = fc1_o;
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_fc1 += b-a;
+
+    a = realtime();
+    auto M = t.size(0) * t.size(1);
+    auto K = t.size(2) / 2;
+    auto silu_o = torch::empty({t.size(0), t.size(1), K}, t.options());
+    silu_mul_gpu(t.data_ptr(), silu_o.data_ptr(), M, K);
+    t = silu_o;
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_silu += b-a;
+
+    a = realtime();
+    t = fc2(t);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_fc2 += b-a;
+    
+    return t;
+}
+
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
     double a, b;
     auto device_idx = x.options().device_index();
 
-    // auto w = fc1->weight.chunk(2, 0);
-    // int64_t B = x.size(0) * x.size(1); // batch * timestep size
-    // int64_t I = w[0].size(1); // input dim or hidden dim
-    // int64_t H = w[0].size(0); // output dim
-
-    // auto d0 = torch::zeros(B * H, x.options()); // acc 0 ?
-    // auto d1 = torch::zeros(B * H, x.options()); // acc 1 ?
-    // auto t = torch::zeros({x.size(0), x.size(1), H}, x.options()); // output tensor
-
-    // swiglu_gpu(
-    //     x.data_ptr(),
-    //     w[0].data_ptr(),
-    //     w[1].data_ptr(),
-    //     d0.data_ptr(),
-    //     d1.data_ptr(),
-    //     t.data_ptr(), // result
-    //     B,
-    //     I,
-    //     H
-    // );
-
-    
-// #ifdef USE_GPU
-//     if (!init) {
-//         fc1w_quant = quantize_tensor(fc1->weight, -1);
-//         init = true;
-//     }
-//     a = realtime();
-//     quant_gemm_gpu(
-//         x_quant.tensor.data_ptr(),
-//         fc1w_quant.tensor.data_ptr(),
-//         x_quant.scale.data_ptr(),
-//         fc1w_quant.scale.data_ptr(),
-//         fc1_o.data_ptr(),
-//         x.size(0) * x.size(1),
-//         fc1->weight.size(0),
-//         fc1->weight.size(1)
-//     );
-//     torch::cuda::synchronize(device_idx);
-//     t = fc1_o;
-// #else
-//     // t = fc1(x);
-// #endif
     a = realtime();
     t = fc1(x);
     torch::cuda::synchronize(device_idx);
@@ -279,6 +281,112 @@ torch::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size)
     return mask;
 };
 
+torch::Tensor MultiHeadAttentionImpl::forward_quant(tensor_quant &x_quant) {
+    const int64_t N = x_quant.tensor.size(0);
+    const int64_t T = x_quant.tensor.size(1);
+    const int64_t C = x_quant.tensor.size(2);
+
+    double a, b;
+    auto device_idx = options.device_index();
+    
+    a = realtime();
+    if (!init) {
+        wqkv_quant = quantize_tensor(wqkv->weight, -1);
+        init = true;
+    }
+    auto oqkv = torch::empty({N, T, wqkv->weight.size(0)}, x_quant.tensor.options().dtype(at::kHalf));
+    quant_gemm_gpu(
+        x_quant.tensor.data_ptr(),
+        wqkv_quant.tensor.data_ptr(),
+        x_quant.scale.data_ptr(),
+        wqkv_quant.scale.data_ptr(),
+        oqkv.data_ptr(),
+        x_quant.tensor.size(0) * x_quant.tensor.size(1),
+        wqkv->weight.size(0),
+        wqkv->weight.size(1)
+    );
+    auto qkv = oqkv.view({N, T, 3, nhead, head_dim});
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_mm += b-a;
+
+    a = realtime();
+    qkv = rotary_emb(qkv);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_rotary_emb += b-a;
+
+    a = realtime();
+    const auto win_upper = std::get<0>(attn_window);
+    const auto win_lower = std::get<1>(attn_window);
+
+    torch::Tensor attn_output_ntc;
+#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
+    if (use_flash) {
+        float softmax_scale = 1.0 / std::sqrt(head_dim);
+
+        auto qkv_chunks = qkv.chunk(3, 2);
+        auto q = qkv_chunks[0].squeeze();
+        auto k = qkv_chunks[1].squeeze();
+        auto v = qkv_chunks[2].squeeze();
+        
+        auto flash_res = at::_flash_attention_forward(
+            q, k, v,
+            std::nullopt, std::nullopt, // cum_seq_qk
+            qkv.size(1), qkv.size(1), // size_qk
+            0.0, // dropout
+            false, // casual
+            false, // return debug mask
+            softmax_scale,
+            win_lower,
+            win_upper,
+            std::nullopt, // seqused k
+            std::nullopt // alibi slopes
+        );
+        attn_output_ntc = std::get<0>(flash_res).reshape({N, T, C});
+    } else
+#endif
+    {
+        qkv = qkv.permute({2, 0, 3, 1, 4}); // N T 3 H D -> 3 N H T D
+        attn_output_ntc = torch::empty({N, T, C}, qkv.options());
+        auto attn_window_mask = get_attn_window_mask(T);
+        auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
+        // // The MPS backend refuses to work on a span of the mask that doesn't have an
+        // // alignment of 4 elements, so pad the amount we process each loop to that.
+        const auto elems_per_split = pad_to(div_round_up(T, int64_t{num_splits}), int64_t{4});
+        for (int i = 0; i < num_splits; ++i) {
+            const auto qb = i * elems_per_split;
+            if (qb >= T) {
+                break;
+            }
+            const auto qe = std::min(T, qb + elems_per_split);
+            const auto kvb = std::max<int64_t>(0, qb - win_lower);
+            const auto kve = std::min<int64_t>(T, qe + win_upper);
+            const auto q = qkv[0].slice(-2, qb, qe);
+            const auto k = qkv[1].slice(-2, kvb, kve);
+            const auto v = qkv[2].slice(-2, kvb, kve);
+            const auto mask = attn_window_mask.index({Slice(qb, qe), Slice(kvb, kve)});
+            c10::optional<torch::Tensor> opt_mask;
+            // Not using the mask gets us significantly better performance, at the cost of some
+            // accuracy. Accuracy loss is minimised by larger num_splits.
+            opt_mask = mask;
+            attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
+        }
+    }
+
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_sdp_attn += b-a;
+
+    a = realtime();
+    auto o = out_proj(attn_output_ntc);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_out_proj += b-a;
+    
+    return o;
+};
+
 torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const int64_t N = x.size(0);
     const int64_t T = x.size(1);
@@ -382,6 +490,60 @@ TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::Tensor
     register_buffer("deepnorm_alpha", deepnorm_alpha);
 };
 
+void TxEncoderImpl::forward_quant(tensor_quant &x_quant) {
+    torch::Tensor attn, f;
+    const auto deepnorm_alpha = named_buffers()["deepnorm_alpha"];
+    const auto alpha = deepnorm_alpha.flatten()[0].item<float>();
+    double a, b;
+
+    auto run_norm = [&](RMSNorm &norm, const torch::Tensor &in, at::Tensor &weight) {
+        auto MN = in.size(0) * in.size(1);
+        auto K = in.size(2);
+        auto eps = 1e-5f;
+
+        // std::cerr << "rmsnorm 1 " << std::endl;
+        // std::cerr << "x: " << x_quant.tensor.sizes() << std::endl;
+        // std::cerr << "x: " << x_quant.scale.sizes() << std::endl;
+        // std::cerr << "in: " << in.sizes() << std::endl;
+        // std::cerr << "weight: " << weight.sizes() << std::endl;
+
+        rmsnorm_quant_gpu(
+            in.contiguous().data_ptr(),
+            weight.contiguous().data_ptr(),
+            x_quant.tensor.data_ptr(),
+            x_quant.scale.data_ptr(),
+            MN,
+            K,
+            alpha,
+            eps
+        );
+    };
+
+    a = realtime();
+    attn = self_attn->forward_quant(x_quant);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_self_attn += b-a;
+
+    a = realtime();
+    run_norm(norm1, attn, norm1->weight);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_norm1 += b-a;
+
+    a = realtime();
+    f = ff->forward_quant(x_quant);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_ff += b-a;
+
+    a = realtime();
+    run_norm(norm2, f, norm2->weight);
+    torch::cuda::synchronize(device_idx);
+    b = realtime();
+    model_stats->time_norm2 += b-a;
+}
+
 torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     torch::Tensor attn, f;
     const auto deepnorm_alpha = named_buffers()["deepnorm_alpha"];
@@ -393,6 +555,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
         auto output = torch::empty({in.size(0), in.size(1), in.size(2)}, in.options());
         auto K = in.size(2);
         auto eps = 1e-5f;
+        
         rmsnorm_gpu(
             in.contiguous().data_ptr(),
             x.contiguous().data_ptr(),
@@ -465,7 +628,12 @@ TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torc
 };
 
 torch::Tensor TxEncoderStackImpl::forward(const torch::Tensor &x) {
-    return stack->forward(x);
+    auto x_quant = quantize_tensor(x, -1);
+    for (auto &layer : layer_vec) {
+        layer->forward_quant(x_quant);
+    }
+    return (x_quant.tensor.to(at::kFloat) * x_quant.scale.unsqueeze(-1)).to(at::kHalf);
+    // return stack->forward(x);
 }
 
 LinearUpsampleImpl::LinearUpsampleImpl(const EncoderUpsampleParams &params) : scale_factor(params.scale_factor) {
