@@ -44,4 +44,21 @@ inline void module_load_state_dict(torch::nn::Module& module, const std::vector<
     }
 }
 
+struct tensor_quant {
+    at::Tensor tensor; // int8 tensor
+    at::Tensor scale;  // float scale per slice, reciprocal pre-applied
+};
+
+inline tensor_quant quantize_tensor(const at::Tensor &x, int dim) {
+    auto fp_range = x.abs().amax(dim);
+    constexpr int i_range = 256 / 2;
+    auto quant_scale = (i_range / fp_range);
+    auto quant_max = i_range - 1;
+    auto x_quant = (x * quant_scale.unsqueeze(dim)).round().clip(-quant_max, quant_max);
+    return tensor_quant {
+        x_quant.to(torch::kInt8),
+        quant_scale.to(torch::kFloat32).reciprocal_()
+    };
+}
+
 #endif

@@ -48,6 +48,9 @@ struct GatedMLPImpl : torch::nn::Module {
     int hidden_features;
     tx_stats_t *model_stats;
     torch::nn::Linear fc1{nullptr}, fc2{nullptr};
+    
+    bool init = false;
+    tensor_quant fc1w_quant;
 };
 
 TORCH_MODULE(GatedMLP);

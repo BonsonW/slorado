@@ -73,6 +73,49 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     double a, b;
     auto device_idx = x.options().device_index();
 
+    // auto w = fc1->weight.chunk(2, 0);
+    // int64_t B = x.size(0) * x.size(1); // batch * timestep size
+    // int64_t I = w[0].size(1); // input dim or hidden dim
+    // int64_t H = w[0].size(0); // output dim
+
+    // auto d0 = torch::zeros(B * H, x.options()); // acc 0 ?
+    // auto d1 = torch::zeros(B * H, x.options()); // acc 1 ?
+    // auto t = torch::zeros({x.size(0), x.size(1), H}, x.options()); // output tensor
+
+    // swiglu_gpu(
+    //     x.data_ptr(),
+    //     w[0].data_ptr(),
+    //     w[1].data_ptr(),
+    //     d0.data_ptr(),
+    //     d1.data_ptr(),
+    //     t.data_ptr(), // result
+    //     B,
+    //     I,
+    //     H
+    // );
+
+    
+// #ifdef USE_GPU
+//     if (!init) {
+//         fc1w_quant = quantize_tensor(fc1->weight, -1);
+//         init = true;
+//     }
+//     a = realtime();
+//     quant_gemm_gpu(
+//         x_quant.tensor.data_ptr(),
+//         fc1w_quant.tensor.data_ptr(),
+//         x_quant.scale.data_ptr(),
+//         fc1w_quant.scale.data_ptr(),
+//         fc1_o.data_ptr(),
+//         x.size(0) * x.size(1),
+//         fc1->weight.size(0),
+//         fc1->weight.size(1)
+//     );
+//     torch::cuda::synchronize(device_idx);
+//     t = fc1_o;
+// #else
+//     // t = fc1(x);
+// #endif
     a = realtime();
     t = fc1(x);
     torch::cuda::synchronize(device_idx);
@@ -80,12 +123,19 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     model_stats->time_fc1 += b-a;
 
     a = realtime();
+#ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
-    auto o = torch::empty({t.size(0), t.size(1), K}, x.options());
-    silu_mul_gpu(t.data_ptr(), o.data_ptr(), M, K);
-    t = o;
+    auto silu_o = torch::empty({t.size(0), t.size(1), K}, t.options());
+    silu_mul_gpu(t.data_ptr(), silu_o.data_ptr(), M, K);
+    t = silu_o;
     torch::cuda::synchronize(device_idx);
+#else
+    const auto chunks = t.chunk(2, -1);
+    const auto &y = chunks[0];
+    const auto &gate = chunks[1];
+    t = functional::silu(gate).mul_(y);
+#endif
     b = realtime();
     model_stats->time_silu += b-a;
 
@@ -339,14 +389,42 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     double a, b;
 
     auto run_norm = [&](RMSNorm &norm, const torch::Tensor &in, at::Tensor &weight) {
-        auto k = in + (x * deepnorm_alpha);
-#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 9) || TORCH_VERSION_MAJOR >= 3)
+        auto MN = in.size(0) * in.size(1);
+        auto output = torch::empty({in.size(0), in.size(1), in.size(2)}, in.options());
+        auto K = in.size(2);
         auto eps = 1e-5f;
-        auto t0 = at::_fused_rms_norm(k, {k.size(2)}, weight, eps);
-        x = std::get<0>(t0);
-#else
-        x = norm(k);
-#endif
+        rmsnorm_gpu(
+            in.contiguous().data_ptr(),
+            x.contiguous().data_ptr(),
+            weight.contiguous().data_ptr(),
+            output.contiguous().data_ptr(),
+            MN,
+            K,
+            deepnorm_alpha.flatten()[0].item<float>(),
+            eps
+        );
+        x = output;
+
+        // std::cerr << "rmsnorm 1 " << std::endl;
+        // std::cerr << "x: " << x.sizes() << std::endl;
+        // std::cerr << "in: " << in.sizes() << std::endl;
+        // std::cerr << "weight: " << weight.sizes() << std::endl;
+        // std::cerr << "alpha: " << deepnorm_alpha.sizes() << std::endl;
+        
+        // auto eps = 1e-5f;
+        // auto k = in + (x * deepnorm_alpha);
+        // auto t0 = at::_fused_rms_norm(k, {k.size(2)}, weight, eps);
+        // x = std::get<0>(t0);
+
+        // std::cerr << "out: " << x.sizes() << std::endl;
+
+        // exit(0);
+
+// #if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 9) || TORCH_VERSION_MAJOR >= 3)
+        
+// #else
+//         x = norm(k);
+// #endif
     };
 
     a = realtime();
