@@ -70,11 +70,18 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_) : in_features
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
     t = fc1(x);
+#ifdef USE_GPU
+    auto M = t.size(0) * t.size(1);
+    auto K = t.size(2) / 2;
+    auto silu_o = torch::empty({t.size(0), t.size(1), K}, t.options());
+    openfish_silu_mul_gpu(t.data_ptr(), silu_o.data_ptr(), M, K);
+    t = silu_o;
+#else
     const auto chunks = t.chunk(2, -1);
     const auto &y = chunks[0];
     const auto &gate = chunks[1];
     t = functional::silu(gate).mul_(y);
-    
+#endif
     return fc2(t);
 }
 
@@ -315,16 +322,28 @@ TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::Tensor
 torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     torch::Tensor attn, f;
     const auto deepnorm_alpha = named_buffers()["deepnorm_alpha"];
-
     double a, b;
 
     auto run_norm = [&](RMSNorm &norm, const torch::Tensor &in, at::Tensor &weight) {
-        auto k = in + (x * deepnorm_alpha);
-#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 9) || TORCH_VERSION_MAJOR >= 3)
+#if defined USE_GPU
+        auto MN = in.size(0) * in.size(1);
+        auto output = torch::empty({in.size(0), in.size(1), in.size(2)}, in.options());
+        auto K = in.size(2);
         auto eps = 1e-5f;
-        auto t0 = at::_fused_rms_norm(k, {k.size(2)}, weight, eps);
-        x = std::get<0>(t0);
+        
+        openfish_rmsnorm_gpu(
+            in.contiguous().data_ptr(),
+            x.contiguous().data_ptr(),
+            weight.contiguous().data_ptr(),
+            output.contiguous().data_ptr(),
+            MN,
+            K,
+            deepnorm_alpha.flatten()[0].item<float>(),
+            eps
+        );
+        x = output;
 #else
+        auto k = in + (x * deepnorm_alpha);
         x = norm(k);
 #endif
     };
