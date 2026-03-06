@@ -215,7 +215,7 @@ void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstri
         int overlap_down_sampled = overlap_size / model_stride;
         int mid_point_rear = overlap_down_sampled / 2;
 
-        const int current_chunk_bases_to_trim = std::reduce(std::prev(current_chunk.moves.end(), mid_point_rear), current_chunk.moves.end(), 0);
+        const int current_chunk_bases_to_trim = std::accumulate(std::prev(current_chunk.moves.end(), mid_point_rear), current_chunk.moves.end(), 0);
         // for (int i = current_chunk.moves.size() - 1; i > (int)(current_chunk.moves.size() - mid_point_rear); i--){
         //     current_chunk_bases_to_trim += (int) current_chunk.moves[i];
         // }
