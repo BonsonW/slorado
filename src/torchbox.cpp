@@ -209,7 +209,8 @@ torch::Tensor tensor_from_record(slow5_rec_t *rec) {
 std::vector<basecall_chunk_t> create_basecall_chunks(size_t num_samples, size_t chunk_size, size_t overlap, size_t stride, read_dat_t *read_dat) {
     std::size_t offset = 0;
     std::size_t last_offset = (num_samples > chunk_size) ? (num_samples - chunk_size) : 0;
-    if (const std::size_t misalignment = last_offset % stride; misalignment != 0) {
+    const std::size_t misalignment = last_offset % stride;
+    if (misalignment != 0) {
         // Move last chunk start to the next stride boundary, we'll zero pad any excess samples required.
         last_offset += stride - misalignment;
     }
