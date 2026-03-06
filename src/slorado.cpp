@@ -53,6 +53,7 @@ void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
 void preprocess_signal(core_t* core, db_t* db, int32_t i);
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
+void free_read_dat(read_dat_t *read_dat);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -272,7 +273,7 @@ void free_db_tmp(db_t* db) {
         free((*db->sequence)[i]);
         free((*db->qstring)[i]);
         (*db->moves)[i].clear();
-        delete (*db->read_dats)[i];
+        free_read_dat((*db->read_dats)[i]);
         (*db->basecall_chunks)[i].clear();
     }
 }

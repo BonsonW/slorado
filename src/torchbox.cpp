@@ -44,6 +44,10 @@ SOFTWARE.
 #include <c10/hip/HIPGuard.h>
 #endif
 
+void free_read_dat(read_dat_t *read_dat) {
+    delete read_dat;
+}
+
 std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     std::vector<std::string> devices;
 

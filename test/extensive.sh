@@ -12,7 +12,7 @@ MINIMAP2=minimap2/minimap2 # this will be automatically download
 DATAMASH=datamash
 SLORADO=./slorado
 
-BUILD_FROM_SOURCE=0 # run only if in slorado repo, required for memory checks
+BUILD_FROM_SOURCE=1 # run only if in slorado repo, required for memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
 
 # batch sizes for each model
@@ -157,7 +157,10 @@ fi
 # download minimap2
 test -e $MINIMAP2 || download_minimap2
 $DATAMASH --version > /dev/null || die "datamash is missing"
-$SLORADO --version > /dev/null || die "slorado is missing"
+
+if [ $BUILD_FROM_SOURCE -eq 0 ]; then
+    $SLORADO --version > /dev/null || die "slorado is missing"
+fi
 
 # download models
 test -d models/$FAST || download_model $FAST
@@ -171,7 +174,7 @@ test -d models/$SUP_RNA || download_model $SUP_RNA
 # memory check with asan if building from source
 
 if [ $BUILD_FROM_SOURCE -eq 1 ]; then
-    make clean && make -j asan=1
+    make clean && make -j asan=1 cxx11_abi=1
 
     echo "Memory Check - CPU - FAST model - 1 5khz reads"
     ex $SLORADO basecaller models/$FAST test/5khz_r10/one_5khz.blow5 -xcpu -c200 -K10 > test/tmp.fastq  || die "Running the tool failed"
@@ -198,7 +201,7 @@ fi
 # accuracy check DNA
 
 if [ $BUILD_FROM_SOURCE -eq 1 ]; then
-    make clean && make -j cuda=1
+    make clean && make -j cuda=1 cxx11_abi=1
 fi
 
 if [ $RUN_500K -eq 1 ]; then
