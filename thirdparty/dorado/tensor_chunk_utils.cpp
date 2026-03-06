@@ -244,7 +244,7 @@ void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstri
         // shorten the sequence, qstring & moves where the read is shorter than chunksize
         const int last_index_in_moves_to_keep = int(len_raw_signal / model_stride);
         moves = std::vector<uint8_t>(moves.begin(), moves.begin() + last_index_in_moves_to_keep);
-        const int end = std::reduce(moves.begin(), moves.end(), 0);
+        const int end = std::accumulate(moves.begin(), moves.end(), 0);
         sequences.push_back(last_chunk.seq.substr(start_pos, end));
         qstrings.push_back(last_chunk.qstring.substr(start_pos, end));
     } else {
@@ -262,7 +262,7 @@ void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstri
             qstring.pop_back();
         }
         moves.pop_back();
-        assert(size_t(std::reduce(moves.begin(), moves.end(), 0)) == sequence.size());
+        assert(size_t(std::accumulate(moves.begin(), moves.end(), 0)) == sequence.size());
     }
 }
 
