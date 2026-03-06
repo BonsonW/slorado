@@ -74,9 +74,22 @@ typedef struct {
     int32_t overlap;            // overlap: p
 } opt_t;
 
-typedef struct chunk_sig chunk_sig_t;
-typedef struct chunk_res chunk_res_t;
-typedef struct chunk_db chunk_db_t;
+typedef struct read_dat read_dat_t;
+
+// result + metadata of a chunk
+struct basecall_chunk {
+    size_t input_offset;    // raw signal offset
+    size_t idx_in_read;     // order in read
+    size_t raw_chunk_size;  // size in raw signal
+
+    std::string seq;
+    std::string qstring;
+    std::vector<uint8_t> moves;
+
+    read_dat_t *read_dat;
+};
+
+typedef struct basecall_chunk basecall_chunk_t;
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -90,10 +103,11 @@ typedef struct {
 
     double *means;
 
-    chunk_db_t *chunk_db;
-
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
+    std::vector<std::vector<uint8_t>> *moves;
+    std::vector<std::vector<basecall_chunk_t>> *basecall_chunks;
+    std::vector<read_dat_t *> *read_dats;
 
     // stats
     int64_t sum_bytes;

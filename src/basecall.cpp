@@ -53,14 +53,30 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
-static void accept_chunk(const int num_chunks, const chunk_sig_t *chunk_sig, const core_t* core, const int runner_idx) {
-    runner_t* runner = (*core->runners)[runner_idx];
-    runner->input_tensor.index_put_({num_chunks, 0}, chunk_sig->tensor);
+static void accept_chunk(const int num_chunks, const basecall_chunk_t *chunk, runner_t *runner, int chunk_size) {
+    torch::Tensor input_slice = (chunk->read_dat->scaled_signal).index({torch::indexing::Ellipsis, torch::indexing::Slice(chunk->input_offset, chunk->input_offset + chunk_size)});
+    input_slice = input_slice.unsqueeze(0);
+    size_t slice_size = input_slice.size(1);
+
+    // repeat-pad non-full chunks
+    if (slice_size != chunk_size) {
+        int64_t quot = chunk_size / slice_size;
+        int64_t rem = chunk_size % slice_size;
+        input_slice = torch::concat(
+            {
+                input_slice.repeat({1, quot}),
+                input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, rem)})
+            },
+            1
+        );
+    }
+
+    runner->input_tensor.index_put_({num_chunks, 0}, {input_slice});
 }
 
 static void call_chunks(
     const core_t* core,
-    const std::vector<chunk_res_t *> &results,
+    const std::vector<basecall_chunk_t *> &chunks,
     const int runner_idx
 ) {
     torch::InferenceMode guard;
@@ -114,22 +130,22 @@ static void call_chunks(
 
     LOG_DEBUG("%s", "writing to chunks");
 
-    for (size_t chunk = 0; chunk < results.size(); ++chunk) {
+    for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
         size_t idx = chunk * T;
-        results[chunk]->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
+        chunks[chunk]->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
         size_t num_bases = 0;
-        for (auto move: results[chunk]->moves) {
+        for (auto move: chunks[chunk]->moves) {
             num_bases += move;
         }
         if (num_bases > (size_t)T) {
             ERROR("num bases %zu greater than number of timesteps %d", num_bases, T);
             exit(EXIT_FAILURE);
         }
-        results[chunk]->seq = std::string(sequence + idx, num_bases);
-        results[chunk]->qstring = std::string(qstring + idx, num_bases);
+        chunks[chunk]->seq = std::string(sequence + idx, num_bases);
+        chunks[chunk]->qstring = std::string(qstring + idx, num_bases);
 
-        size_t seq_size = strlen(results[chunk]->seq.c_str());
-        size_t qstr_size = strlen(results[chunk]->qstring.c_str());
+        size_t seq_size = strlen(chunks[chunk]->seq.c_str());
+        size_t qstr_size = strlen(chunks[chunk]->qstring.c_str());
 
         if (seq_size == 0) {
             ERROR("%s", "empty sequence returned by decoder");
@@ -143,8 +159,8 @@ static void call_chunks(
         
         if (seq_size != qstr_size) {
             ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
-            ERROR("seq: %s", results[chunk]->seq.c_str());
-            ERROR("qstring: %s", results[chunk]->qstring.c_str());
+            ERROR("seq: %s", chunks[chunk]->seq.c_str());
+            ERROR("qstring: %s", chunks[chunk]->qstring.c_str());
             exit(EXIT_FAILURE);
         }
     }
@@ -158,18 +174,20 @@ static void call_chunks(
 static void basecall_chunks(
     const core_t* core,
     const int runner_idx,
-    const std::vector<chunk_sig_t *> &signals,
-    const std::vector<chunk_res_t *> &results
+    const std::vector<basecall_chunk_t *> &chunks
 ) {
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
-    for (size_t i = 0; i < signals.size(); ++i) {
+    runner_t* runner = (*core->runners)[runner_idx];
+    auto chunk_size = core->chunk_size;
+
+    for (size_t i = 0; i < chunks.size(); ++i) {
         ts->time_accept -= realtime();
-        accept_chunk(i, signals[i], core, runner_idx);
+        accept_chunk(i, chunks[i], runner, chunk_size);
         ts->time_accept += realtime();
     }
 
     ts->time_basecall -= realtime();
-    call_chunks(core, results, runner_idx);
+    call_chunks(core, chunks, runner_idx);
     ts->time_basecall += realtime();
 }
 
@@ -182,35 +200,31 @@ static void* pthread_single_basecall(void* voidargs) {
     const size_t end = args->end;
     opt_t opt = core->opt;
 
-    std::vector<chunk_res_t *> results;
-    std::vector<chunk_sig_t *> signals;
+    std::vector<basecall_chunk_t *> chunks;
 
     for (size_t read_idx = start; read_idx < end; ++read_idx) {
-        auto& chunks_res = (*db->chunk_db->chunks_res)[read_idx];
-        auto& chunks_sig = (*db->chunk_db->chunks_sig)[read_idx];
+        auto& db_chunks = (*db->basecall_chunks)[read_idx];
 
-        for (size_t chunk_idx = 0; chunk_idx < chunks_res.size(); ++chunk_idx) {
-            results.push_back(&chunks_res[chunk_idx]);
-            signals.push_back(&chunks_sig[chunk_idx]);
+        for (size_t chunk_idx = 0; chunk_idx < db_chunks.size(); ++chunk_idx) {
+            chunks.push_back(&db_chunks[chunk_idx]);
 
-            if (results.size() == (size_t)opt.gpu_batch_size) {
-                basecall_chunks(core, runner_idx, signals, results);
-                results.clear();
-                signals.clear();
+            if (chunks.size() == (size_t)opt.gpu_batch_size) {
+                basecall_chunks(core, runner_idx, chunks);
+                chunks.clear();
             }
         }
     }
 
     // leftover chunks
-    if (results.size() > 0) {
-        basecall_chunks(core, runner_idx, signals, results);
+    if (chunks.size() > 0) {
+        basecall_chunks(core, runner_idx, chunks);
     }
 
     pthread_exit(0);
 }
 
 void basecall_db(core_t* core, db_t* db) {
-    int32_t n_reads = (*db->chunk_db->chunks_res).size();
+    int32_t n_reads = db->n_rec;
     int32_t num_threads = (*core->runners).size();
     int32_t step = (n_reads + num_threads - 1) / num_threads;
 

@@ -197,66 +197,31 @@ void free_runners(core_t *core) {
 
 }
 
-void init_chunk_db(db_t *db) {
-    db->chunk_db = (chunk_db_t *)malloc(sizeof(chunk_db_t));
-    MALLOC_CHK(db->chunk_db);
-    db->chunk_db->chunks_res = new std::vector<std::vector<chunk_res_t>>(db->capacity_rec, std::vector<chunk_res_t>());
-    db->chunk_db->chunks_sig = new std::vector<std::vector<chunk_sig_t>>(db->capacity_rec, std::vector<chunk_sig_t>());
-}
-
-void free_chunk_db(db_t *db) {
-    delete db->chunk_db->chunks_res;
-    delete db->chunk_db->chunks_sig;
-    free(db->chunk_db);
-}
-
 torch::Tensor tensor_from_record(slow5_rec_t *rec) {
     torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt16);
     return torch::from_blob(rec->raw_signal, rec->len_raw_signal, options);
 }
 
-std::vector<chunk_res_t> create_chunks_res(size_t tensor_size, size_t chunk_size, size_t overlap) {
-    size_t step = chunk_size - overlap;
-
-    size_t n_chunks = tensor_size / step;
-    n_chunks += tensor_size % step > 0 ? 1 : 0;
-
-    std::vector<chunk_res_t> chunks_res;
-    chunks_res.reserve(n_chunks);
-
-    for (size_t i = 0; i < n_chunks; ++i) {
-        size_t sig_pos = std::min(step * i, tensor_size - chunk_size);
-        chunks_res.push_back({sig_pos, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>()});
+std::vector<basecall_chunk_t> create_basecall_chunks(size_t num_samples, size_t chunk_size, size_t overlap, size_t stride, read_dat_t *read_dat) {
+    std::size_t offset = 0;
+    std::size_t last_offset = (num_samples > chunk_size) ? (num_samples - chunk_size) : 0;
+    if (const std::size_t misalignment = last_offset % stride; misalignment != 0) {
+        // Move last chunk start to the next stride boundary, we'll zero pad any excess samples required.
+        last_offset += stride - misalignment;
     }
+    const std::size_t chunk_step = chunk_size - overlap;
 
-    return chunks_res;
-}
+    std::vector<basecall_chunk_t> ret;
 
-std::vector<chunk_sig_t> create_chunks_sig(torch::Tensor &signal, std::vector<chunk_res_t> &chunks_res, size_t chunk_size) {
-    std::vector<chunk_sig_t> chunks_sig;
-    chunks_sig.reserve(chunks_res.size());
-
-    for (size_t i = 0; i < chunks_res.size(); ++i) {
-        torch::Tensor input_slice = signal.index({torch::indexing::Ellipsis, torch::indexing::Slice(chunks_res[i].input_offset, chunks_res[i].input_offset + chunk_size)});
-        input_slice = input_slice.unsqueeze(0);
-        size_t slice_size = input_slice.size(1);
-
-        // repeat-pad non-full chunks
-        if (slice_size != chunk_size) {
-            int64_t quot = chunk_size / slice_size;
-            int64_t rem = chunk_size % slice_size;
-            input_slice = torch::concat(
-                {
-                    input_slice.repeat({1, quot}),
-                    input_slice.index({torch::indexing::Ellipsis, torch::indexing::Slice(0, rem)})
-                },
-                1
-            );
-        }
-        chunks_sig.push_back({input_slice});
+    size_t i = 1;
+    ret.push_back({0, 0, chunk_size, std::string(), std::string(), std::vector<uint8_t>(), read_dat});
+    while ((offset + chunk_size) < num_samples) {
+        offset = std::min(offset + chunk_step, last_offset);
+        ret.push_back({offset, i, chunk_size, std::string(), std::string(), std::vector<uint8_t>(), read_dat});
+        i += 1;
     }
-
-    return chunks_sig;
+    
+    return ret;
 }
 
 void preprocess_signal(core_t *core, db_t *db, int32_t i) {
@@ -270,11 +235,14 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         torch::Tensor signal = tensor_from_record(rec);
 
         scale_signal(core, signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
+        LOG_TRACE("%s", "scaled signal");
 
-        std::vector<chunk_res_t> chunks_res = create_chunks_res(signal.size(0), core->chunk_size, opt.overlap);
-        (*db->chunk_db->chunks_res)[i] = chunks_res;
+        read_dat_t *read_dat = new read_dat_t;
+        MALLOC_CHK(read_dat);
+        read_dat->scaled_signal = signal;
+        (*db->read_dats)[i] = read_dat;
 
-        std::vector<chunk_sig_t> chunks_sig = create_chunks_sig(signal, chunks_res, core->chunk_size);
-        (*db->chunk_db->chunks_sig)[i] = chunks_sig;
+        std::vector<basecall_chunk_t> chunks = create_basecall_chunks(signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
+        (*db->basecall_chunks)[i] = chunks;
     }
 }

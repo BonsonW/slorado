@@ -189,25 +189,36 @@ int div_round_closest(const int n, const int d) {
     return ((n < 0) ^ (d < 0)) ? ((n - d/2)/d) : ((n + d/2)/d);
 }
 
-void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring) {
-    std::vector<chunk_res> &chunks = (*chunk_db->chunks_res)[i];
+
+void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride) {
+    std::vector<basecall_chunk_t> &chunks = (*db->basecall_chunks)[i];
+    assert(static_cast<int>(div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size())) == model_stride);
+
+
     // Calculate the chunk down sampling, round to closest int.
-    int down_sampling = div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size());
+    // int down_sampling = div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size());
 
     int start_pos = 0;
+    int mid_point_front = 0;
+    
     std::vector<std::string> sequences;
     std::vector<std::string> qstrings;
-    for (size_t i = 0; i < chunks.size() - 1; i++){
-        chunk_res_t &current_chunk = chunks[i];
-        chunk_res_t &next_chunk = chunks[i+1];
-        int overlap_size = (current_chunk.raw_chunk_size + current_chunk.input_offset) - (next_chunk.input_offset);
-        int overlap_down_sampled = overlap_size / down_sampling;
-        int mid_point = overlap_down_sampled / 2;
 
-        int current_chunk_bases_to_trim = 0;
-        for (int i = current_chunk.moves.size() - 1; i > (int)(current_chunk.moves.size() - mid_point); i--){
-            current_chunk_bases_to_trim += (int) current_chunk.moves[i];
-        }
+    for (size_t i = 0; i < chunks.size() - 1; i++){
+        basecall_chunk_t &current_chunk = chunks[i];
+        basecall_chunk_t &next_chunk = chunks[i+1];
+        int overlap_size = (current_chunk.raw_chunk_size + current_chunk.input_offset) - (next_chunk.input_offset);
+        // if (overlap_size % model_stride != 0) {
+        //     fprintf(stderr, "overlap: %d, model_stride: %d, raw_chunk_size: %zu, input_offset: %zu, next_input_offset: %zu\n", overlap_size, model_stride, current_chunk.raw_chunk_size, current_chunk.input_offset, next_chunk.input_offset);
+        // }
+        assert(overlap_size % model_stride == 0);
+        int overlap_down_sampled = overlap_size / model_stride;
+        int mid_point_rear = overlap_down_sampled / 2;
+
+        const int current_chunk_bases_to_trim = std::reduce(std::prev(current_chunk.moves.end(), mid_point_rear), current_chunk.moves.end(), 0);
+        // for (int i = current_chunk.moves.size() - 1; i > (int)(current_chunk.moves.size() - mid_point_rear); i--){
+        //     current_chunk_bases_to_trim += (int) current_chunk.moves[i];
+        // }
 
         int current_chunk_seq_len = current_chunk.seq.size();
         int end_pos = current_chunk_seq_len - current_chunk_bases_to_trim;
@@ -215,19 +226,44 @@ void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::s
         sequences.push_back(current_chunk.seq.substr(start_pos, trimmed_len));
         qstrings.push_back(current_chunk.qstring.substr(start_pos, trimmed_len));
 
+        moves.insert(moves.end(), std::next(current_chunk.moves.begin(), mid_point_front), std::prev(current_chunk.moves.end(), mid_point_rear));
+
+        mid_point_front = overlap_down_sampled - mid_point_rear;
+
         start_pos = 0;
-        for (int i=0; i < mid_point; i++){
+        for (int i = 0; i < mid_point_front; i++){
             start_pos += (int) next_chunk.moves[i];
         }
     }
+    // append the final chunk
+    auto& last_chunk = chunks[chunks.size() - 1];
 
-    //append the final read
-    sequences.push_back(chunks[chunks.size() - 1].seq.substr(start_pos));
-    qstrings.push_back(chunks[chunks.size() - 1].qstring.substr(start_pos));
+    moves.insert(moves.end(), std::next(last_chunk.moves.begin(), mid_point_front), last_chunk.moves.end());
 
-    // Set the read seq and qstring
+    if (chunks.size() == 1) {
+        // shorten the sequence, qstring & moves where the read is shorter than chunksize
+        const int last_index_in_moves_to_keep = int(len_raw_signal / model_stride);
+        moves = std::vector<uint8_t>(moves.begin(), moves.begin() + last_index_in_moves_to_keep);
+        const int end = std::reduce(moves.begin(), moves.end(), 0);
+        sequences.push_back(last_chunk.seq.substr(start_pos, end));
+        qstrings.push_back(last_chunk.qstring.substr(start_pos, end));
+    } else {
+        sequences.push_back(last_chunk.seq.substr(start_pos));
+        qstrings.push_back(last_chunk.qstring.substr(start_pos));
+    }
+
+    // set the read seq and qstring
     sequence = std::accumulate(sequences.begin(), sequences.end(), std::string(""));
     qstring = std::accumulate(qstrings.begin(), qstrings.end(), std::string(""));
+
+    if (static_cast<int>(moves.size()) > static_cast<int>(len_raw_signal / model_stride)) {
+        if (moves.back() == 1) {
+            sequence.pop_back();
+            qstring.pop_back();
+        }
+        moves.pop_back();
+        assert(size_t(std::reduce(moves.begin(), moves.end(), 0)) == sequence.size());
+    }
 }
 
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors) {

@@ -51,10 +51,8 @@ SOFTWARE.
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
-void init_chunk_db(db_t *db);
-void free_chunk_db(db_t *db);
 void preprocess_signal(core_t* core, db_t* db, int32_t i);
-void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring);
+void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -131,9 +129,11 @@ db_t* init_db(core_t* core) {
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
 
-    init_chunk_db(db);
     db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
     db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
+    db->read_dats = new std::vector<read_dat_t *>(db->capacity_rec, NULL);
+    db->basecall_chunks = new std::vector<std::vector<basecall_chunk_t>>(db->capacity_rec, std::vector<basecall_chunk_t>());
+    db->moves = new std::vector<std::vector<uint8_t>>(db->capacity_rec, std::vector<uint8_t>());
 
     db->total_reads = 0;
     db->sum_bytes = 0;
@@ -195,11 +195,15 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     if (len_raw_signal > 0) {
         std::string sequence;
         std::string qstring;
-        stitch_chunks(db->chunk_db, i, sequence, qstring);
+        std::vector<uint8_t> moves;
+
+        stitch_chunks(db, i, sequence, qstring, moves, len_raw_signal, core->model_stride);
         
         if (is_rna(core->model_config->sample_type)) {
             std::reverse(sequence.begin(), sequence.end());
             std::reverse(qstring.begin(), qstring.end());
+            std::reverse(moves.begin(), moves.end());
+            (*db->moves)[i] = std::move(moves);
         }
 
         (*db->sequence)[i] = strdup(sequence.c_str());
@@ -267,6 +271,9 @@ void free_db_tmp(db_t* db) {
         free(db->mem_records[i]);
         free((*db->sequence)[i]);
         free((*db->qstring)[i]);
+        (*db->moves)[i].clear();
+        delete (*db->read_dats)[i];
+        (*db->basecall_chunks)[i].clear();
     }
 }
 
@@ -283,7 +290,9 @@ void free_db(db_t* db) {
     free(db->means);
     delete db->sequence;
     delete db->qstring;
-    free_chunk_db(db);
+    delete db->moves;
+    delete db->basecall_chunks;
+    delete db->read_dats;
     free(db);
 }
 
