@@ -54,13 +54,14 @@ static struct option long_options[] = {
     {"debug-break", required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
     {"profile-cpu", required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
     {"accel",required_argument, 0, 0},              //9 accelerator //not used, can be reused for something elese
-    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
+    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [10000]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
     {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
     {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
     {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
     {"flash", required_argument, 0, 0},             //16 toggles flash attention when possible
+    {"mod", required_argument, 0, 0},               //17 detect modified bases
     {0, 0, 0, 0}};
 
 
@@ -84,12 +85,13 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
-    // fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
+    fprintf(fp_help, "  --emit-sam=yes|no           emits sam output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 }
 
 int basecaller_main(int argc, char* argv[]) {
     double realtime0 = realtime();
+    double a, b;
 
     const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";
 
@@ -168,6 +170,8 @@ int basecaller_main(int argc, char* argv[]) {
             yes_or_no(&opt.flag, SLORADO_ESM, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 16) { // flash attention
             yes_or_no(&opt.flag, SLORADO_FLS, long_options[longindex].name, optarg, 1);
+        } else if (c == 0 && longindex == 17) { // flash attention
+            opt.mod = optarg;
         }
     }
 
@@ -255,7 +259,10 @@ int basecaller_main(int argc, char* argv[]) {
         output_db(core, db);
 
         // free temporary
+        a = realtime();
         free_db_tmp(db);
+        b = realtime();
+        core->time_free_db += b-a;
 
         if (opt.debug_break == counter) {
             break;
@@ -264,7 +271,10 @@ int basecaller_main(int argc, char* argv[]) {
     }
 
     // free the databatch
+    a = realtime();
     free_db(db);
+    b = realtime();
+    core->time_free_db += b-a;
 
     fprintf(stderr, "[%s] total entries: %ld", __func__, (long)core->total_reads);
     fprintf(stderr, "\n[%s] total bytes: %.1f M", __func__, core->sum_bytes/(float)(1000*1000));
@@ -279,7 +289,11 @@ int basecaller_main(int argc, char* argv[]) {
 
     auto runner_stats = *core->runner_stats;
     for (size_t i = 0; i < runner_stats.size(); ++i) {
-        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_stats[i]->time_basecall + runner_stats[i]->time_accept);
+        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i,
+            runner_stats[i]->time_basecall +
+            runner_stats[i]->time_accept +
+            runner_stats[i]->time_modcall
+        );
         fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_stats[i]->time_accept);
         fprintf(stderr, "\n[%s]             - basecall: %.3f sec", __func__, runner_stats[i]->time_basecall);
         fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_stats[i]->time_infer);
@@ -307,10 +321,14 @@ int basecaller_main(int argc, char* argv[]) {
             // fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
         }
         fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
+        fprintf(stderr, "\n[%s]             - modcall: %.3f sec", __func__, runner_stats[i]->time_modcall);
         // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
     }
     fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
+    fprintf(stderr, "\n[%s]     - mod_preprocess: %.3f sec", __func__, core->time_preproc_mod);
+    fprintf(stderr, "\n[%s]     - mod_postprocess: %.3f sec", __func__, core->time_postproc_mod);
     fprintf(stderr, "\n[%s] data output: %.3f sec", __func__, core->time_output);
+    fprintf(stderr, "\n[%s] data free: %.3f sec", __func__, core->time_free_db);
     fprintf(stderr,"\n");
 
     // free the core data structure
