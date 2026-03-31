@@ -64,7 +64,7 @@ std::pair<float, float> med_mad(torch::Tensor &x, float factor=1.4826){
     torch::Tensor med = x.median();
     torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
 
-    return {med.item<float>(), mad.item<float>()};
+    return std::make_pair(med.item<float>(), mad.item<float>());
 }
 
 int determine_rna_adapter_pos(torch::Tensor &signal) {

@@ -165,7 +165,7 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 14) { // emit fastq
-            yes_or_no(&opt.flag, SLORADO_EFQ, long_options[longindex].name, optarg, 1);
+            yes_or_no(&opt.flag, SLORADO_ESM, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 16) { // flash attention
             yes_or_no(&opt.flag, SLORADO_FLS, long_options[longindex].name, optarg, 1);
         }

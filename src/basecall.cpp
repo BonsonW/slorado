@@ -270,3 +270,7 @@ void basecall_db(core_t* core, db_t* db) {
 
     core->time_sync += time_sync;
 }
+
+void mod_basecall_db(core_t* core, db_t* db) {
+
+}

@@ -50,11 +50,13 @@ SOFTWARE.
 
 #define SLORADO_PRF 0x001 // cpu-profile mode
 #define SLORADO_ACC 0x002 // accelerator enable
-#define SLORADO_EFQ 0x004 // emit fastq enable
+#define SLORADO_ESM 0x004 // emit sam enable
 #define SLORADO_FLS 0x008 // flash attention enable
 
 #define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 // stealing threshold
+
+#define NUM_BASES (4)
 
 /* user specified options */
 typedef struct {
@@ -72,6 +74,8 @@ typedef struct {
     const char *device;         // specified device: x
     size_t chunk_size;          // size of chunks: c
     int32_t overlap;            // overlap: p
+
+    const char *mod;         // specified modbase: x
 } opt_t;
 
 typedef struct read_dat read_dat_t;
@@ -89,6 +93,22 @@ struct basecall_chunk {
     read_dat_t *read_dat;
 };
 
+// result + metadata of a modbase chunk
+struct mod_chunk {
+    read_dat_t *read_dat;
+
+    int model_id;
+    int base_id;
+
+    size_t signal_offset;   // starting offset of the preprocessed signal
+    size_t hit_offset;      // starting offset of the context hits
+
+    int64_t num_states;   // number of states predicted by the modbase model `num_mods + 1`
+    
+    std::vector<float> scores;  // model predictions for this chunk arranged in `[canonical, mod1, .., modN, canonical, mod1, ..]`
+};
+typedef struct mod_chunk mod_chunk_t;
+
 typedef struct basecall_chunk basecall_chunk_t;
 
 /* a batch of read data (dynamic data based on the reads) */
@@ -103,11 +123,19 @@ typedef struct {
 
     double *means;
 
+    // intermediate data
+    std::vector<std::vector<basecall_chunk_t>> *basecall_chunks;
+    std::vector<std::vector<mod_chunk_t>> *mod_chunks;
+    std::vector<read_dat_t *> *read_dats;
+
+    // basecall results
     std::vector<char *> *sequence;
     std::vector<char *> *qstring;
     std::vector<std::vector<uint8_t>> *moves;
-    std::vector<std::vector<basecall_chunk_t>> *basecall_chunks;
-    std::vector<read_dat_t *> *read_dats;
+
+    // modcall results
+    std::vector<char *> *mod_string;
+    std::vector<std::vector<uint8_t>> *mod_prob;
 
     // stats
     int64_t sum_bytes;
@@ -145,6 +173,7 @@ typedef struct {
     double time_basecall;
     double time_infer;
     double time_decode;
+    double time_modcall;
 
     void *model_stats;
 
@@ -162,12 +191,15 @@ typedef struct {
     opt_t opt;
     openfish_opt_t decoder_opts;
     CRFModelConfig *model_config;
+    ModBaseModelConfig *modbase_config = NULL;
+    ModBaseInfo *modbase_info = NULL;
     size_t model_stride;
     size_t chunk_size;
 
     // create model runner
     // only one per GPU is used for now
     std::vector<runner_t *> *runners;
+    std::vector<runner_t *> *mod_runners;
 
     // realtime0
     double realtime0;
@@ -176,11 +208,14 @@ typedef struct {
     double time_init_runners;
     double time_load_db;
     double time_process_db;
+    double time_free_db;
     double time_parse;
     double time_preproc;
     double time_runners;
     double time_sync;
     double time_postproc;
+    double time_preproc_mod;
+    double time_postproc_mod;
     double time_output;
 
     // stats for each runner

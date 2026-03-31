@@ -251,3 +251,113 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         (*db->basecall_chunks)[i] = chunks;
     }
 }
+
+void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
+
+}
+
+// static bool validate_bam_tag_code(const std::string& bam_name) {
+//     // Check the supplied bam_name is a single character
+//     if (bam_name.size() == 1 && std::isalpha(static_cast<unsigned char>(bam_name[0]))) {
+//         return true;
+//     }
+
+//     // Check the supplied bam_name is a simple integer and if so, assume it's a CHEBI code.
+//     if (std::all_of(bam_name.begin(), bam_name.end(),
+//                     [](const char& c) { return std::isdigit(static_cast<unsigned char>(c)); })) {
+//         return true;
+//     }
+//     return false;
+// }
+
+void postprocess_modbase(core_t *core, db_t *db, int32_t i) {
+    slow5_rec_t *rec = db->slow5_rec[i];
+    uint64_t len_raw_signal = rec->len_raw_signal;
+
+    if (len_raw_signal <= 0) { return; }
+
+    const auto threshold_float = 0.05f;
+    const auto threshold = static_cast<uint8_t>(std::min(threshold_float * 256.0f, 255.0f));
+
+    const size_t num_channels = core->modbase_info->alphabet.size();
+    const std::string cardinal_bases = "ACGT";
+    read_dat_t *read_dat = (*db->read_dats)[i];
+    char *seq = read_dat->seq;
+    const auto seqlen = strlen(seq);
+
+    if (seqlen * num_channels != read_dat->base_mod_probs.size()) {
+        ERROR("%s", "Mismatch between base_mod_probs size and sequence length * num channels in modbase_alphabet!");
+    }
+
+    std::string modbase_string = "";
+    std::vector<uint8_t> modbase_prob;
+
+    // Duplex doesn't retain the mask, and tests may not have it set.
+    const bool need_to_generate_mask = read_dat->base_mod_simplex_motif_hits.empty();
+
+    // Create a mask indicating which bases are modified.
+    std::bitset<256> base_has_context{};
+
+    ModBaseContext context_handler;
+    context_handler.set_context(core->modbase_config->mods.motif, size_t(core->modbase_config->mods.motif_offset));
+    std::string context = context_handler.encode();
+    // ERROR("%s", context.c_str());
+    // exit(1);
+
+    if (!context.empty()) {
+        if (!context_handler.decode(context, need_to_generate_mask)) {
+            ERROR("%s", "Invalid base modification context string.");
+            exit(1);
+        }
+        for (auto base : cardinal_bases) {
+            if (context_handler.motif(base).size() > 1) {
+                // If the context is just the single base, then this is equivalent to no context.
+                base_has_context[base] = true;
+            }
+        }
+    } else { // this is something i added, not in dorado
+        ERROR("%s", "Modbase context not found.");
+        exit(1);
+    }
+
+    auto modbase_mask = need_to_generate_mask ? context_handler.get_sequence_mask(seq, strlen(seq)) : read_dat->base_mod_simplex_motif_hits;
+    context_handler.update_mask(modbase_mask, seq, core->modbase_info->alphabet, read_dat->base_mod_probs, threshold);
+
+    // // Iterate over the provided alphabet and find all the channels we need to write out
+    // char current_cardinal = 0;
+    // for (size_t channel_idx = 0; channel_idx < num_channels; channel_idx++) {
+    //     if (cardinal_bases.find(core->modbase_info->alphabet[channel_idx]) != std::string::npos) {
+    //         // A cardinal base
+    //         current_cardinal = core->modbase_info->alphabet[channel_idx][0];
+    //     } else {
+    //         // A modification on the previous cardinal base
+    //         std::string bam_name = core->modbase_info->alphabet[channel_idx];
+    //         // if (!validate_bam_tag_code(bam_name)) {
+    //         //     return;
+    //         // }
+
+    //         // Write out the results we found
+    //         modbase_string += std::string(1, current_cardinal) + "+" + bam_name;
+    //         modbase_string += base_has_context.test(static_cast<uint8_t>(current_cardinal)) ? "?" : ".";
+    //         int skipped_bases = 0;
+    //         for (size_t base_idx = 0; base_idx < seqlen; base_idx++) {
+    //             if (seq[base_idx] == current_cardinal) {
+    //                 if (modbase_mask[base_idx]) {
+    //                     modbase_string += "," + std::to_string(skipped_bases);
+    //                     skipped_bases = 0;
+    //                     modbase_prob.push_back(read_dat->base_mod_probs[base_idx * num_channels + channel_idx]);
+    //                 } else {
+    //                     // Skip this base
+    //                     skipped_bases++;
+    //                 }
+    //             }
+    //         }
+    //         modbase_string += ";";
+    //     }
+    // }
+
+    // (*db->mod_string)[i] = strdup(modbase_string.c_str());
+    // assert((*db->mod_string)[i] != NULL);
+
+    // (*db->mod_prob)[i] = std::move(modbase_prob);
+}

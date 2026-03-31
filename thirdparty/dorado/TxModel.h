@@ -1,6 +1,5 @@
 #pragma once
 
-#include "model_config.h"
 #include "CRFModel.h"
 #include "error.h"
 #include "misc.h"
