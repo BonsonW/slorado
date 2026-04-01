@@ -100,7 +100,7 @@ inline void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float
     constexpr std::size_t elem_size = 2;
     constexpr std::size_t elems_per_block = kFloatsPerRegister * kUnrollFactor;
 
-    std::int16_t* data = static_cast<std::int16_t*>(tensor.mutable_data_ptr());
+    std::int16_t* data = tensor.data_ptr<std::int16_t>();
     const std::size_t size = tensor.numel();
 
     const FloatRegister shift_f32 = simd_load1_f32(&shift);
@@ -142,7 +142,7 @@ inline void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float
     constexpr std::size_t elem_size = 2;
     constexpr std::size_t elems_per_block = kFloatsPerRegister * kUnrollFactor;
 
-    std::int16_t* data = static_cast<std::int16_t*>(tensor.mutable_data_ptr());
+    std::int16_t* data = tensor.data_ptr<std::int16_t>();
     const std::size_t size = tensor.numel();
 
     const FloatRegister shift_f32 = simd_load1_f32(&shift);
