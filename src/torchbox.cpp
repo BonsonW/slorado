@@ -295,7 +295,7 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
 void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
     slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
-    double a, b;
+    // double a, b;
 
     (*db->mod_chunks)[i].clear();
     if (len_raw_signal > 0) {
@@ -309,7 +309,8 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
             hits.clear();
         }
 
-        char *seq = (*db->sequence)[i];
+        const char *seq = (*db->sequence)[i].c_str();
+        char *seq_mut = const_cast<char*>(seq);
         read_dat->seq = seq;
 
         std::vector<uint8_t> &moves = (*db->moves)[i];
@@ -324,7 +325,7 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
         LOG_TRACE("%s", "initialise_base_mod_probs");
 
         // a = realtime();
-        initialise_base_mod_probs(core, read_dat, seq);
+        initialise_base_mod_probs(core, read_dat, seq_mut);
         // b = realtime();
         // if (core->opt.num_thread == 1) core->time_init_base_mod_probs += (b-a);
 
@@ -337,7 +338,7 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
 
         LOG_TRACE("%s", "populate_hits_seq");
 
-        if (!populate_hits_seq(core, read_dat, seq)) {
+        if (!populate_hits_seq(core, read_dat, seq_mut)) {
             // WARNING("%s", "coud not populate hits sequence, not an error");
             return;
         }
@@ -418,7 +419,8 @@ void postprocess_modbase(core_t *core, db_t *db, int32_t i) {
     const size_t num_channels = core->modbase_info->alphabet.size();
     const std::string cardinal_bases = "ACGT";
     read_dat_t *read_dat = (*db->read_dats)[i];
-    char *seq = read_dat->seq;
+    const char *seq = read_dat->seq;
+    char *seq_mut = const_cast<char*>(seq);
     const auto seqlen = strlen(seq);
 
     if (seqlen * num_channels != read_dat->base_mod_probs.size()) {
@@ -456,7 +458,7 @@ void postprocess_modbase(core_t *core, db_t *db, int32_t i) {
         exit(1);
     }
 
-    auto modbase_mask = need_to_generate_mask ? context_handler.get_sequence_mask(seq, strlen(seq)) : read_dat->base_mod_simplex_motif_hits;
+    auto modbase_mask = need_to_generate_mask ? context_handler.get_sequence_mask(seq_mut, strlen(seq)) : read_dat->base_mod_simplex_motif_hits;
     context_handler.update_mask(modbase_mask, seq, core->modbase_info->alphabet, read_dat->base_mod_probs, threshold);
 
     // Iterate over the provided alphabet and find all the channels we need to write out
@@ -492,11 +494,6 @@ void postprocess_modbase(core_t *core, db_t *db, int32_t i) {
         }
     }
 
-    const size_t mod_str_len = modbase_string.size() + 1;
-    char* mod_str = static_cast<char*>(realloc((*db->mod_string)[i], mod_str_len));
-    MALLOC_CHK(mod_str);
-    std::memcpy(mod_str, modbase_string.c_str(), mod_str_len);
-    (*db->mod_string)[i] = mod_str;
-
+    (*db->mod_string)[i] = std::move(modbase_string);
     (*db->mod_prob)[i] = std::move(modbase_prob);
 }

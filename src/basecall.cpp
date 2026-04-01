@@ -320,7 +320,7 @@ static void mod_call_chunks(
         // The number of states predicted by this modbase model `num_mods + 1`
         const int64_t scores_states = chunk->num_states;
         const int64_t scores_size = static_cast<int64_t>(chunk->scores.size());
-        const int64_t scores_seq_len = scores_size / scores_states;
+        // const int64_t scores_seq_len = scores_size / scores_states;
 
         const int64_t base_offset = static_cast<int64_t>(core->modbase_info->base_probs_offsets.at(cfg->mods.base_id));
         const auto num_states = NUM_BASES + cfg->mods.count;

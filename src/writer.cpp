@@ -40,7 +40,7 @@ SOFTWARE.
 #include "error.h"
 #include "writer.h"
 
-void write_to_file_fastq(FILE *out, char *sequence, char *qstring, char *read_id) {
+void write_to_file_fastq(FILE *out, const char *sequence, const char *qstring, const char *read_id) {
     ASSERT(strlen(sequence) == strlen(qstring));
 
     int ret = fprintf(out, "@%s\n%s\n+\n%s\n", read_id, sequence, qstring);
@@ -63,7 +63,7 @@ static std::string mod_prob_to_str(const std::vector<uint8_t>& ml) {
     return s;
 }
 
-void write_to_file_sam(FILE *out, char *sequence, char *qstring, char *read_id, char *mod_string, std::vector<uint8_t> &mod_prob) {
+void write_to_file_sam(FILE *out, const char *sequence, const char *qstring, const char *read_id, const char *mod_string, std::vector<uint8_t> &mod_prob) {
     ASSERT(strlen(sequence) == strlen(qstring));
 
     int flags = 4; // unmapped

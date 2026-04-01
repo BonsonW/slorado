@@ -129,12 +129,12 @@ typedef struct {
     std::vector<read_dat_t *> *read_dats;
 
     // basecall results
-    std::vector<char *> *sequence;
-    std::vector<char *> *qstring;
+    std::vector<std::string> *sequence;
+    std::vector<std::string> *qstring;
     std::vector<std::vector<uint8_t>> *moves;
 
     // modcall results
-    std::vector<char *> *mod_string;
+    std::vector<std::string> *mod_string;
     std::vector<std::vector<uint8_t>> *mod_prob;
 
     // stats

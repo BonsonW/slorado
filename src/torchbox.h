@@ -10,7 +10,7 @@ struct read_dat {
     torch::Tensor scaled_signal;
 
     // mod data
-    char *seq;
+    const char *seq;
 
     std::vector<int8_t> encoded_kmers;
     std::array<std::vector<int64_t>, 4> per_base_hits_seq; // sequence indices for hits for each base (i.e. one per model)

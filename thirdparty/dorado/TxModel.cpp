@@ -251,7 +251,6 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const int64_t C = x.size(2);
 
     double a, b;
-    auto device_idx = options.device_index();
     
     a = realtime();
     auto qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
@@ -442,9 +441,9 @@ TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOption
 torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
     torch::Tensor h;
     double a, b;
-    auto device_idx = m_options.device_index();
 
 #ifdef USE_GPU
+    auto device_idx = m_options.device_index();
 #ifdef HAVE_CUDA
     c10::cuda::CUDAGuard device_guard(device_idx);
 #endif

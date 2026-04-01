@@ -9,7 +9,7 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I thirdparty/tomlc99/ \
 			-I openfish/include
 CFLAGS	+= 	-g -Wall -O2
-CXXFLAGS   += -g -Wall -O2  -std=c++17
+CXXFLAGS   += -g -Wall -O2 -std=c++17
 DEPFLAGS = -MMD -MP -MF $(@:.o=.d)
 LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../lib' \
 			-Wl,-rpath,$(LIBTORCH_DIR)/lib \

@@ -58,14 +58,6 @@ void free_read_dat(read_dat_t *read_dat);
 void preprocess_modbase(core_t *core, db_t *db, int32_t i);
 void postprocess_modbase(core_t *core, db_t *db, int32_t i);
 
-static inline void assign_cstr_buffer(char*& dst, const std::string& src) {
-    const size_t n = src.size() + 1;
-    char* resized = static_cast<char*>(realloc(dst, n));
-    MALLOC_CHK(resized);
-    memcpy(resized, src.c_str(), n);
-    dst = resized;
-}
-
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)calloc(1, sizeof(core_t));
@@ -162,14 +154,14 @@ db_t* init_db(core_t* core) {
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
 
-    db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
-    db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
+    db->sequence = new std::vector<std::string>(db->capacity_rec);
+    db->qstring = new std::vector<std::string>(db->capacity_rec);
     db->read_dats = new std::vector<read_dat_t *>(db->capacity_rec, NULL);
     db->basecall_chunks = new std::vector<std::vector<basecall_chunk_t>>(db->capacity_rec, std::vector<basecall_chunk_t>());
     db->mod_chunks = new std::vector<std::vector<mod_chunk_t>>(db->capacity_rec, std::vector<mod_chunk_t>());
     db->moves = new std::vector<std::vector<uint8_t>>(db->capacity_rec, std::vector<uint8_t>());
 
-    db->mod_string = new std::vector<char *>(db->capacity_rec, NULL);
+    db->mod_string = new std::vector<std::string>(db->capacity_rec);
     db->mod_prob = new std::vector<std::vector<uint8_t>>(db->capacity_rec, std::vector<uint8_t>());
 
     db->total_reads = 0;
@@ -230,9 +222,12 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     uint64_t len_raw_signal = rec->len_raw_signal;
 
     if (len_raw_signal > 0) {
-        std::string sequence;
-        std::string qstring;
-        std::vector<uint8_t> moves;
+        auto& sequence = (*db->sequence)[i];
+        sequence.clear();
+        auto& qstring = (*db->qstring)[i];
+        qstring.clear();
+        auto& moves = (*db->moves)[i];
+        moves.clear();
 
         stitch_chunks(db, i, sequence, qstring, moves, len_raw_signal, core->model_stride);
         
@@ -242,10 +237,6 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
             std::reverse(moves.begin(), moves.end()); // might not need this, no idea
         }
 
-        assign_cstr_buffer((*db->sequence)[i], sequence);
-        assign_cstr_buffer((*db->qstring)[i], qstring);
-
-        (*db->moves)[i] = std::move(moves);
     }
 }
 
@@ -309,9 +300,9 @@ void output_db(core_t* core, db_t* db) {
     for (i = 0; i < db->n_rec; i++) {
         if (db->slow5_rec[i]->len_raw_signal > 0) {
             if ((core->opt.flag & SLORADO_SAM) != 0) {
-                write_to_file_sam(core->opt.out, (*db->sequence)[i], (*db->qstring)[i], db->slow5_rec[i]->read_id, (*db->mod_string)[i], (*db->mod_prob)[i]);
+                write_to_file_sam(core->opt.out, (*db->sequence)[i].c_str(), (*db->qstring)[i].c_str(), db->slow5_rec[i]->read_id, (*db->mod_string)[i].c_str(), (*db->mod_prob)[i]);
             } else {
-                write_to_file_fastq(core->opt.out, (*db->sequence)[i], (*db->qstring)[i], db->slow5_rec[i]->read_id);
+                write_to_file_fastq(core->opt.out, (*db->sequence)[i].c_str(), (*db->qstring)[i].c_str(), db->slow5_rec[i]->read_id);
             }
         }
     }
@@ -338,9 +329,6 @@ void free_db(db_t* db) {
     LOG_DEBUG("%s", "freeing db");
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
-        free((*db->sequence)[i]);
-        free((*db->qstring)[i]);
-        free((*db->mod_string)[i]);
         free_read_dat((*db->read_dats)[i]);
         slow5_rec_free(db->slow5_rec[i]);
     }
