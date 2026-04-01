@@ -57,6 +57,14 @@ void free_read_dat(read_dat_t *read_dat);
 void preprocess_modbase(core_t *core, db_t *db, int32_t i);
 void postprocess_modbase(core_t *core, db_t *db, int32_t i);
 
+static inline void assign_cstr_buffer(char*& dst, const std::string& src) {
+    const size_t n = src.size() + 1;
+    char* resized = static_cast<char*>(realloc(dst, n));
+    MALLOC_CHK(resized);
+    memcpy(resized, src.c_str(), n);
+    dst = resized;
+}
+
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)calloc(1, sizeof(core_t));
@@ -230,11 +238,8 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
             std::reverse(moves.begin(), moves.end()); // might not need this, no idea
         }
 
-        (*db->sequence)[i] = strdup(sequence.c_str());
-        assert((*db->sequence)[i] != NULL);
-
-        (*db->qstring)[i] = strdup(qstring.c_str());
-        assert((*db->qstring)[i] != NULL);
+        assign_cstr_buffer((*db->sequence)[i], sequence);
+        assign_cstr_buffer((*db->qstring)[i], qstring);
 
         (*db->moves)[i] = std::move(moves);
     }
@@ -242,10 +247,11 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
 
 void process_db(core_t* core, db_t* db) {
     double proc_start = realtime();
+    double a, b;
 
-    double a = realtime();
+    a = realtime();
     work_db(core, db, parse_single);
-    double b = realtime();
+    b = realtime();
     core->time_parse += (b - a);
     LOG_DEBUG("%s", "parsed reads");
 
@@ -319,11 +325,7 @@ void free_db_tmp(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->n_rec; ++i) {
         free(db->mem_records[i]);
-        free((*db->sequence)[i]);
-        free((*db->qstring)[i]);
-        std::vector<uint8_t>().swap((*db->moves)[i]);
-        free((*db->mod_string)[i]);
-        std::vector<uint8_t>().swap((*db->mod_prob)[i]);
+        db->mem_records[i] = NULL;
     }
 }
 
@@ -332,6 +334,9 @@ void free_db(db_t* db) {
     LOG_DEBUG("%s", "freeing db");
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
+        free((*db->sequence)[i]);
+        free((*db->qstring)[i]);
+        free((*db->mod_string)[i]);
         free_read_dat((*db->read_dats)[i]);
         slow5_rec_free(db->slow5_rec[i]);
     }
@@ -353,9 +358,9 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 2000;
-    opt->gpu_batch_size = 500;
-    opt->batch_size_bytes = 500*1000*1000;
+    opt->batch_size = 4000;
+    opt->gpu_batch_size = 512;
+    opt->batch_size_bytes = 256*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;

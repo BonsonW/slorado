@@ -218,6 +218,15 @@ typedef struct {
     double time_postproc_mod;
     double time_output;
 
+    double time_tens_from_rec;
+    double time_init_base_mod_probs;
+    double time_seq_to_sig_map;
+    double time_seq_to_ints;
+    double time_populate_hits_sig;
+    double time_populate_signal;
+    double time_get_minimal_encoding_skips;
+    double time_populate_encoded_kmer;
+
     // stats for each runner
     std::vector<runner_stat_t *> *runner_stats;
 

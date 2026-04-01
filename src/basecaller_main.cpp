@@ -45,7 +45,7 @@ SOFTWARE.
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
-    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
+    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [4000]
     {"max-bytes", required_argument, 0, 'B'},       //2 batchsize - number of bytes loaded at once
     {"verbose", required_argument, 0, 'v'},         //3 verbosity level [1]
     {"help", no_argument, 0, 'h'},                  //4
@@ -54,11 +54,11 @@ static struct option long_options[] = {
     {"debug-break", required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
     {"profile-cpu", required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
     {"accel",required_argument, 0, 0},              //9 accelerator //not used, can be reused for something elese
-    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [10000]
+    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [12288]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
     {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
-    {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
+    {"emit-sam", no_argument, 0, 0},                //14 toggles emit sam
     {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
     {"flash", required_argument, 0, 0},             //16 toggles flash attention when possible
     {"mod", required_argument, 0, 0},               //17 detect modified bases
@@ -85,7 +85,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
-    fprintf(fp_help, "  --emit-sam=yes|no           emits sam output format\n");
+    fprintf(fp_help, "  --emit-sam                  emits sam output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 }
 
@@ -167,7 +167,7 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 14) { // emit fastq
-            yes_or_no(&opt.flag, SLORADO_ESM, long_options[longindex].name, optarg, 1);
+            opt.flag |= SLORADO_ESM;
         } else if (c == 0 && longindex == 16) { // flash attention
             yes_or_no(&opt.flag, SLORADO_FLS, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 17) { // flash attention
@@ -223,7 +223,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
     fprintf(stderr,"device:             %s\n", opt.device);
     fprintf(stderr,"chunk size:         %zu\n", opt.chunk_size);
-    fprintf(stderr,"batch size:         %d\n", opt.batch_size);
+    fprintf(stderr,"read batch size:    %d\n", opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
@@ -326,6 +326,12 @@ int basecaller_main(int argc, char* argv[]) {
     }
     fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
     fprintf(stderr, "\n[%s]     - mod_preprocess: %.3f sec", __func__, core->time_preproc_mod);
+    fprintf(stderr, "\n[%s]         - seq_to_sig_map: %.3f sec", __func__, core->time_seq_to_sig_map);
+    fprintf(stderr, "\n[%s]         - seq_to_ints: %.3f sec", __func__, core->time_seq_to_ints);
+    fprintf(stderr, "\n[%s]         - populate_hits_sig: %.3f sec", __func__, core->time_populate_hits_sig);
+    fprintf(stderr, "\n[%s]         - populate_signal: %.3f sec", __func__, core->time_populate_signal);
+    fprintf(stderr, "\n[%s]         - get_minimal_encoding_skips: %.3f sec", __func__, core->time_get_minimal_encoding_skips);
+    fprintf(stderr, "\n[%s]         - populate_encoded_kmer: %.3f sec", __func__, core->time_populate_encoded_kmer);
     fprintf(stderr, "\n[%s]     - mod_postprocess: %.3f sec", __func__, core->time_postproc_mod);
     fprintf(stderr, "\n[%s] data output: %.3f sec", __func__, core->time_output);
     fprintf(stderr, "\n[%s] data free: %.3f sec", __func__, core->time_free_db);

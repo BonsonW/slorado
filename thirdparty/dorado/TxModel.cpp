@@ -677,9 +677,9 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
     model->eval();
 
     if (use_flash) {
-        fprintf(stderr, "%s\n", "using flash");
+        INFO("%s", "flash attention enabled");
     } else {
-        fprintf(stderr, "%s\n", "not using flash attention");
+        INFO("%s", "flash attention disabled");
     }
 
     auto module = AnyModule(model);

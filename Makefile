@@ -45,6 +45,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/torchbox.o \
 	  $(BUILD_DIR)/basecall.o \
 	  $(BUILD_DIR)/tensor_chunk_utils.o \
+	  $(BUILD_DIR)/modbase.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/TxModel.o \
 	  $(BUILD_DIR)/ModBaseModel.o \
@@ -120,6 +121,9 @@ $(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h 
 
 # dorado
 $(BUILD_DIR)/tensor_chunk_utils.o: thirdparty/dorado/tensor_chunk_utils.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/modbase.o: thirdparty/dorado/modbase.cpp thirdparty/dorado/modbase.h src/error.h src/misc.h src/torchbox.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFModel.h src/error.h thirdparty/dorado/tensor_chunk_utils.h

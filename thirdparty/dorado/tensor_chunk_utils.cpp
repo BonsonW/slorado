@@ -8,6 +8,7 @@
 
 #include "error.h"
 #include "tensor_chunk_utils.h"
+#include "simd.h"
 
 #define EPS (1e-9f)
 #define DEFAULT_TRIM_THRESHOLD (2.4f)
@@ -155,14 +156,13 @@ void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offs
             scale = 1.f / scaling;
             shift = -1.f * offset;
         }
-        signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
-
+        shift_scale_tensor_i16_to_f16_inplace_impl(signal, shift, scale);
     } else {
         auto t1 = strategy == ScalingStrategy::QUANTILE ? normalisation(scaling_params.quantile, signal) : med_mad(signal);
         shift = std::get<0>(t1);
         scale = std::get<1>(t1);
 
-        signal = ((signal.to(torch::kFloat) - shift) / scale).to(torch::kFloat16);
+        shift_scale_tensor_i16_to_f16_inplace_impl(signal, shift, scale);
     }
 
     if (!is_rna_model) {
