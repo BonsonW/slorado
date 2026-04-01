@@ -8,6 +8,14 @@
 #define ENABLE_AVX2_IMPL 0
 #endif
 
+// GCC 5 can fail to emit function multiversion dispatchers for f16c targets.
+// Keep AVX2 includes enabled, but disable target("avx2,f16c") overloads there.
+#if ENABLE_AVX2_IMPL && defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 6)
+#define ENABLE_AVX2_FMV 0
+#else
+#define ENABLE_AVX2_FMV ENABLE_AVX2_IMPL
+#endif
+
 #if defined(__arm64__) || defined(__aarch64__)
 #define ENABLE_NEON_IMPL 1
 #include <arm_neon.h>
@@ -71,14 +79,14 @@ using Int16Register = __m128i;
 #endif
 
 #if !ENABLE_NEON_IMPL
-#if ENABLE_AVX2_IMPL
+#if ENABLE_AVX2_FMV
 [[maybe_unused]] __attribute__((target("default")))
 #endif
 inline void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
     tensor = tensor.to(at::ScalarType::Float).sub_(shift).div_(scale).to(at::ScalarType::Half);
 }
 
-#if ENABLE_AVX2_IMPL
+#if ENABLE_AVX2_FMV
 [[maybe_unused]] __attribute__((target("default")))
 #endif
 inline void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
@@ -86,12 +94,12 @@ inline void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float
 }
 #endif  // !ENABLE_NEON_IMPL
 
-#if ENABLE_AVX2_IMPL || ENABLE_NEON_IMPL
-#if ENABLE_AVX2_IMPL
+#if ENABLE_AVX2_FMV || ENABLE_NEON_IMPL
+#if ENABLE_AVX2_FMV
 [[maybe_unused]] __attribute__((target("avx2,f16c")))
 #endif
 inline void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
-#if ENABLE_AVX2_IMPL
+#if ENABLE_AVX2_FMV
     constexpr std::size_t kUnrollFactor = 4;
 #else
     constexpr std::size_t kUnrollFactor = 1;
@@ -129,11 +137,11 @@ inline void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float
     tensor = tensor.view(at::ScalarType::Half);
 }
 
-#if ENABLE_AVX2_IMPL
+#if ENABLE_AVX2_FMV
 [[maybe_unused]] __attribute__((target("avx2,f16c")))
 #endif
 inline void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
-#if ENABLE_AVX2_IMPL
+#if ENABLE_AVX2_FMV
     constexpr std::size_t kUnrollFactor = 4;
 #else
     constexpr std::size_t kUnrollFactor = 1;
@@ -170,4 +178,4 @@ inline void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float
 
     tensor = tensor.view(at::ScalarType::Half);
 }
-#endif  // ENABLE_AVX2_IMPL || ENABLE_NEON_IMPL
+#endif  // ENABLE_AVX2_FMV || ENABLE_NEON_IMPL
