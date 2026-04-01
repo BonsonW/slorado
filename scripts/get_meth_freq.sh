@@ -33,8 +33,6 @@ map "$BAM" "$GENOME" > "$BAM_MAP" || die "mapping failed"
 
 $SAMTOOLS index "$BAM_MAP" || die "indexing failed"
 
-rm $BAM_MAP
-
 # get meth freq
 if [[ "$OUT" == *.mm.bedmethyl ]]; then
 	$MINIMOD freq "$GENOME" "$BAM_MAP" -b > "$OUT" || die "mod freq failed"
@@ -43,3 +41,5 @@ elif [[ "$OUT" == *.mm.tsv ]]; then
 else
 	die "unsupported output suffix: '$OUT' (use .mm.tsv or .mm.bedmethyl)"
 fi
+
+rm $BAM_MAP
