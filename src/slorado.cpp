@@ -48,6 +48,7 @@ SOFTWARE.
 #include <unistd.h>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);

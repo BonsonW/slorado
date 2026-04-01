@@ -36,12 +36,22 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <unordered_set>
 
 #include <openfish/openfish_error.h>
 
 #include "slorado.h"
 #include "misc.h"
 #include "error.h"
+
+// add supported modbase models here
+static const std::unordered_set<std::string> supported = std::unordered_set<std::string>({
+    "5mCG_5hmCG@v3",
+});
+
+static inline bool is_modbase_supported(const char *mod) {
+    return supported.find(std::string(mod)) != supported.end();
+}
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
@@ -197,6 +207,15 @@ int basecaller_main(int argc, char* argv[]) {
     }
 
     model = argv[optind++];
+
+    if (opt.mod != NULL && !is_modbase_supported(opt.mod)) {
+        std::string error_msg = "unsupported modbase model \"" + std::string(opt.mod) + "\"curent supported modbase models are: ";
+        for (const auto &s : supported) {
+            error_msg += s + ", ";
+        }
+        ERROR("%s", error_msg.c_str());
+        exit(EXIT_FAILURE);
+    }
 
     if (model == NULL) {
         print_help_msg(fp_help, opt);
