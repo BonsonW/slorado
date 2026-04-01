@@ -8,9 +8,10 @@
 #define ENABLE_AVX2_IMPL 0
 #endif
 
-// GCC 5 can fail to emit function multiversion dispatchers for f16c targets.
-// Keep AVX2 includes enabled, but disable target("avx2,f16c") overloads there.
-#if ENABLE_AVX2_IMPL && defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 6)
+// GCC can fail to emit function multiversion dispatchers for f16c targets on
+// some distro/compiler combinations (for example Ubuntu18 + GCC7).
+// Keep AVX2 includes enabled, but disable target("avx2,f16c") overloads on GCC.
+#if ENABLE_AVX2_IMPL && defined(__GNUC__) && !defined(__clang__)
 #define ENABLE_AVX2_FMV 0
 #else
 #define ENABLE_AVX2_FMV ENABLE_AVX2_IMPL
