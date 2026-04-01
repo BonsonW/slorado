@@ -10,25 +10,28 @@ map() {
 	bam=$1
 	genome=$2
 
-	samtools fastq -@64 -TMM,ML "$bam" | minimap2 -t64 -x map-ont -a -y -Y --secondary=no "$genome" - | samtools sort -@64 -
+	$SAMTOOLS fastq -@64 -TMM,ML "$bam" | minimap2 -t64 -x map-ont -a -y -Y --secondary=no "$genome" - | $SAMTOOLS sort -@64 - 
 }
 
 if [ $# -lt 3 ]; then
 	die "Usage: $0 <reference genome> <fastq/sam/bam file> <output file>.mm.tsv|<output file>.mm.bedmethyl"
 fi
 
-SAMTOOLS=samtools # path to samtools
-MINIMOD=minimod # path to minimod
-
 GENOME=$1 # path to reference genome
 BAM=$2 # path to unmapped sam/bam output
 OUT=$3 # output file path
 
+test -z "$SAMTOOLS" && SAMTOOLS=samtools # path to samtools
+test -z "$MINIMOD" && MINIMOD=minimod # path to minimod
+
+$SAMTOOLS --version > /dev/null 2>&1 || die "samtools not found or not working"
+$MINIMOD --version > /dev/null 2>&1 || die "minimod not found or not working"
+
 BAM_MAP=mapped.sam # path to mapped bam output
 
-map "$BAM" "$GENOME" > "$BAM_MAP" | die "mapping failed"
+map "$BAM" "$GENOME" > "$BAM_MAP" || die "mapping failed"
 
-$SAMTOOLS index "$BAM_MAP" | die "indexing failed"
+$SAMTOOLS index "$BAM_MAP" || die "indexing failed"
 
 rm $BAM_MAP
 
