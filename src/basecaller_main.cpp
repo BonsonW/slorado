@@ -345,12 +345,12 @@ int basecaller_main(int argc, char* argv[]) {
     }
     fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
     fprintf(stderr, "\n[%s]     - mod_preprocess: %.3f sec", __func__, core->time_preproc_mod);
-    fprintf(stderr, "\n[%s]         - seq_to_sig_map: %.3f sec", __func__, core->time_seq_to_sig_map);
-    fprintf(stderr, "\n[%s]         - seq_to_ints: %.3f sec", __func__, core->time_seq_to_ints);
-    fprintf(stderr, "\n[%s]         - populate_hits_sig: %.3f sec", __func__, core->time_populate_hits_sig);
-    fprintf(stderr, "\n[%s]         - populate_signal: %.3f sec", __func__, core->time_populate_signal);
-    fprintf(stderr, "\n[%s]         - get_minimal_encoding_skips: %.3f sec", __func__, core->time_get_minimal_encoding_skips);
-    fprintf(stderr, "\n[%s]         - populate_encoded_kmer: %.3f sec", __func__, core->time_populate_encoded_kmer);
+    // fprintf(stderr, "\n[%s]         - seq_to_sig_map: %.3f sec", __func__, core->time_seq_to_sig_map);
+    // fprintf(stderr, "\n[%s]         - seq_to_ints: %.3f sec", __func__, core->time_seq_to_ints);
+    // fprintf(stderr, "\n[%s]         - populate_hits_sig: %.3f sec", __func__, core->time_populate_hits_sig);
+    // fprintf(stderr, "\n[%s]         - populate_signal: %.3f sec", __func__, core->time_populate_signal);
+    // fprintf(stderr, "\n[%s]         - get_minimal_encoding_skips: %.3f sec", __func__, core->time_get_minimal_encoding_skips);
+    // fprintf(stderr, "\n[%s]         - populate_encoded_kmer: %.3f sec", __func__, core->time_populate_encoded_kmer);
     fprintf(stderr, "\n[%s]     - mod_postprocess: %.3f sec", __func__, core->time_postproc_mod);
     fprintf(stderr, "\n[%s] data output: %.3f sec", __func__, core->time_output);
     fprintf(stderr, "\n[%s] data free: %.3f sec", __func__, core->time_free_db);
