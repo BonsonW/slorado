@@ -527,7 +527,7 @@ inline std::vector<int8_t> encode_kmer_chunk_generic(
 
 #if ENABLE_AVX2_IMPL
 [[maybe_unused]] __attribute__((target("avx2"))) void avx2_encode_kmer_len9(
-		std::byte* output_t_ptr,
+		uint8_t* output_t_ptr,
 		const std::vector<int>& seq,
 		const std::vector<uint64_t>& seq_mappings,
 		const std::vector<bool>& base_skips,
@@ -613,7 +613,7 @@ inline std::vector<int8_t> encode_kmer_chunk_generic(
 	const size_t output_size = kKmerBytes * total_samples;
 	const size_t padded_start = kKmerBytes * padding_samples;
 	std::vector<int8_t> output_t(output_size);
-	std::byte* output_t_ptr = reinterpret_cast<std::byte*>(&output_t[padded_start]);
+	uint8_t* output_t_ptr = reinterpret_cast<uint8_t*>(&output_t[padded_start]);
 
 	avx2_encode_kmer_len9(output_t_ptr, ext_seq, seq_mappings, base_skips, seq.size());
 	return output_t;
