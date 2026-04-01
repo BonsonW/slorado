@@ -48,10 +48,10 @@ SOFTWARE.
  * flags related to the user specified options (opt_t) *
  *******************************************************/
 
-#define SLORADO_PRF 0x001 // cpu-profile mode
-#define SLORADO_ACC 0x002 // accelerator enable
-#define SLORADO_ESM 0x004 // emit sam enable
-#define SLORADO_FLS 0x008 // flash attention enable
+#define SLORADO_PRF         0x001 // cpu-profile mode
+#define SLORADO_ACC         0x002 // accelerator enable
+#define SLORADO_SAM         0x004 // emit sam enable
+#define SLORADO_FLASH       0x008 // flash attention enable
 
 #define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 // stealing threshold

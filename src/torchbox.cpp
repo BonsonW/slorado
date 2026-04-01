@@ -49,66 +49,6 @@ SOFTWARE.
 #include <c10/hip/HIPGuard.h>
 #endif
 
-#if !ENABLE_NEON_IMPL  // We only need the SIMD implementation when we have Neon support.
-#if ENABLE_AVX2_IMPL
-[[maybe_unused]] __attribute__((target("default")))
-#endif
-static void convert_f32_to_f16_impl(c10::Half* const dest, const float* const src, std::size_t count) {
-    auto src_tensor_f32 = at::from_blob(const_cast<float*>(src), {static_cast<int64_t>(count)});
-    auto src_tensor_f16 = src_tensor_f32.to(at::ScalarType::Half);
-    std::memcpy(dest, src_tensor_f16.data_ptr(), count * sizeof(c10::Half));
-}
-#endif  // ENABLE_NEON_IMPL
-
-#if ENABLE_AVX2_IMPL || ENABLE_NEON_IMPL
-#if ENABLE_AVX2_IMPL
-// We have to specify f16c to have _mm256_cvtps_ph available, as strictly speaking it's a separate
-// feature from AVX2.  All relevant CPUs have it.
-[[maybe_unused]] __attribute__((target("avx2,f16c")))
-#endif
-static void convert_f32_to_f16_impl(c10::Half* const dest, const float* const src, std::size_t count) {
-    if (!count) {
-        return;
-    }
-
-#if ENABLE_AVX2_IMPL
-    // There seems to be no improvement by unrolling this (tested on pipelinedev).
-    static constexpr size_t kUnrollFactor = 1;
-#else
-    // An unroll factor of 2 gives ~30% improvement on Apple Silicon.
-    // Any higher unrolling shows no difference.
-    static constexpr size_t kUnrollFactor = 2;
-#endif
-
-    // Outer unroll.
-    static constexpr size_t kUnroll = kFloatsPerRegister * kUnrollFactor;
-
-    // Main vectorised loop.
-    const auto* src_ptr = src;
-    auto* dest_ptr = dest;
-    for (size_t chunk_i = 0; chunk_i < count / kUnroll; ++chunk_i) {
-        for (size_t unroll_i = 0; unroll_i < kUnrollFactor; ++unroll_i) {
-            const FloatRegister elems_f32 = simd_load_f32(src_ptr);
-            const HalfRegister elems_f16 = simd_convert_f32_f16(elems_f32);
-            simd_store_f16(dest_ptr, elems_f16);
-            src_ptr += kFloatsPerRegister;
-            dest_ptr += kFloatsPerRegister;
-        }
-    }
-
-    // Loop for final floats.
-    // TODO -- probably nicer to use masked loads/stores.
-    const size_t remaining_count = count % kUnroll;
-    for (size_t i = 0; i < remaining_count; ++i) {
-        const FloatRegister elem_f32 = simd_load1_f32(src_ptr);
-        const HalfRegister elem_f16 = simd_convert_f32_f16(elem_f32);
-        simd_store1_f16(dest_ptr, elem_f16);
-        ++src_ptr;
-        ++dest_ptr;
-    }
-}
-#endif  // ENABLE_AVX2_IMPL || ENABLE_NEON_IMPL
-
 void free_read_dat(read_dat_t *read_dat) {
     delete read_dat;
 }
@@ -190,7 +130,7 @@ void init_runner(
         if (core->model_config->tx != NULL) {
             LOG_TRACE("%s", "loading tx model");
             tx_stats_t *model_stats = init_tx_stats();
-            runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLS) != 0, core->opt.num_thread);
+            runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, core->opt.num_thread);
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         } else {
             LOG_TRACE("%s", "loading lstm model");

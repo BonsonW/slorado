@@ -80,7 +80,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
-    fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLS) ? "yes" : "no");
+    fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
@@ -167,9 +167,9 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 14) { // emit fastq
-            opt.flag |= SLORADO_ESM;
+            opt.flag |= SLORADO_SAM;
         } else if (c == 0 && longindex == 16) { // flash attention
-            yes_or_no(&opt.flag, SLORADO_FLS, long_options[longindex].name, optarg, 1);
+            yes_or_no(&opt.flag, SLORADO_FLASH, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 17) { // flash attention
             opt.mod = optarg;
         }

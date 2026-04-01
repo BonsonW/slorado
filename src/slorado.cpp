@@ -81,6 +81,9 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     // modbase stuff
     if (opt.mod != NULL) {
+        INFO("%s", "modification calling detected, output will be in SAM format");
+        core->opt.flag |= SLORADO_SAM;
+        
         LOG_TRACE("%s", "loading modbase configs...");
         auto modbase_config_path = std::string(model) + "_" + opt.mod;
         ModBaseModelConfig modbase_config = load_modbase_model_config(modbase_config_path.c_str());
@@ -304,7 +307,7 @@ void output_db(core_t* core, db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->n_rec; i++) {
         if (db->slow5_rec[i]->len_raw_signal > 0) {
-            if ((core->opt.flag & SLORADO_ESM) != 0) {
+            if ((core->opt.flag & SLORADO_SAM) != 0) {
                 write_to_file_sam(core->opt.out, (*db->sequence)[i], (*db->qstring)[i], db->slow5_rec[i]->read_id, (*db->mod_string)[i], (*db->mod_prob)[i]);
             } else {
                 write_to_file_fastq(core->opt.out, (*db->sequence)[i], (*db->qstring)[i], db->slow5_rec[i]->read_id);
@@ -378,5 +381,5 @@ void init_opt(opt_t* opt) {
 
     opt->mod = NULL;
 
-    // opt->flag |= SLORADO_ESM;
+    // opt->flag |= SLORADO_SAM;
 }
