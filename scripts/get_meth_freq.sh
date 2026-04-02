@@ -24,8 +24,8 @@ OUT=$3 # output file path
 test -z "$SAMTOOLS" && SAMTOOLS=samtools # path to samtools
 test -z "$MINIMOD" && MINIMOD=minimod # path to minimod
 
-$SAMTOOLS --version > /dev/null 2>&1 || die "samtools not found or not working"
-$MINIMOD --version > /dev/null 2>&1 || die "minimod not found or not working"
+$SAMTOOLS --version > /dev/null 2>&1 || die "samtools not found! Either put samtools under path or set SAMTOOLS variable, e.g.,export SAMTOOLS=/path/to/samtools"
+$MINIMOD --version > /dev/null 2>&1 || die "minimod not found! Either put minimod under path or set MINIMOD variable, e.g.,export MINIMOD=/path/to/minimod"
 
 BAM_MAP=mapped.sam # path to mapped bam output
 
