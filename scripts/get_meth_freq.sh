@@ -14,7 +14,7 @@ map() {
 }
 
 if [ $# -lt 3 ]; then
-	die "Usage: $0 <reference genome> <fastq/sam/bam file> <output file>.mm.tsv|<output file>.mm.bedmethyl"
+	die "Usage: $0 <reference genome>.fa <fastq/sam/bam file> <output file>.mm.tsv|<output file>.mm.bedmethyl"
 fi
 
 GENOME=$1 # path to reference genome
