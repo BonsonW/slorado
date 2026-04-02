@@ -55,7 +55,7 @@ static inline bool is_modbase_supported(const char *mod) {
 
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
-    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [4000]
+    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [4096]
     {"max-bytes", required_argument, 0, 'B'},       //2 batchsize - number of bytes loaded at once
     {"verbose", required_argument, 0, 'v'},         //3 verbosity level [1]
     {"help", no_argument, 0, 'h'},                  //4
