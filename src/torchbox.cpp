@@ -283,7 +283,14 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         }
         auto signal_norm_params = core->model_config->signal_norm_params;
 
-        read_dat->scaled_signal = tensor_from_record(rec);
+        // if we are doing modbase calling, we need to keep the original signal for the modbase preproc,
+        // so clone the tensor here to avoid in-place scaling modifying the original tensor.
+        // if not doing modbase calling, we can save memory by not cloning and just using the same tensor for scaling and basecalling.
+        if (opt.mod != NULL) {
+            read_dat->scaled_signal = tensor_from_record(rec).clone();
+        } else {
+            read_dat->scaled_signal = tensor_from_record(rec);
+        }
 
         scale_signal(core, read_dat->scaled_signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
         LOG_TRACE("%s", "scaled signal");

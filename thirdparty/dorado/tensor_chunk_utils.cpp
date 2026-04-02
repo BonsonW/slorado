@@ -53,7 +53,8 @@ int trim(const torch::Tensor& signal, float threshold, int window_size, int min_
 }
 
 std::pair<float, float> normalisation(QuantileScalingParams& params, torch::Tensor& x) {
-    auto quantiles = quantile_counting(x, torch::tensor({params.quantile_a, params.quantile_b}));
+    auto xfloat = x.to(torch::ScalarType::Float);
+    auto quantiles = quantile_counting(xfloat, torch::tensor({params.quantile_a, params.quantile_b}));
     float q20 = quantiles[0].item<float>();
     float q90 = quantiles[1].item<float>();
     float shift = std::max(10.0f, params.shift_multiplier * (q20 + q90));
@@ -62,8 +63,9 @@ std::pair<float, float> normalisation(QuantileScalingParams& params, torch::Tens
 }
 
 std::pair<float, float> med_mad(torch::Tensor &x, float factor=1.4826){
+    auto xfloat = x.to(torch::ScalarType::Float);
     torch::Tensor med = x.median();
-    torch::Tensor mad = torch::median(torch::abs(x - med)) * factor + EPS;
+    torch::Tensor mad = torch::median(torch::abs(xfloat - med)) * factor + EPS;
 
     return std::make_pair(med.item<float>(), mad.item<float>());
 }
