@@ -24,6 +24,6 @@ SOFTWARE.
 
 Third-Party Licenses
 
-The source code in the third-party/Dorado directory is subject to the terms of
+The source code in the thirdparty/dorado directory is subject to the terms of
 Oxford Nanopore Technologies PLC. Public License, v 1.0. Full licence can be
 found at https://github.com/nanoporetech/dorado/blob/master/LICENCE.txt
