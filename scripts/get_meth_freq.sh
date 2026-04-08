@@ -13,13 +13,12 @@ map() {
 	$SAMTOOLS fastq -@64 -TMM,ML "$bam" | minimap2 -t64 -x map-ont -a -y -Y --secondary=no "$genome" - | $SAMTOOLS sort -@64 - 
 }
 
-if [ $# -lt 3 ]; then
-	die "Usage: $0 <reference genome>.fa <fastq/sam/bam file> <output file>.mm.tsv|<output file>.mm.bedmethyl"
+if [ $# -lt 2 ]; then
+	die "Usage: $0 <reference genome>.fa <fastq/sam/bam file>"
 fi
 
 GENOME=$1 # path to reference genome
 BAM=$2 # path to unmapped sam/bam output
-OUT=$3 # output file path
 
 test -z "$SAMTOOLS" && SAMTOOLS=samtools # path to samtools
 test -z "$MINIMOD" && MINIMOD=minimod # path to minimod
@@ -34,12 +33,6 @@ map "$BAM" "$GENOME" > "$BAM_MAP" || die "mapping failed"
 $SAMTOOLS index "$BAM_MAP" || die "indexing failed"
 
 # get meth freq
-if [[ "$OUT" == *.mm.bedmethyl ]]; then
-	$MINIMOD freq "$GENOME" "$BAM_MAP" -b > "$OUT" || die "mod freq failed"
-elif [[ "$OUT" == *.mm.tsv ]]; then
-	$MINIMOD freq "$GENOME" "$BAM_MAP" > "$OUT" || die "mod freq failed"
-else
-	die "unsupported output suffix: '$OUT' (use .mm.tsv or .mm.bedmethyl)"
-fi
+$MINIMOD freq "$GENOME" "$BAM_MAP" -b || die "mod freq failed"
 
 rm $BAM_MAP
