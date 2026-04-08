@@ -19,6 +19,10 @@ LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../li
 LDFLAGS  += $(LIBS) -lz -lm -lpthread
 BUILD_DIR = build
 
+ifeq ($(f16c),1)
+CXXFLAGS   += -mavx2 -mf16c
+endif
+
 ifeq ($(zstd),1)
 LDFLAGS		+= -lzstd
 endif
