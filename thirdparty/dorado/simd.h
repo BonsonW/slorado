@@ -70,29 +70,30 @@ using Int16Register = __m128i;
 
 #endif
 
-#if !ENABLE_NEON_IMPL
-#if !ENABLE_AVX2_IMPL || ((defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 8)) && !(defined(__AVX2__) && defined(__F16C__)))
-#if ENABLE_AVX2_IMPL && !(defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 8))
+#if !ENABLE_NEON_IMPL  // We only need the SIMD implementation when we have Neon support.
+
+#if ENABLE_AVX2_IMPL
 [[maybe_unused]] __attribute__((target("default")))
 #endif
-inline void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
+static void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
     tensor = tensor.to(at::ScalarType::Float).sub_(shift).div_(scale).to(at::ScalarType::Half);
 }
 
-#if ENABLE_AVX2_IMPL && !(defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 8))
+#if ENABLE_AVX2_IMPL
 [[maybe_unused]] __attribute__((target("default")))
 #endif
-inline void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
+static void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
     tensor = tensor.to(at::ScalarType::Float).mul_(scale).add_(shift).to(at::ScalarType::Half);
 }
-#endif
+
 #endif  // !ENABLE_NEON_IMPL
 
-#if ENABLE_NEON_IMPL || (ENABLE_AVX2_IMPL && ( !(defined(__GNUC__) && !defined(__clang__)) || (__GNUC__ >= 8) || (defined(__AVX2__) && defined(__F16C__)) ))
-#if ENABLE_AVX2_IMPL && !(defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 8))
+#if ENABLE_AVX2_IMPL || ENABLE_NEON_IMPL
+
+#if ENABLE_AVX2_IMPL
 [[maybe_unused]] __attribute__((target("avx2,f16c")))
 #endif
-inline void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
+static void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
 #if ENABLE_AVX2_IMPL
     constexpr std::size_t kUnrollFactor = 4;
 #else
@@ -131,10 +132,10 @@ inline void shift_scale_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float
     tensor = tensor.view(at::ScalarType::Half);
 }
 
-#if ENABLE_AVX2_IMPL && !(defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 8))
+#if ENABLE_AVX2_IMPL
 [[maybe_unused]] __attribute__((target("avx2,f16c")))
 #endif
-inline void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
+static void scale_shift_tensor_i16_to_f16_inplace_impl(at::Tensor& tensor, float shift, float scale) {
 #if ENABLE_AVX2_IMPL
     constexpr std::size_t kUnrollFactor = 4;
 #else
