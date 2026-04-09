@@ -20,9 +20,6 @@ fi
 GENOME=$1 # path to reference genome
 BAM=$2 # path to unmapped sam/bam output
 
-test -z "$SAMTOOLS" && SAMTOOLS=samtools # path to samtools
-test -z "$MINIMOD" && MINIMOD=minimod # path to minimod
-
 $SAMTOOLS --version > /dev/null 2>&1 || die "samtools not found! Either put samtools under path or set SAMTOOLS variable, e.g.,export SAMTOOLS=/path/to/samtools"
 $MINIMOD --version > /dev/null 2>&1 || die "minimod not found! Either put minimod under path or set MINIMOD variable, e.g.,export MINIMOD=/path/to/minimod"
 

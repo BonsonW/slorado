@@ -8,9 +8,11 @@
 # =========================================================================================================
 # change these
 
-MINIMAP2=minimap2/minimap2 # this will be automatically download
 DATAMASH=datamash
 SLORADO=./slorado
+
+export MINIMAP2=minimap2/minimap2 # this will be automatically downloaded
+export MINIMOD=minimod/minimod # this will be automatically downloaded
 
 BUILD_FROM_SOURCE=1 # run only if in slorado repo, required for memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
@@ -49,7 +51,7 @@ SUBSUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX23033
 SUBSUBSAMPLE_RNA="/data/slow5-testdata/uhr_prom_rna004_subsubsample/PNXRXX240011_reads_20k.blow5"
 
 CHR22="/data/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5"
-CHR22_METH_BED=test/bulsufite_chr22.tsv
+CHR22_METH_BED=test/bisulphite_chr22.tsv
 
 SINGLE_READ="test/PGXXXX230339/reads_1.blow5"
 
@@ -147,6 +149,13 @@ download_minimap2() {
     rm minimap2-2.24_x64-linux.tar.bz2
 }
 
+download_minimod() {
+    wget https://github.com/warp9seq/minimod/releases/download/v0.5.0/minimod-v0.5.0-x86_64-linux-binaries.tar.gz
+    tar xf minimod-v0.5.0-x86_64-linux-binaries.tar.gz
+    mv minimod-v0.5.0 minimod
+    rm minimod-v0.5.0-x86_64-linux-binaries.tar.gz
+}
+
 download_model() {
     test -e $1.zip && rm $1.zip
     test -d $1 && rm -r $1
@@ -187,8 +196,11 @@ if [ $RUN_500K -eq 1 ]; then
     test -e $SUBSAMPLE || die "missing DNA BLOW5 subsample"
 fi
 
-# download minimap2
+# check tools
+test -e $MINIMOD || download_minimod
 test -e $MINIMAP2 || download_minimap2
+
+$SAMTOOLS --version > /dev/null || die "samtools not found! Either put samtools under path or set SAMTOOLS variable, e.g.,export SAMTOOLS=/path/to/samtools"
 $DATAMASH --version > /dev/null || die "datamash is missing"
 
 if [ $BUILD_FROM_SOURCE -eq 0 ]; then
