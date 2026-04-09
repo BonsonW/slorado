@@ -49,7 +49,7 @@ SUBSUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX23033
 SUBSUBSAMPLE_RNA="/data/slow5-testdata/uhr_prom_rna004_subsubsample/PNXRXX240011_reads_20k.blow5"
 
 CHR22="/data/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5"
-CHR22_METH_BED=/home/hasindu/scratch/hg2_na12878_old/hg2_prom_lsk114/compare-bisulphite/bulsufite/chr22.tsv
+CHR22_METH_BED=test/bulsufite_chr22.tsv
 
 SINGLE_READ="test/PGXXXX230339/reads_1.blow5"
 
@@ -176,10 +176,12 @@ check_corr_mod() {
 }
 
 # check files
-test -e $REF_DNA || die "missing DNA reference genome"
-test -e $REF_RNA || die "missing RNA reference genome"
-test -e $SUBSUBSAMPLE || die "missing DNA BLOW5 subsubsample"
-test -e $RNA_SUBSUBSAMPLE || die "missing RNA BLOW5 subsubsample"
+test -e $REF_DNA || die "missing DNA reference genome $REF_DNA"
+test -e $REF_DNA_FA || die "missing DNA reference genome $REF_DNA_FA"
+test -e $REF_RNA || die "missing RNA reference genome $REF_RNA"
+test -e $SUBSUBSAMPLE || die "missing DNA BLOW5 subsubsample $SUBSUBSAMPLE"
+test -e $RNA_SUBSUBSAMPLE || die "missing RNA BLOW5 subsubsample $RNA_SUBSUBSAMPLE"
+test -e $CHR22 || die "missing chr22 BLOW5 subsubsample $CHR22"
 
 if [ $RUN_500K -eq 1 ]; then
     test -e $SUBSAMPLE || die "missing DNA BLOW5 subsample"
@@ -234,7 +236,24 @@ fi
 
 # GPU tests
 if [ $BUILD_FROM_SOURCE -eq 1 ]; then
-    make clean && make -j cuda=1 cxx11_abi=1
+    TORCH_BUILD_VERSION_FILE=thirdparty/torch/libtorch/build-version
+    test -e $TORCH_BUILD_VERSION_FILE || die "missing torch build version file $TORCH_BUILD_VERSION_FILE"
+
+    TORCH_BUILD_VERSION=$(tr -d '[:space:]' < $TORCH_BUILD_VERSION_FILE)
+    case "$TORCH_BUILD_VERSION" in
+    *rocm*|*ROCM* )
+        GPU_BUILD_FLAG=rocm=1
+        ;;
+    *cuda*|*CUDA*|*cu* )
+        GPU_BUILD_FLAG=cuda=1
+        ;;
+    *)
+        die "could not determine torch backend from $TORCH_BUILD_VERSION_FILE (value: $TORCH_BUILD_VERSION)"
+        ;;
+    esac
+
+    echo "Detected torch backend: $TORCH_BUILD_VERSION ($GPU_BUILD_FLAG)"
+    make clean && make -j $GPU_BUILD_FLAG cxx11_abi=1
 fi
 
 # correlation check modified basecalling with 5mCG_5hmCG
