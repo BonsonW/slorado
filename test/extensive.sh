@@ -241,13 +241,13 @@ fi
 
 echo "GPU - HAC meth model - chr22"
 ex $SLORADO basecaller models/$HAC $SUBSUBSAMPLE --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.sam || die "Running the tool failed"
-check_acc_dna $HAC
+check_corr_mod $HAC
 echo ""
 echo "********************************************************************"
 
 echo "GPU - SUP meth model - chr22"
 ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.sam || die "Running the tool failed"
-check_acc_dna $SUP
+check_corr_mod $SUP
 echo ""
 echo "********************************************************************"
 
