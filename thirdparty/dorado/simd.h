@@ -2,8 +2,12 @@
 
 // TSan's init breaks the call to __cpu_indicator_init (which determines which implementation to take)
 #if defined(__GNUC__) && defined(__x86_64__) && !defined(__clang__) && !defined(__SANITIZE_THREAD__)
+#if (__GNUC__ > 7) || (defined(__AVX2__) && defined(__F16C__))
 #define ENABLE_AVX2_IMPL 1
 #include <immintrin.h>
+#else
+#define ENABLE_AVX2_IMPL 0
+#endif
 #else
 #define ENABLE_AVX2_IMPL 0
 #endif
