@@ -17,14 +17,14 @@ RUN_500K=0 # run 500k DNA dataset for HAC
 
 # batch sizes for each model
 FAST_BATCH=1000
-HAC_BATCH=800
-SUP_BATCH=500
+HAC_BATCH=512
+SUP_BATCH=512
 
 # basecaller options
-NTHREADS=32
-CHUNKSIZE=10000
-READ_MEM=500M
-READ_BATCH=2000
+NTHREADS=64
+CHUNKSIZE=12288
+READ_MEM=512M
+READ_BATCH=2048
 
 # models
 FAST="dna_r10.4.1_e8.2_400bps_fast@v5.0.0"
@@ -35,14 +35,23 @@ FAST_RNA="rna004_130bps_fast@v5.1.0"
 HAC_RNA="rna004_130bps_hac@v5.1.0"
 SUP_RNA="rna004_130bps_sup@v5.1.0"
 
+# mod
+METH=5mCG_5hmCG@v3
+
 # =========================================================================================================
 # make sure these exist, will automatically check at start
 
 REF_DNA="/genome/hg38noAlt.idx"
 REF_RNA="/genome/gencode.v40.transcripts.fa"
+REF_DNA_FA="/genome/hg38noAlt.fa"
 
 SUBSUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5"
 SUBSUBSAMPLE_RNA="/data/slow5-testdata/uhr_prom_rna004_subsubsample/PNXRXX240011_reads_20k.blow5"
+
+CHR22="/data/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5"
+CHR22_METH_BED=/home/hasindu/scratch/hg2_na12878_old/hg2_prom_lsk114/compare-bisulphite/bulsufite/chr22.tsv
+
+SINGLE_READ="test/PGXXXX230339/reads_1.blow5"
 
 # optional only checks if $RUN_500K = 1
 SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_reads_500k.blow5"
@@ -72,14 +81,12 @@ check_accuracy() {
             return 0
         fi
         ;;
-
     $HAC )
         if (( $(echo "$2 >= 0.97" | bc -l) ));
         then
             return 0
         fi
         ;;
-
     $SUP )
         if (( $(echo "$2 >= 0.98" | bc -l) ));
         then
@@ -92,27 +99,45 @@ check_accuracy() {
             return 0
         fi
         ;;
-
     $HAC_RNA )
         if (( $(echo "$2 >= 0.95" | bc -l) ));
         then
             return 0
         fi
         ;;
-
     $SUP_RNA )
         if (( $(echo "$2 >= 0.97" | bc -l) ));
         then
             return 0
         fi
         ;;
-
     *)
         die "Invalid model provided"
         ;;
     esac
 
     die "$1 failed accuracy test with value of $2"
+}
+
+check_corr() {
+    case $1 in
+    $HAC )
+        if (( $(echo "$2 >= 0.91" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    $SUP )
+        if (( $(echo "$2 >= 0.91" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    *)
+        die "Invalid model provided"
+        ;;
+    esac
+    die "$1 failed mod freq correlation test with value of $2"
 }
 
 download_minimap2() {
@@ -144,6 +169,12 @@ check_acc_rna() {
     check_accuracy $1 $MEDIAN
 }
 
+check_corr_mod() {
+    ./scripts/get_meth_freq.sh $REF_DNA_FA tmp.sam > tmp.mm.bedmethyl || die "Getting methylation frequency failed"
+    corr=$(python3 scripts/compare.py $CHR22_METH_BED tmp.mm.bedmethyl)
+    check_corr $1 $corr
+}
+
 # check files
 test -e $REF_DNA || die "missing DNA reference genome"
 test -e $REF_RNA || die "missing RNA reference genome"
@@ -171,38 +202,56 @@ test -d models/$FAST_RNA || download_model $FAST_RNA
 test -d models/$HAC_RNA || download_model $HAC_RNA
 test -d models/$SUP_RNA || download_model $SUP_RNA
 
+test -d models/${HAC}_${METH} || download_model ${HAC}_${METH}
+test -d models/${SUP}_${METH} || download_model ${SUP}_${METH}
+
 # memory check with asan if building from source
 
 if [ $BUILD_FROM_SOURCE -eq 1 ]; then
     make clean && make -j asan=1 cxx11_abi=1
 
     echo "Memory Check - CPU - FAST model - 1 5khz reads"
-    ex $SLORADO basecaller models/$FAST test/5khz_r10/one_5khz.blow5 -xcpu -c200 -K10 > test/tmp.fastq  || die "Running the tool failed"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K10 > test/tmp.fastq  || die "Running the tool failed"
 
     echo "Memory Check - CPU - FAST model - 2 batch 1 thread"
-    ex $SLORADO basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c200 -K5 -t1 > test/tmp.fastq  || die "Running the tool failed"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K5 -t1 > test/tmp.fastq  || die "Running the tool failed"
 
     echo "Memory Check - CPU - FAST model - incomplete batch 1 thread"
-    ex $SLORADO basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c200 -K6 -t1 > test/tmp.fastq  || die "Running the tool failed"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K6 -t1 > test/tmp.fastq  || die "Running the tool failed"
 
     echo "Memory Check - CPU - FAST model - 2 batch 2 thread"
-    ex $SLORADO basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c200 -K5 -t2 > test/tmp.fastq  || die "Running the tool failed"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K5 -t2 > test/tmp.fastq  || die "Running the tool failed"
 
     echo "Memory Check - CPU - FAST model - incomplete batch 2 thread"
-    ex $SLORADO basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c200 -K6 -t2 > test/tmp.fastq  || die "Running the tool failed"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K6 -t2 > test/tmp.fastq  || die "Running the tool failed"
 
     echo "Memory Check - CPU - FAST model - 2 batch 3 thread"
-    ex $SLORADO basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c200 -K5 -t3 > test/tmp.fastq  || die "Running the tool failed"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K5 -t3 > test/tmp.fastq  || die "Running the tool failed"
 
     echo "Memory Check - CPU - FAST model - incomplete batch 3 thread"
-    ex $SLORADO basecaller models/$FAST test/4khz_r10/10_reads.blow5 -xcpu -c200 -K6 -t3 > test/tmp.fastq  || die "Running the tool failed"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K6 -t3 > test/tmp.fastq  || die "Running the tool failed"
 fi
 
-# accuracy check DNA
-
+# GPU tests
 if [ $BUILD_FROM_SOURCE -eq 1 ]; then
     make clean && make -j cuda=1 cxx11_abi=1
 fi
+
+# correlation check modified basecalling with 5mCG_5hmCG
+
+echo "GPU - HAC meth model - chr22"
+ex $SLORADO basecaller models/$HAC $SUBSUBSAMPLE --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.sam || die "Running the tool failed"
+check_acc_dna $HAC
+echo ""
+echo "********************************************************************"
+
+echo "GPU - SUP meth model - chr22"
+ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.sam || die "Running the tool failed"
+check_acc_dna $SUP
+echo ""
+echo "********************************************************************"
+
+# accuracy check DNA
 
 if [ $RUN_500K -eq 1 ]; then
     echo "GPU - HAC model - 500k reads"
