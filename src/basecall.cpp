@@ -37,12 +37,8 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
-#ifdef HAVE_CUDA
-#include <c10/cuda/CUDAGuard.h>
-#endif
-
-#ifdef HAVE_ROCM
-#include <c10/hip/HIPGuard.h>
+#ifdef USE_GPU
+#include <c10/core/DeviceGuard.h>
 #endif
 
 typedef struct {
@@ -184,13 +180,17 @@ static void call_chunks(
     const std::vector<basecall_chunk_t *> &chunks,
     const int runner_idx
 ) {
-    torch::InferenceMode guard;
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
 
+#ifdef USE_GPU
+    c10::DeviceGuard device_guard(runner->tensor_opts.device());
+#endif
+    torch::InferenceMode guard;
+    
     LOG_DEBUG("%s", "basecalling chunks");
     ts->time_infer -= realtime();
-    auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device_opt().value()));
+    auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device()));
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
@@ -220,12 +220,6 @@ static void call_chunks(
         openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
     } else {
 #ifdef USE_GPU
-#ifdef HAVE_CUDA
-    c10::cuda::CUDAGuard device_guard(runner->device_idx);
-#endif
-#ifdef HAVE_ROCM
-    c10::hip::HIPGuard device_guard(runner->device_idx);
-#endif
         openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else
         ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
@@ -283,8 +277,12 @@ static void mod_call_chunks(
     const std::vector<mod_chunk_t *> &chunks,
     const int runner_idx
 ) {
-    torch::InferenceMode guard;
     runner_t* runner = (*core->mod_runners)[runner_idx];
+    
+#ifdef USE_GPU
+    c10::DeviceGuard device_guard(runner->tensor_opts.device());
+#endif
+    torch::InferenceMode guard;
 
     LOG_DEBUG("%s", "mod calling chunks");
     auto scores = runner->module->forward(

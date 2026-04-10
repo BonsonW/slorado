@@ -39,14 +39,8 @@ SOFTWARE.
 #include "dorado/modbase.h"
 #include "dorado/simd.h"
 
-#include <regex>
-
-#ifdef HAVE_CUDA
-#include <c10/cuda/CUDAGuard.h>
-#endif
-
-#ifdef HAVE_ROCM
-#include <c10/hip/HIPGuard.h>
+#ifdef USE_GPU
+#include <c10/core/DeviceGuard.h>
 #endif
 
 void free_read_dat(read_dat_t *read_dat) {
@@ -109,20 +103,21 @@ void init_runner(
 #ifdef USE_GPU
         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
         runner->device_idx = device_idx;
-
 #ifdef HAVE_CUDA
-        c10::cuda::CUDAGuard device_guard(device_idx);
+        auto device_type = c10::kCUDA;
 #endif
 #ifdef HAVE_ROCM
-        c10::hip::HIPGuard device_guard(device_idx);
+        auto device_type = c10::kHIP;
 #endif
+        runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device_type, device_idx);
+        c10::DeviceGuard device_guard(runner->tensor_opts.device());
         runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
 #endif        
+    } else {
+        runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(torch::kCPU);
     }
 
     LOG_TRACE("%s", "device str parsed");
-
-    runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device);
     if (modbase == true) {
         LOG_TRACE("%s", "loading modbase model");
         runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, core->opt.gpu_batch_size);
@@ -223,12 +218,7 @@ void free_runners(core_t *core) {
         runner_t *runner = (*core->runners)[i];
         if (runner->device != "cpu") {
 #ifdef USE_GPU
-#ifdef HAVE_CUDA
-            c10::cuda::CUDAGuard device_guard(runner->device_idx);
-#endif
-#ifdef HAVE_ROCM
-            c10::hip::HIPGuard device_guard(runner->device_idx);
-#endif
+            c10::DeviceGuard device_guard(runner->tensor_opts.device());
             openfish_gpubuf_free(runner->gpubuf);
 #endif
         }

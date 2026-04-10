@@ -14,14 +14,6 @@
 #include <stdexcept>
 #include <string>
 
-#ifdef HAVE_CUDA
-#include <c10/cuda/CUDAGuard.h>
-#endif
-
-#ifdef HAVE_ROCM
-#include <c10/hip/HIPGuard.h>
-#endif
-
 using namespace torch::nn;
 using Slice = torch::indexing::Slice;
 
@@ -460,16 +452,6 @@ TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOption
 torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
     torch::Tensor h;
     double a, b;
-
-#ifdef USE_GPU
-    auto device_idx = m_options.device_index();
-#ifdef HAVE_CUDA
-    c10::cuda::CUDAGuard device_guard(device_idx);
-#endif
-#ifdef HAVE_ROCM
-    c10::hip::HIPGuard device_guard(device_idx);
-#endif
-#endif
 
     a = realtime();
     h = convs->forward(x);
