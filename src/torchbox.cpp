@@ -103,13 +103,7 @@ void init_runner(
 #ifdef USE_GPU
         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
         runner->device_idx = device_idx;
-#ifdef HAVE_CUDA
-        auto device_type = c10::kCUDA;
-#endif
-#ifdef HAVE_ROCM
-        auto device_type = c10::kHIP;
-#endif
-        runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(device_type, device_idx);
+        runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(c10::kCUDA, device_idx);
         c10::DeviceGuard device_guard(runner->tensor_opts.device());
         runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
 #endif        
