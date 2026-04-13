@@ -285,25 +285,27 @@ static void mod_call_chunks(
     torch::InferenceMode guard;
 
     LOG_DEBUG("%s", "mod calling chunks");
+    const int64_t active_chunks = static_cast<int64_t>(chunks.size());
+    auto active_input_sigs = runner->input_sigs.narrow(0, 0, active_chunks);
+    auto active_input_seqs = runner->input_seqs.narrow(0, 0, active_chunks);
+
     auto scores = runner->module->forward(
-        runner->input_sigs.to(runner->tensor_opts.device_opt().value()),
-        runner->input_seqs.to(runner->tensor_opts.device_opt().value())
-    ).to(at::ScalarType::Float);
+        active_input_sigs.to(runner->tensor_opts.device_opt().value()),
+        active_input_seqs.to(runner->tensor_opts.device_opt().value())
+    );
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
     
-    auto scores_f32 = scores.to(at::ScalarType::Float).cpu();
+    auto scores_f32 = scores.cpu().to(at::ScalarType::Float);
     assert(scores_f32.is_contiguous());
     const auto* const scores_f32_ptr = scores_f32.data_ptr<float>();
 
-    const auto row_size = scores.size(1);
+    const int64_t row_size = scores_f32.size(1);
     for (size_t i = 0; i < chunks.size(); ++i) {
         mod_chunk_t *chunk = chunks[i];
         read_dat_t *read_dat = chunk->read_dat;
-
-        chunk->scores.resize(row_size);
-        std::memcpy(chunk->scores.data(), &scores_f32_ptr[i * row_size], row_size * sizeof(float));
+        const float* const chunk_scores = &scores_f32_ptr[i * row_size];
 
         const std::vector<int64_t>& hits_seq = read_dat->per_base_hits_seq.at(chunk->base_id);
         const std::vector<int64_t>& hits_sig = read_dat->per_base_hits_sig.at(chunk->base_id);
@@ -317,7 +319,7 @@ static void mod_call_chunks(
 
         // The number of states predicted by this modbase model `num_mods + 1`
         const int64_t scores_states = chunk->num_states;
-        const int64_t scores_size = static_cast<int64_t>(chunk->scores.size());
+        const int64_t scores_size = row_size;
         // const int64_t scores_seq_len = scores_size / scores_states;
 
         const int64_t base_offset = static_cast<int64_t>(core->modbase_info->base_probs_offsets.at(cfg->mods.base_id));
@@ -357,7 +359,7 @@ static void mod_call_chunks(
                     ERROR("%s", "Modbase score index out of bounds.");
                 }
 
-                const uint8_t score = static_cast<uint8_t>(std::min(std::floor(chunk->scores[score_idx] * 256), 255.0f));
+                const uint8_t score = static_cast<uint8_t>(std::min(std::floor(chunk_scores[score_idx] * 256), 255.0f));
 
                 // Index into the probabilities is calculated by
                 // sequence_index * num_states := canonical "A" base probs index
