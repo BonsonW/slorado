@@ -41,16 +41,19 @@ SUP_RNA="rna004_130bps_sup@v5.1.0"
 METH=5mCG_5hmCG@v3
 
 # =========================================================================================================
-# make sure these exist, will automatically check at start
+# test data - this will be automatically downloaded if not present
 
-REF_DNA="/genome/hg38noAlt.idx"
-REF_RNA="/genome/gencode.v40.transcripts.fa"
-REF_DNA_FA="/genome/hg38noAlt.fa"
+DATA_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQAECzbEx9P0SIYFBFOS7whhAe6TcLp2YIZlBELlKwCpL9I?download=1"
+DATA_DIR=test/slorado_test_ext_dat
 
-SUBSUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsubsample/PGXXXX230339_reads_20k.blow5"
-SUBSUBSAMPLE_RNA="/data/slow5-testdata/uhr_prom_rna004_subsubsample/PNXRXX240011_reads_20k.blow5"
+REF_DNA="${DATA_DIR}/genome/hg38noAlt.idx"
+REF_RNA="${DATA_DIR}/genome/gencode.v40.transcripts.fa"
+REF_DNA_FA="${DATA_DIR}/genome/hg38noAlt.fa"
 
-CHR22="/data/slow5-testdata/hg2_prom_lsk114_5khz_chr22/PGXXXX230339_reads_chr22.blow5"
+SUBSUBSAMPLE="${DATA_DIR}/PGXXXX230339_reads_20k.blow5"
+SUBSUBSAMPLE_RNA="${DATA_DIR}/PNXRXX240011_reads_20k.blow5"
+
+CHR22="${DATA_DIR}/PGXXXX230339_reads_chr22.blow5"
 CHR22_METH_BED=test/bisulphite_chr22.tsv
 
 SINGLE_READ="test/PGXXXX230339/reads_1.blow5"
@@ -142,6 +145,21 @@ check_corr() {
     die "$1 failed mod freq correlation test with value of $2"
 }
 
+# download test set given url
+#
+download_test_data() {
+	# data set exists
+	if [ -d ${DATA_DIR} ]; then
+		return
+	fi
+
+	tar_path=test/data.tgz
+	wget -O $tar_path ${DATA_URL} || rm -rf $tar_path ${DATA_DIR}
+	echo "Extracting. Please wait."
+	tar -xf $tar_path || rm -rf $tar_path ${DATA_DIR}
+	rm -f $tar_path
+}
+
 download_minimap2() {
     wget https://github.com/lh3/minimap2/releases/download/v2.24/minimap2-2.24_x64-linux.tar.bz2
     tar xf minimap2-2.24_x64-linux.tar.bz2
@@ -183,6 +201,8 @@ check_corr_mod() {
     corr=$(python3 scripts/compare.py $CHR22_METH_BED tmp.mm.bedmethyl)
     check_corr $1 $corr
 }
+
+download_test_data
 
 # check files
 test -e $REF_DNA || die "missing DNA reference genome $REF_DNA"
