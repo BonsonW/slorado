@@ -297,15 +297,16 @@ static void mod_call_chunks(
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
     
-    auto scores_f32 = scores.cpu().to(at::ScalarType::Float);
-    assert(scores_f32.is_contiguous());
-    const auto* const scores_f32_ptr = scores_f32.data_ptr<float>();
+    auto scores_f16 = scores.cpu().contiguous();
+    assert(scores_f16.is_contiguous());
+    assert(scores_f16.dtype() == at::ScalarType::Half);
 
-    const int64_t row_size = scores_f32.size(1);
+    const int64_t row_size = scores_f16.size(1);
+    const auto* const scores_f16_ptr = scores_f16.data_ptr<c10::Half>();
     for (size_t i = 0; i < chunks.size(); ++i) {
         mod_chunk_t *chunk = chunks[i];
         read_dat_t *read_dat = chunk->read_dat;
-        const float* const chunk_scores = &scores_f32_ptr[i * row_size];
+        const int64_t row_offset = static_cast<int64_t>(i) * row_size;
 
         const std::vector<int64_t>& hits_seq = read_dat->per_base_hits_seq.at(chunk->base_id);
         const std::vector<int64_t>& hits_sig = read_dat->per_base_hits_sig.at(chunk->base_id);
@@ -359,7 +360,9 @@ static void mod_call_chunks(
                     ERROR("%s", "Modbase score index out of bounds.");
                 }
 
-                const uint8_t score = static_cast<uint8_t>(std::min(std::floor(chunk_scores[score_idx] * 256), 255.0f));
+                const int64_t row_score_idx = row_offset + score_idx;
+                const float score_value = static_cast<float>(scores_f16_ptr[row_score_idx]);
+                const uint8_t score = static_cast<uint8_t>(std::min(std::floor(score_value * 256), 255.0f));
 
                 // Index into the probabilities is calculated by
                 // sequence_index * num_states := canonical "A" base probs index
