@@ -50,6 +50,7 @@ cmake-build-debug/
 build/
 /models/*
 /minimap2
+/minimod
 /zstd
 
 #Allowed files
