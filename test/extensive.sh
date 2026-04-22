@@ -9,7 +9,6 @@
 # change these
 
 SLORADO=slorado-v0.5.0-beta/bin/slorado # will be automatically changed if building from source
-export NTHREADS=32
 
 BUILD_FROM_SOURCE=0 # run only if in slorado repo, required for memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
@@ -77,12 +76,6 @@ die() {
     echo "Error: $@" >&2
     exit 1
 }
-
-if [ "$1" = 'flash' ]; then
-    flash=1
-else
-    flash=0
-fi
 
 ex() {
     "$@"
@@ -155,10 +148,20 @@ check_corr() {
     die "$1 failed mod freq correlation test with value of $2"
 }
 
-# download test set given url
-#
+# set number of threads
+export NTHREADS=$(getconf _NPROCESSORS_ONLN)
+
+if ! [[ "$NTHREADS" =~ ^[0-9]+$ ]] || [ "$NTHREADS" -le 0 ]; then
+    die "NTHREADS must be a positive integer, got '$NTHREADS'"
+fi
+
+if [ "$1" = 'flash' ]; then
+    flash=1
+else
+    flash=0
+fi
+
 download_test_data() {
-	# data set exists
 	if [ -d ${DATA_DIR} ]; then
 		return
 	fi
