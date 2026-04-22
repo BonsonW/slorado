@@ -14,7 +14,7 @@ SLORADO=./slorado
 export MINIMAP2=minimap2/minimap2 # this will be automatically downloaded
 export MINIMOD=minimod/minimod # this will be automatically downloaded
 
-BUILD_FROM_SOURCE=1 # run only if in slorado repo, required for memory checks
+BUILD_FROM_SOURCE=0 # run only if in slorado repo, required for memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
 
 # batch sizes for each model
@@ -24,7 +24,7 @@ SUP_BATCH=512
 
 # basecaller options
 NTHREADS=64
-CHUNKSIZE=12288
+CHUNKSIZE=10000
 READ_MEM=512M
 READ_BATCH=2048
 
@@ -244,6 +244,8 @@ test -d models/${SUP}_${METH} || download_model ${SUP}_${METH}
 if [ $BUILD_FROM_SOURCE -eq 1 ]; then
     make clean && make -j asan=1 cxx11_abi=1
 
+    # basecalling
+
     echo "Memory Check - CPU - FAST model - 1 5khz reads"
     ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K10 > test/tmp.fastq  || die "Running the tool failed"
 
@@ -264,6 +266,14 @@ if [ $BUILD_FROM_SOURCE -eq 1 ]; then
 
     echo "Memory Check - CPU - FAST model - incomplete batch 3 thread"
     ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K6 -t3 > test/tmp.fastq  || die "Running the tool failed"
+
+    # modcalling
+
+    echo "Memory Check - CPU - HAC model - $MOD - 1 5khz reads"
+    ex $SLORADO basecaller models/$HAC $SINGLE_READ --mod $METH -xcpu -c200 -K10 > test/tmp.fastq  || die "Running the tool failed"
+
+    echo "Memory Check - CPU - HAC model - $MOD - 2 batch 2 thread"
+    ex $SLORADO basecaller models/$HAC $SINGLE_READ --mod $METH -xcpu -c200 -K5 -t2 > test/tmp.fastq  || die "Running the tool failed"
 fi
 
 # GPU tests

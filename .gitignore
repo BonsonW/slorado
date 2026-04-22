@@ -52,6 +52,7 @@ build/
 /minimap2
 /minimod
 /zstd
+/test/slorado_test_ext_dat
 
 #Allowed files
 !CMakeLists.txt
