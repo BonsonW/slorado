@@ -47,5 +47,5 @@
     ```
 
 - You can optionally enable zstd support for built-in slow5lib when building slorado by invoking `make zstd=1`. This requires zstd 1.3 development libraries installed on your system (libzstd1-dev package for apt, libzstd-devel for yum/dnf).
-- If building with GCC 7 or lower, invoke `f16c=1` to optionally add SIMD support. SIMD is automatically enabled on GCC 8 and higher.
+- If building with GCC 7 or lower, invoke `make f16c=1` to optionally add SIMD support. SIMD is automatically enabled on GCC 8 and higher.
 
