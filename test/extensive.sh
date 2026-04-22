@@ -2,7 +2,10 @@
 
 # =========================================================================================================
 
-# run like: ./test/extensive.sh <cuda|rocm> <custom|bin|build>
+# run like:
+# ./test/extensive.sh <cuda|rocm> <bin|build>
+# OR
+# ./test/extensive.sh <path_to_slorado_executable>
 
 # =========================================================================================================
 # change these
@@ -303,32 +306,38 @@ check_corr_mod() {
     check_corr $1 $corr
 }
 
-if [ $# -ne 2 ]; then
-    die "Usage: $0 <cuda|rocm> <custom|bin|build>"
-fi
+if [ $# -eq 1 ]; then
+    SLORADO="$1"
+    SLORADO_MODE="path"
+    $SLORADO --version > /dev/null || die "slorado is missing"
+elif [ $# -eq 2 ]; then
+    DEV=$1
+    SLORADO_MODE=$2
 
-DEV=$1
-SLORADO_MODE=$2
+    if [ "$DEV" = "cuda" ]; then
+        GPU_BUILD_FLAG=cuda=1
+    elif [ "$DEV" = "rocm" ]; then
+        GPU_BUILD_FLAG=rocm=1
+    else
+        die "Unknown DEV option ${DEV}. Supported options are: cuda, rocm"
+    fi
 
-if [ "$DEV" = "cuda" ]; then
-    GPU_BUILD_FLAG=cuda=1
-elif [ "$DEV" = "rocm" ]; then
-    GPU_BUILD_FLAG=rocm=1
+    if [ "$SLORADO_MODE" = "bin" ]; then
+        download_slorado_binary
+    elif [ "$SLORADO_MODE" = "build" ]; then
+        SLORADO="./slorado"
+    else
+        die "Unknown slorado mode ${SLORADO_MODE}. Supported modes are: bin, build"
+    fi
 else
-    die "Unknown DEV option ${DEV}. Supported options are: cuda, rocm"
+    die "Usage: $0 <cuda|rocm> <bin|build> OR $0 <path_to_slorado_executable>"
 fi
 
-if [ "$SLORADO_MODE" = "custom" ]; then
-    :
-elif [ "$SLORADO_MODE" = "bin" ]; then
-    download_slorado_binary
-elif [ "$SLORADO_MODE" = "build" ]; then
-    SLORADO="slorado"
-else
-    die "Unknown slorado mode ${SLORADO_MODE}. Supported modes are: custom, bin, build"
-fi
-
+echo ""
+echo "********************************************************************"
 echo "Using slorado executable at: $SLORADO"
+echo "********************************************************************"
+echo ""
 
 # check tools
 test -x $MINIMOD || download_minimod
@@ -361,8 +370,6 @@ test -e $CHR22 || die "missing chr22 BLOW5 subsubsample $CHR22"
 if [ $RUN_500K -eq 1 ]; then
     test -e $SUBSAMPLE || die "missing DNA BLOW5 subsample"
 fi
-
-$SLORADO --version > /dev/null || die "slorado is missing"
 
 # download models
 test -d models/$FAST || download_model $FAST
