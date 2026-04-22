@@ -10,12 +10,8 @@
 # =========================================================================================================
 # change these
 
-SLORADO="slorado"
-
 SLORADO_CUDA_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQBksuPWnfpaTbnkIC9k05I3AY_Dhe1uz_Rj5sO9JxT2n64?download=1"
 SLORADO_ROCM_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQC0nnJ4s3foSJDd8Qaw7124AX_STnHRsg0bZaZ7zSeEcgk?download=1"
-
-RUN_500K=0 # run 500k DNA dataset for HAC
 
 # batch sizes for each model
 FAST_BATCH=512
@@ -38,6 +34,9 @@ SUP_RNA="rna004_130bps_sup@v5.1.0"
 
 # mod
 METH=5mCG_5hmCG@v3
+
+RUN_500K=0 # run 500k DNA dataset for HAC
+SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_reads_500k.blow5"
 
 # =========================================================================================================
 # tools (will be automatically downloaded if not present)
@@ -70,9 +69,6 @@ CHR22="${DATA_DIR}/PGXXXX230339_reads_chr22.blow5"
 CHR22_METH_BED=test/bisulphite_chr22.tsv
 
 SINGLE_READ="test/PGXXXX230339/reads_1.blow5"
-
-# optional only checks if $RUN_500K = 1
-SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_reads_500k.blow5"
 
 # =========================================================================================================
 
@@ -306,6 +302,7 @@ check_corr_mod() {
     check_corr $1 $corr
 }
 
+SLORADO=""
 if [ $# -eq 1 ]; then
     SLORADO="$1"
     SLORADO_MODE="path"
