@@ -80,6 +80,14 @@ Slorado does not currently support demultiplexing. You can demultiplex reads gen
 ./dorado demux --kit-name <kit-name> --output-dir demux_reads/ reads.fastq
 ```
 
+## Modification Detection
+
+Slorado supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
+```
+# example modification calling
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5 --mod 5mCG_5hmCG@v3 -xcuda:all -o reads.fastq
+```
+
 ## Options
 
 All options supported by slorado basecaller are detailed below:
@@ -87,17 +95,18 @@ All options supported by slorado basecaller are detailed below:
 | Option:           | Decription:                                           | Default Value: |
 |-------------------|-------------------------------------------------------|----------------|
 | -t INT            | number of processing threads                          | 8              |
-| -K INT            | batch size (max number of reads loaded at once)       | 2000           |
-| -C INT            | gpu batch size (max number of chunks loaded at once)  | 500            |
-| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 500.0M         |
+| -K INT            | batch size (max number of reads loaded at once)       | 4096           |
+| -C INT            | gpu batch size (max number of chunks loaded at once)  | 512            |
+| -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 512M           |
 | -o FILE           | output to file                                        | stdout         |
-| -c INT            | chunk size                                            | 10000           |
+| -c INT            | chunk size                                            | 12288          |
 | -p INT            | overlap                                               | 150            |
-| -x DEVICE         | specify device (e.g., cpu; cuda:0; cuda:1,2; cuda:all)| cuda:all (GPU version) or cpu (CPU version)         |
+| -x DEVICE         | specify device (e.g., cpu; cuda:0; cuda:1,2; cuda:all)| cuda:all (GPU build) or cpu (CPU build)         |
 | -h                | shows help message and exits                          | -              |
 | --verbose INT     | verbosity level                                       | 4              |
 | --version         | print version                                         |                |
 | --flash yes|no    | enable flash attention (from v0.4.0-beta)             | No             |
+| --mod STR         | add modification detection (from v0.5.0-beta)         | NULL           |
 
 ## Batchsizes
 
@@ -111,6 +120,7 @@ Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v
 
 | slorado version | Tested models |
 | ---             | ---           |
+| 0.5.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; dna_r10.4.1_e8.2_400bps_5mCG_5hmCG@v3 v5.0.0; rna004_130bps v5.1.0 |
 | 0.4.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; rna004_130bps v5.1.0 |
 | 0.3.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 and v5.0.0 |
 | 0.2.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 |
