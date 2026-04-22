@@ -12,7 +12,6 @@ SLORADO="slorado"
 SLORADO_CUDA_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQBksuPWnfpaTbnkIC9k05I3AY_Dhe1uz_Rj5sO9JxT2n64?download=1"
 SLORADO_ROCM_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQC0nnJ4s3foSJDd8Qaw7124AX_STnHRsg0bZaZ7zSeEcgk?download=1"
 
-BUILD_FROM_SOURCE=0 # run only if in slorado repo, for asan memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
 
 # batch sizes for each model
@@ -379,7 +378,7 @@ test -d models/${SUP}_${METH} || download_model ${SUP}_${METH}
 
 # memory check with asan if building from source
 
-if [ $BUILD_FROM_SOURCE -eq 1 ]; then
+if [ "$SLORADO_MODE" = "build" ]; then
     make clean && make -j asan=1 cxx11_abi=1
 
     # basecalling
@@ -415,7 +414,7 @@ if [ $BUILD_FROM_SOURCE -eq 1 ]; then
 fi
 
 # GPU tests
-if [ $BUILD_FROM_SOURCE -eq 1 ]; then
+if [ "$SLORADO_MODE" = "build" ]; then
     echo "Using requested GPU backend: $DEV ($GPU_BUILD_FLAG)"
     make clean && make -j $GPU_BUILD_FLAG cxx11_abi=1
 fi
