@@ -15,9 +15,9 @@ BUILD_FROM_SOURCE=0 # run only if in slorado repo, required for memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
 
 # batch sizes for each model
-FAST_BATCH=1000
-HAC_BATCH=512
-SUP_BATCH=512
+FAST_BATCH=512
+HAC_BATCH=256
+SUP_BATCH=256
 
 # basecaller options
 CHUNKSIZE=10000
@@ -214,7 +214,8 @@ download_samtools() {
     tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting samtools failed"
     (
         cd $src_dir || exit 1
-        make || exit 1
+        ./configure --without-curses || exit 1
+        make -j || exit 1
     ) || die "Building samtools failed"
 
     test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
@@ -235,7 +236,7 @@ download_datamash() {
     (
         cd $src_dir || exit 1
         ./configure --prefix=$(pwd)/../../ || exit 1
-        make || exit 1
+        make -j || exit 1
     ) || die "Building datamash failed"
 
     test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
