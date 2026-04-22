@@ -52,6 +52,7 @@ build/
 /zstd
 /test/slorado_test_ext_dat
 /test/tools
+test/slorado*
 /slorado-*/
 
 #Allowed files

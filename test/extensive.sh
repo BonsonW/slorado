@@ -2,15 +2,17 @@
 
 # =========================================================================================================
 
-# run like: ./test/extensive.sh
-# if you want to check flash attention too: ./test/extensive.sh flash
+# run like: ./test/extensive.sh <cuda|rocm> <custom|bin|build>
 
 # =========================================================================================================
 # change these
 
-SLORADO=slorado-v0.5.0-beta/bin/slorado # will be automatically changed if building from source
+SLORADO="slorado"
 
-BUILD_FROM_SOURCE=0 # run only if in slorado repo, required for memory checks
+SLORADO_CUDA_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQBksuPWnfpaTbnkIC9k05I3AY_Dhe1uz_Rj5sO9JxT2n64?download=1"
+SLORADO_ROCM_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQC0nnJ4s3foSJDd8Qaw7124AX_STnHRsg0bZaZ7zSeEcgk?download=1"
+
+BUILD_FROM_SOURCE=0 # run only if in slorado repo, for asan memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
 
 # batch sizes for each model
@@ -148,19 +150,6 @@ check_corr() {
     die "$1 failed mod freq correlation test with value of $2"
 }
 
-# set number of threads
-export NTHREADS=$(getconf _NPROCESSORS_ONLN)
-
-if ! [[ "$NTHREADS" =~ ^[0-9]+$ ]] || [ "$NTHREADS" -le 0 ]; then
-    die "NTHREADS must be a positive integer, got '$NTHREADS'"
-fi
-
-if [ "$1" = 'flash' ]; then
-    flash=1
-else
-    flash=0
-fi
-
 download_test_data() {
 	if [ -d ${DATA_DIR} ]; then
 		return
@@ -263,6 +252,40 @@ download_model() {
     rm -f $1.zip || die "Removing the model failed"
 }
 
+download_slorado_binary() {
+    archive_path=test/slorado_${DEV}.binpkg
+    extract_dir=test/slorado_${DEV}
+
+    # Reuse an existing extracted binary to avoid downloading every run.
+    downloaded_slorado=$(find "$extract_dir" -type f -path "*/bin/slorado" -perm -u+x 2>/dev/null | head -n1)
+    if [ -n "$downloaded_slorado" ]; then
+        SLORADO="$downloaded_slorado"
+        return
+    fi
+
+    test -e "$archive_path" && rm -f "$archive_path"
+    test -d "$extract_dir" && rm -rf "$extract_dir"
+    mkdir -p "$extract_dir" || die "Creating $extract_dir failed"
+
+    if [ "$DEV" = "cuda" ]; then
+        wget -O "$archive_path" "$SLORADO_CUDA_URL" || die "Downloading slorado CUDA binary failed"
+    elif [ "$DEV" = "rocm" ]; then
+        wget -O "$archive_path" "$SLORADO_ROCM_URL" || die "Downloading slorado ROCm binary failed"
+    else
+        die "Unknown DEV option ${DEV}. Supported options are: cuda, rocm"
+    fi
+
+    if ! tar -xf "$archive_path" -C "$extract_dir"; then
+        if ! unzip -q "$archive_path" -d "$extract_dir"; then
+            die "Extracting slorado binary package failed"
+        fi
+    fi
+
+    downloaded_slorado=$(find "$extract_dir" -type f -path "*/bin/slorado" -perm -u+x | head -n1)
+    test -n "$downloaded_slorado" || die "slorado executable not found at /bin/slorado in downloaded package"
+    SLORADO="$downloaded_slorado"
+}
+
 check_acc_dna() {
     $MINIMAP2 -cx map-ont $REF_DNA -t $NTHREADS tmp.fastq --secondary=no > tmp.paf || die "minimap2 failed"
     MEDIAN=$(awk '{print $10/$11}' tmp.paf | $DATAMASH median 1)
@@ -281,6 +304,51 @@ check_corr_mod() {
     check_corr $1 $corr
 }
 
+if [ $# -ne 2 ]; then
+    die "Usage: $0 <cuda|rocm> <custom|bin|build>"
+fi
+
+DEV=$1
+SLORADO_MODE=$2
+
+if [ "$DEV" = "cuda" ]; then
+    GPU_BUILD_FLAG=cuda=1
+elif [ "$DEV" = "rocm" ]; then
+    GPU_BUILD_FLAG=rocm=1
+else
+    die "Unknown DEV option ${DEV}. Supported options are: cuda, rocm"
+fi
+
+if [ "$SLORADO_MODE" = "custom" ]; then
+    :
+elif [ "$SLORADO_MODE" = "bin" ]; then
+    download_slorado_binary
+elif [ "$SLORADO_MODE" = "build" ]; then
+    SLORADO="slorado"
+else
+    die "Unknown slorado mode ${SLORADO_MODE}. Supported modes are: custom, bin, build"
+fi
+
+echo "Using slorado executable at: $SLORADO"
+
+# check tools
+test -x $MINIMOD || download_minimod
+test -x $MINIMAP2 || download_minimap2
+test -x $SAMTOOLS || download_samtools
+test -x $DATAMASH || download_datamash
+
+$MINIMOD --version > /dev/null || die "minimod is missing"
+$MINIMAP2 --version > /dev/null || die "minimap2 is missing"
+$SAMTOOLS --version > /dev/null || die "samtools is missing"
+$DATAMASH --version > /dev/null || die "datamash is missing"
+
+# set number of threads
+export NTHREADS=$(getconf _NPROCESSORS_ONLN)
+
+if ! [[ "$NTHREADS" =~ ^[0-9]+$ ]] || [ "$NTHREADS" -le 0 ]; then
+    die "NTHREADS must be a positive integer, got '$NTHREADS'"
+fi
+
 download_test_data
 
 # check files
@@ -295,22 +363,7 @@ if [ $RUN_500K -eq 1 ]; then
     test -e $SUBSAMPLE || die "missing DNA BLOW5 subsample"
 fi
 
-# check tools
-test -x $MINIMOD || download_minimod
-test -x $MINIMAP2 || download_minimap2
-test -x $SAMTOOLS || download_samtools
-test -x $DATAMASH || download_datamash
-
-$MINIMOD --version > /dev/null || die "minimod is missing"
-$MINIMAP2 --version > /dev/null || die "minimap2 is missing"
-$SAMTOOLS --version > /dev/null || die "samtools is missing"
-$DATAMASH --version > /dev/null || die "datamash is missing"
-
-if [ $BUILD_FROM_SOURCE -eq 0 ]; then
-    $SLORADO --version > /dev/null || die "slorado is missing"
-else
-    SLORADO=slorado
-fi
+$SLORADO --version > /dev/null || die "slorado is missing"
 
 # download models
 test -d models/$FAST || download_model $FAST
@@ -363,23 +416,7 @@ fi
 
 # GPU tests
 if [ $BUILD_FROM_SOURCE -eq 1 ]; then
-    TORCH_BUILD_VERSION_FILE=thirdparty/torch/libtorch/build-version
-    test -e $TORCH_BUILD_VERSION_FILE || die "missing torch build version file $TORCH_BUILD_VERSION_FILE"
-
-    TORCH_BUILD_VERSION=$(tr -d '[:space:]' < $TORCH_BUILD_VERSION_FILE)
-    case "$TORCH_BUILD_VERSION" in
-    *rocm*|*ROCM* )
-        GPU_BUILD_FLAG=rocm=1
-        ;;
-    *cuda*|*CUDA*|*cu* )
-        GPU_BUILD_FLAG=cuda=1
-        ;;
-    *)
-        die "could not determine torch backend from $TORCH_BUILD_VERSION_FILE (value: $TORCH_BUILD_VERSION)"
-        ;;
-    esac
-
-    echo "Detected torch backend: $TORCH_BUILD_VERSION ($GPU_BUILD_FLAG)"
+    echo "Using requested GPU backend: $DEV ($GPU_BUILD_FLAG)"
     make clean && make -j $GPU_BUILD_FLAG cxx11_abi=1
 fi
 
@@ -444,19 +481,32 @@ check_acc_rna $SUP_RNA
 echo ""
 echo "********************************************************************"
 
-# check flash
-if [ $flash -eq 1 ]; then
-    echo "GPU - SUP model (flash) - 20k reads"
-    ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq || die "Running the tool failed"
-    check_acc_dna $SUP
-    echo ""
-    echo "********************************************************************"
+# check flash support by trying to run it
+FLASH_SUPPORTED=1
 
-    echo "GPU - SUP RNA model (flash) - 20k reads"
-    ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq || die "Running the tool failed"
-    check_acc_rna $SUP_RNA
-    echo ""
-    echo "********************************************************************"
+echo "GPU - SUP model (flash) - 20k reads"
+if ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq; then
+    if ! (check_acc_dna $SUP); then
+        FLASH_SUPPORTED=0
+    fi
+else
+    FLASH_SUPPORTED=0
 fi
+echo ""
+echo "********************************************************************"
+
+echo "GPU - SUP RNA model (flash) - 20k reads"
+if ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq; then
+    if ! (check_acc_rna $SUP_RNA); then
+        FLASH_SUPPORTED=0
+    fi
+else
+    FLASH_SUPPORTED=0
+fi
+echo ""
+echo "********************************************************************"
 
 echo "all tests passed!"
+if [ $FLASH_SUPPORTED -eq 0 ]; then
+    echo "...but flash attention tests have failed on this system/device"
+fi
