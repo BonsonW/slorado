@@ -1,5 +1,7 @@
 #!/bin/bash
 
+NTHREADS="${NTHREADS:-32}"
+
 die() {
     echo "$@" >&2
     exit 1
@@ -10,7 +12,7 @@ map() {
 	bam=$1
 	genome=$2
 
-	$SAMTOOLS fastq -@64 -TMM,ML "$bam" | minimap2 -t64 -x map-ont -a -y -Y --secondary=no "$genome" - | $SAMTOOLS sort -@64 - 
+	$SAMTOOLS fastq -@${NTHREADS} -TMM,ML "$bam" | $MINIMAP2 -t${NTHREADS} -x map-ont -a -y -Y --secondary=no "$genome" - | $SAMTOOLS sort -@${NTHREADS} - 
 }
 
 if [ $# -lt 2 ]; then

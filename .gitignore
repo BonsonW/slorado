@@ -49,10 +49,10 @@ Thumbs.db
 cmake-build-debug/
 build/
 /models/*
-/minimap2
-/minimod
 /zstd
 /test/slorado_test_ext_dat
+/test/tools
+/slorado-*/
 
 #Allowed files
 !CMakeLists.txt

@@ -8,11 +8,8 @@
 # =========================================================================================================
 # change these
 
-DATAMASH=datamash
-SLORADO=./slorado
-
-export MINIMAP2=minimap2/minimap2 # this will be automatically downloaded
-export MINIMOD=minimod/minimod # this will be automatically downloaded
+SLORADO=slorado-v0.5.0-beta/bin/slorado # will be automatically changed if building from source
+export NTHREADS=32
 
 BUILD_FROM_SOURCE=0 # run only if in slorado repo, required for memory checks
 RUN_500K=0 # run 500k DNA dataset for HAC
@@ -23,7 +20,6 @@ HAC_BATCH=512
 SUP_BATCH=512
 
 # basecaller options
-NTHREADS=64
 CHUNKSIZE=10000
 READ_MEM=512M
 READ_BATCH=2048
@@ -39,6 +35,20 @@ SUP_RNA="rna004_130bps_sup@v5.1.0"
 
 # mod
 METH=5mCG_5hmCG@v3
+
+# =========================================================================================================
+# tools (will be automatically downloaded if not present)
+
+TOOLS_DIR=test/tools
+SAMTOOLS_VERSION=1.20
+DATAMASH_VERSION=1.8
+MINIMAP2_VERSION=2.24
+MINIMOD_VERSION=0.5.0
+
+export SAMTOOLS=${SAMTOOLS:-${TOOLS_DIR}/bin/samtools}
+export DATAMASH=${DATAMASH:-${TOOLS_DIR}/bin/datamash}
+export MINIMAP2=${MINIMAP2:-${TOOLS_DIR}/bin/minimap2}
+export MINIMOD=${MINIMOD:-${TOOLS_DIR}/bin/minimod}
 
 # =========================================================================================================
 # test data - this will be automatically downloaded if not present
@@ -161,17 +171,82 @@ download_test_data() {
 }
 
 download_minimap2() {
-    wget https://github.com/lh3/minimap2/releases/download/v2.24/minimap2-2.24_x64-linux.tar.bz2
-    tar xf minimap2-2.24_x64-linux.tar.bz2
-    mv minimap2-2.24_x64-linux minimap2
-    rm minimap2-2.24_x64-linux.tar.bz2
+    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
+    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
+
+    tarball=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}_x64-linux.tar.bz2
+    src_dir=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}_x64-linux
+
+    test -e $tarball && rm -f $tarball
+    test -d $src_dir && rm -rf $src_dir
+
+    wget https://github.com/lh3/minimap2/releases/download/v${MINIMAP2_VERSION}/minimap2-${MINIMAP2_VERSION}_x64-linux.tar.bz2 -O $tarball || die "Downloading minimap2 failed"
+    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting minimap2 failed"
+    cp ${src_dir}/minimap2 ${TOOLS_DIR}/bin/minimap2 || die "Installing minimap2 failed"
+    chmod +x ${TOOLS_DIR}/bin/minimap2 || die "Setting minimap2 permissions failed"
 }
 
 download_minimod() {
-    wget https://github.com/warp9seq/minimod/releases/download/v0.5.0/minimod-v0.5.0-x86_64-linux-binaries.tar.gz
-    tar xf minimod-v0.5.0-x86_64-linux-binaries.tar.gz
-    mv minimod-v0.5.0 minimod
-    rm minimod-v0.5.0-x86_64-linux-binaries.tar.gz
+    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
+    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
+
+    tarball=${TOOLS_DIR}/src/minimod-v${MINIMOD_VERSION}-x86_64-linux-binaries.tar.gz
+    src_dir=${TOOLS_DIR}/src/minimod-v${MINIMOD_VERSION}
+
+    test -e $tarball && rm -f $tarball
+    test -d $src_dir && rm -rf $src_dir
+
+    wget https://github.com/warp9seq/minimod/releases/download/v${MINIMOD_VERSION}/minimod-v${MINIMOD_VERSION}-x86_64-linux-binaries.tar.gz -O $tarball || die "Downloading minimod failed"
+    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting minimod failed"
+    cp ${src_dir}/minimod ${TOOLS_DIR}/bin/minimod || die "Installing minimod failed"
+    chmod +x ${TOOLS_DIR}/bin/minimod || die "Setting minimod permissions failed"
+}
+
+download_samtools() {
+    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
+    tarball=${TOOLS_DIR}/src/samtools-${SAMTOOLS_VERSION}.tar.bz2
+    src_dir=${TOOLS_DIR}/src/samtools-${SAMTOOLS_VERSION}
+
+    test -e $tarball && rm -f $tarball
+    test -d $src_dir && rm -rf $src_dir
+
+    wget https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2 -O $tarball || die "Downloading samtools failed"
+    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting samtools failed"
+    (
+        cd $src_dir || exit 1
+        make || exit 1
+    ) || die "Building samtools failed"
+
+    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
+    cp ${src_dir}/samtools ${TOOLS_DIR}/bin/samtools || die "Installing samtools failed"
+    chmod +x ${TOOLS_DIR}/bin/samtools || die "Setting samtools permissions failed"
+}
+
+download_datamash() {
+    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
+    tarball=${TOOLS_DIR}/src/datamash-${DATAMASH_VERSION}.tar.gz
+    src_dir=${TOOLS_DIR}/src/datamash-${DATAMASH_VERSION}
+
+    test -e $tarball && rm -f $tarball
+    test -d $src_dir && rm -rf $src_dir
+
+    wget https://ftp.gnu.org/gnu/datamash/datamash-${DATAMASH_VERSION}.tar.gz -O $tarball || die "Downloading datamash failed"
+    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting datamash failed"
+    (
+        cd $src_dir || exit 1
+        ./configure --prefix=$(pwd)/../../ || exit 1
+        make || exit 1
+    ) || die "Building datamash failed"
+
+    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
+    if [ -x ${src_dir}/datamash ]; then
+        cp ${src_dir}/datamash ${TOOLS_DIR}/bin/datamash || die "Installing datamash failed"
+    elif [ -x ${src_dir}/src/datamash ]; then
+        cp ${src_dir}/src/datamash ${TOOLS_DIR}/bin/datamash || die "Installing datamash failed"
+    else
+        die "Installing datamash failed (built binary not found)"
+    fi
+    chmod +x ${TOOLS_DIR}/bin/datamash || die "Setting datamash permissions failed"
 }
 
 download_model() {
@@ -209,7 +284,7 @@ test -e $REF_DNA || die "missing DNA reference genome $REF_DNA"
 test -e $REF_DNA_FA || die "missing DNA reference genome $REF_DNA_FA"
 test -e $REF_RNA || die "missing RNA reference genome $REF_RNA"
 test -e $SUBSUBSAMPLE || die "missing DNA BLOW5 subsubsample $SUBSUBSAMPLE"
-test -e $RNA_SUBSUBSAMPLE || die "missing RNA BLOW5 subsubsample $RNA_SUBSUBSAMPLE"
+test -e $SUBSUBSAMPLE_RNA || die "missing RNA BLOW5 subsubsample $SUBSUBSAMPLE_RNA"
 test -e $CHR22 || die "missing chr22 BLOW5 subsubsample $CHR22"
 
 if [ $RUN_500K -eq 1 ]; then
@@ -217,14 +292,20 @@ if [ $RUN_500K -eq 1 ]; then
 fi
 
 # check tools
-test -e $MINIMOD || download_minimod
-test -e $MINIMAP2 || download_minimap2
+test -x $MINIMOD || download_minimod
+test -x $MINIMAP2 || download_minimap2
+test -x $SAMTOOLS || download_samtools
+test -x $DATAMASH || download_datamash
 
-$SAMTOOLS --version > /dev/null || die "samtools not found! Either put samtools under path or set SAMTOOLS variable, e.g.,export SAMTOOLS=/path/to/samtools"
+$MINIMOD --version > /dev/null || die "minimod is missing"
+$MINIMAP2 --version > /dev/null || die "minimap2 is missing"
+$SAMTOOLS --version > /dev/null || die "samtools is missing"
 $DATAMASH --version > /dev/null || die "datamash is missing"
 
 if [ $BUILD_FROM_SOURCE -eq 0 ]; then
     $SLORADO --version > /dev/null || die "slorado is missing"
+else
+    SLORADO=slorado
 fi
 
 # download models
