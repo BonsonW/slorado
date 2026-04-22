@@ -24,6 +24,7 @@ BAM=$2 # path to unmapped sam/bam output
 
 $SAMTOOLS --version > /dev/null 2>&1 || die "samtools not found! Either put samtools under path or set SAMTOOLS variable, e.g.,export SAMTOOLS=/path/to/samtools"
 $MINIMOD --version > /dev/null 2>&1 || die "minimod not found! Either put minimod under path or set MINIMOD variable, e.g.,export MINIMOD=/path/to/minimod"
+$MINIMAP2 --version > /dev/null 2>&1 || die "minimap2 not found! Either put minimap2 under path or set MINIMAP2 variable, e.g.,export MINIMAP2=/path/to/minimap2"
 
 BAM_MAP=mapped.sam # path to mapped bam output
 
