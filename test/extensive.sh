@@ -274,7 +274,7 @@ check_acc_rna() {
 
 check_corr_mod() {
     ./scripts/get_meth_freq.sh $REF_DNA_FA tmp.sam > tmp.mm.bedmethyl || die "Getting methylation frequency failed"
-    corr=$(python3 scripts/compare.py $CHR22_METH_BED tmp.mm.bedmethyl)
+    corr=$(python3 scripts/corr_meth.py $CHR22_METH_BED tmp.mm.bedmethyl)
     check_corr $1 $corr
 }
 
