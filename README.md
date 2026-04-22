@@ -80,7 +80,7 @@ Slorado does not currently support demultiplexing. You can demultiplex reads gen
 ./dorado demux --kit-name <kit-name> --output-dir demux_reads/ reads.fastq
 ```
 
-## Modification Detection
+## Modification Detection (experimental)
 
 Slorado supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
 ```
