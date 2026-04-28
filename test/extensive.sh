@@ -20,8 +20,17 @@ SUP_BATCH="${SUP_BATCH:-256}"
 
 # basecaller options
 READ_MEM="${READ_MEM:-512M}"
+
+# basecaller advanced options
 READ_BATCH="${READ_BATCH:-4096}"
 CHUNKSIZE="${CHUNKSIZE:-10000}"
+
+# default number of threads automatically 
+export NTHREADS=${NTHREADS:-$(getconf _NPROCESSORS_ONLN)}
+
+if ! [[ "$NTHREADS" =~ ^[0-9]+$ ]] || [ "$NTHREADS" -le 0 ]; then
+    die "NTHREADS must be a positive integer, got '$NTHREADS'"
+fi
 
 # models
 FAST="dna_r10.4.1_e8.2_400bps_fast@v5.0.0"
@@ -165,14 +174,31 @@ download_minimap2() {
     test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
     test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
 
-    tarball=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}_x64-linux.tar.bz2
-    src_dir=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}_x64-linux
+    tarball=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}.tar.bz2
+    src_dir=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}
 
     test -e $tarball && rm -f $tarball
     test -d $src_dir && rm -rf $src_dir
 
-    wget https://github.com/lh3/minimap2/releases/download/v${MINIMAP2_VERSION}/minimap2-${MINIMAP2_VERSION}_x64-linux.tar.bz2 -O $tarball || die "Downloading minimap2 failed"
+    wget https://github.com/lh3/minimap2/releases/download/v${MINIMAP2_VERSION}/minimap2-${MINIMAP2_VERSION}.tar.bz2 -O $tarball || die "Downloading minimap2 failed"
     tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting minimap2 failed"
+    (
+        cd $src_dir || exit 1
+        arch=$(uname -m)
+        case "$arch" in
+            aarch64|arm64)
+                # Disable x86 SSE path and build with ARM NEON on 64-bit ARM.
+                make -j $NTHREADS arm_neon=1 aarch64=1 || exit 1
+                ;;
+            armv7l|armv8l)
+                # Disable x86 SSE path and build with ARM NEON on 32-bit ARM.
+                make -j $NTHREADS arm_neon=1 || exit 1
+                ;;
+            *)
+                make -j $NTHREADS || exit 1
+                ;;
+        esac
+    ) || die "Building minimap2 failed"
     cp ${src_dir}/minimap2 ${TOOLS_DIR}/bin/minimap2 || die "Installing minimap2 failed"
     chmod +x ${TOOLS_DIR}/bin/minimap2 || die "Setting minimap2 permissions failed"
 }
@@ -181,14 +207,19 @@ download_minimod() {
     test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
     test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
 
-    tarball=${TOOLS_DIR}/src/minimod-v${MINIMOD_VERSION}-x86_64-linux-binaries.tar.gz
+    tarball=${TOOLS_DIR}/src/minimod-v${MINIMOD_VERSION}-release.tar.gz
     src_dir=${TOOLS_DIR}/src/minimod-v${MINIMOD_VERSION}
 
     test -e $tarball && rm -f $tarball
     test -d $src_dir && rm -rf $src_dir
 
-    wget https://github.com/warp9seq/minimod/releases/download/v${MINIMOD_VERSION}/minimod-v${MINIMOD_VERSION}-x86_64-linux-binaries.tar.gz -O $tarball || die "Downloading minimod failed"
+    wget https://github.com/warp9seq/minimod/releases/download/v${MINIMOD_VERSION}/minimod-v${MINIMOD_VERSION}-release.tar.gz -O $tarball || die "Downloading minimod failed"
     tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting minimod failed"
+    (
+        cd $src_dir || exit 1
+        scripts/install-hts.sh || exit 1
+        make -j $NTHREADS || exit 1
+    ) || die "Building minimod failed"
     cp ${src_dir}/minimod ${TOOLS_DIR}/bin/minimod || die "Installing minimod failed"
     chmod +x ${TOOLS_DIR}/bin/minimod || die "Setting minimod permissions failed"
 }
@@ -212,7 +243,7 @@ download_samtools() {
     (
         cd $src_dir || exit 1
         ./configure --without-curses --disable-bz2 --disable-lzma --disable-libcurl --disable-plugins || exit 1
-        make -j || exit 1
+        make -j $NTHREADS || exit 1
     ) || die "Building samtools failed"
 
     test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
@@ -233,7 +264,7 @@ download_datamash() {
     (
         cd $src_dir || exit 1
         ./configure --prefix=$(pwd)/../../ || exit 1
-        make -j || exit 1
+        make -j $NTHREADS || exit 1
     ) || die "Building datamash failed"
 
     test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
@@ -354,13 +385,6 @@ $MINIMAP2 --version > /dev/null || die "minimap2 is missing"
 $SAMTOOLS --version > /dev/null || die "samtools is missing"
 $DATAMASH --version > /dev/null || die "datamash is missing"
 
-# set number of threads
-export NTHREADS=$(getconf _NPROCESSORS_ONLN)
-
-if ! [[ "$NTHREADS" =~ ^[0-9]+$ ]] || [ "$NTHREADS" -le 0 ]; then
-    die "NTHREADS must be a positive integer, got '$NTHREADS'"
-fi
-
 download_test_data
 
 # check files
@@ -389,7 +413,7 @@ test -d models/${SUP}_${METH} || download_model ${SUP}_${METH}
 
 # memory check with asan if building from source
 if [ "$SLORADO_MODE" = "build" ]; then
-    make clean && make -j asan=1 cxx11_abi=1
+    make clean && make -j $NTHREADS asan=1 cxx11_abi=1
 
     # basecalling
     echo "Memory Check - CPU - FAST model - 1 5khz reads"
@@ -424,7 +448,7 @@ fi
 # GPU tests
 if [ "$SLORADO_MODE" = "build" ]; then
     echo "Using requested GPU backend: $DEV ($GPU_BUILD_FLAG)"
-    make clean && make -j $GPU_BUILD_FLAG cxx11_abi=1
+    make clean && make -j $NTHREADS $GPU_BUILD_FLAG cxx11_abi=1
 fi
 
 # accuracy check DNA
