@@ -4,14 +4,14 @@ Slorado is a simplified version of [Dorado](https://github.com/nanoporetech/dora
 
 Slorado is mainly for our research and educational purposes. Thus, only a minimal set of basecalling features are supported and may not be up-to-date with Dorado. For a feature-rich and up-to-date S/BLOW5-based basecaller for routine use on NVIDIA GPUs, please see [buttery-eel](https://github.com/Psy-Fer/buttery-eel) or [slow5-dorado](https://github.com/hiruna72/slow5-dorado/releases).
 
-[![GitHub Downloads](https://img.shields.io/github/downloads/BonsonW/slorado/total?logo=GitHub)](https://github.com/BonsonW/slorado/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/BonsonW/slorado/total?logo=GitHub)](https://github.com/BonsonW/slorado/releases) [![slorado](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/warp9seq/git-count/refs/heads/main/sum/slorado.json)](https://github.com/BonsonW/slorado)
 
 ## Quick start
 
 We provide compiled binaries for [NVIDIA (cuda)](https://docs.nvidia.com/cuda) and [AMD (rocm)](https://rocm.docs.amd.com/en/latest) GPU accelerators on x86_64 CPUs for Linux. You can download the latest relevant binary release that includes the most recent supported basecalling models from [releases](https://github.com/BonsonW/slorado/releases) as below:
 
 ```
-VERSION=v0.4.0-beta
+VERSION=v0.5.0-beta
 GPU=cuda   # GPU=rocm for AMD GPUs
 wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz"
 tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz
@@ -82,7 +82,7 @@ Slorado does not currently support demultiplexing. You can demultiplex reads gen
 
 ## Modification Detection (experimental)
 
-Slorado supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
+Slorado (from v0.5.0-beta) supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
 ```
 # example modification calling
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5 --mod 5mCG_5hmCG@v3 -xcuda:all -o reads.fastq
@@ -132,5 +132,19 @@ Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v
 - [tomlc99](https://github.com/cktan/tomlc99) library under [thirdparty/tomlc99](thirdparty/tomlc99), is licensed under [MIT license](thirdparty/tomlc99/LICENSE).
 - Some code snippets have been taken from [Minimap2](https://github.com/lh3/minimap2).
 
+## Citation:
 
+Please cite the following in your publications when using Slorado:
 
+> Wong, B., Singh, G., Javaid, H., Denolf, K., Liyanage, K., Samarakoon, H., Deveson, I.W. and Gamaarachchi, H., 2026. Open-source, Hardware-Independent GPU Acceleration for Scalable Nanopore Basecalling with Slorado and Openfish. bioRxiv, pp.2026-03.
+
+```
+@article{wong2026open,
+  title={Open-source, Hardware-Independent GPU Acceleration for Scalable Nanopore Basecalling with Slorado and Openfish},
+  author={Wong, Bonson and Singh, Gagandeep and Javaid, Haris and Denolf, Kristof and Liyanage, Kisaru and Samarakoon, Hiruna and Deveson, Ira W and Gamaarachchi, Hasindu},
+  journal={bioRxiv},
+  pages={2026--03},
+  year={2026},
+  publisher={Cold Spring Harbor Laboratory}
+}
+```

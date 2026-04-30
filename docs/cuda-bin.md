@@ -8,7 +8,7 @@ We have some compiled binaries which should work On Linux if you have at least t
 First, download and extract the slorado cuda Linux binaries tarball.
 
 ```
-VERSION=v0.4.0-beta
+VERSION=v0.5.0-beta
 wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz"
 tar xvf slorado-$VERSION-x86_64-cuda-linux-binaries.tar.xz
 cd slorado-$VERSION
@@ -38,6 +38,7 @@ It should print the mean identity score, median identity score and the number of
 
 | Slorado binary version | minimum GLIBC | tested systems |
 |---             | ---             | ---         |
+| 0.5.0-beta     | 2.17           | Ubuntu 22 - Tesla V100,A100;  Rocky 8 - Tesla H200          |
 | 0.4.0-beta     | 2.17           | Ubuntu 22 - Tesla V100,A100,L4        |
 ||||
 | 0.3.0-beta     | 2.17          | Ubuntu 22 - Tesla V100,A100    |
