@@ -9,7 +9,8 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I thirdparty/tomlc99/ \
 			-I openfish/include
 CFLAGS	+= 	-g -Wall -O2
-CXXFLAGS   += -g -Wall -O2  -std=c++17
+CXXFLAGS   += -g -Wall -O2 -std=c++17
+DEPFLAGS = -MMD -MP -MF $(@:.o=.d)
 LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../lib' \
 			-Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
@@ -17,6 +18,10 @@ LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../li
 			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
 LDFLAGS  += $(LIBS) -lz -lm -lpthread
 BUILD_DIR = build
+
+ifeq ($(f16c),1)
+CXXFLAGS   += -mavx2 -mf16c
+endif
 
 ifeq ($(zstd),1)
 LDFLAGS		+= -lzstd
@@ -45,8 +50,10 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/torchbox.o \
 	  $(BUILD_DIR)/basecall.o \
 	  $(BUILD_DIR)/tensor_chunk_utils.o \
+	  $(BUILD_DIR)/modbase.o \
 	  $(BUILD_DIR)/CRFModel.o \
 	  $(BUILD_DIR)/TxModel.o \
+	  $(BUILD_DIR)/ModBaseModel.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
 
@@ -90,49 +97,55 @@ endif
 $(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
 	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/main.o: src/main.cpp src/error.h src/misc.h src/slorado.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/main.o: src/main.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp src/error.h src/misc.h src/slorado.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/slorado.o: src/slorado.cpp src/misc.h src/error.h src/slorado.h src/basecall.h src/writer.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/slorado.o: src/slorado.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/thread.o: src/thread.cpp src/misc.h src/error.h src/slorado.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/thread.o: src/thread.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/misc.o: src/misc.cpp src/misc.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/misc.o: src/misc.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/error.o: src/error.cpp src/error.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/error.o: src/error.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/writer.o: src/writer.cpp src/error.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/writer.o: src/writer.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/torchbox.o: src/torchbox.cpp src/torchbox.h src/slorado.h thirdparty/dorado/tensor_chunk_utils.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/torchbox.o: src/torchbox.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/basecall.o: src/basecall.cpp src/basecall.h src/misc.h src/error.h src/torchbox.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/basecall.o: src/basecall.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 # dorado
 $(BUILD_DIR)/tensor_chunk_utils.o: thirdparty/dorado/tensor_chunk_utils.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp thirdparty/dorado/CRFModel.h src/error.h thirdparty/dorado/tensor_chunk_utils.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/modbase.o: thirdparty/dorado/modbase.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp thirdparty/dorado/TxModel.h src/error.h thirdparty/dorado/tensor_chunk_utils.h
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp thirdparty/dorado/model_config.h src/error.h thirdparty/tomlc99
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $< -c -o $@
+$(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/ModBaseModel.o: thirdparty/dorado/ModBaseModel.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 # toml
 $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 openfish/lib/libopenfish.a:
 	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT=$(ROCM_ROOT) ROCM_ARCH=$(ROCM_ARCH) CUDA_ROOT=$(CUDA_ROOT) CUDA_ARCH=$(CUDA_ARCH) lib/libopenfish.a
@@ -141,7 +154,7 @@ slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a
 
 clean:
-	rm -rf $(BINARY) $(BUILD_DIR)/*.o
+	rm -rf $(BINARY) $(BUILD_DIR)/*.o $(BUILD_DIR)/*.d
 	make -C slow5lib clean
 	make -C openfish clean
 
@@ -157,3 +170,5 @@ test: $(BINARY)
 # make mem with run a simple memory test using valgrind
 mem: $(BINARY)
 	./test/test.sh mem
+
+-include $(OBJ:.o=.d)

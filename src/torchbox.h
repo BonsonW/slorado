@@ -2,27 +2,23 @@
 #define TORCHBOX_H
 
 #include <torch/torch.h>
+#include <cstdint>
 #include "slorado.h"
 
-// result + metadata of a chunk
-struct chunk_res {
-    size_t input_offset;    // raw signal offset
-    size_t idx_in_read;     // order in read
-    size_t raw_chunk_size;  // size in raw signal
+// per read data
+struct read_dat {
+    torch::Tensor scaled_signal;
 
-    std::string seq;
-    std::string qstring;
-    std::vector<uint8_t> moves;
-};
+    // mod data
+    const char *seq;
 
-// raw signal of a chunk
-struct chunk_sig {
-    torch::Tensor tensor;
-};
+    std::vector<int8_t> encoded_kmers;
+    std::array<std::vector<int64_t>, 4> per_base_hits_seq; // sequence indices for hits for each base (i.e. one per model)
+    std::array<std::vector<int64_t>, 4> per_base_hits_sig; // signal indices for hits for each base (i.e. one per model)
+    int64_t target_start;
 
-struct chunk_db {
-    std::vector<std::vector<chunk_res_t>> *chunks_res;
-    std::vector<std::vector<chunk_sig_t>> *chunks_sig;
+    std::vector<uint8_t> base_mod_probs;
+    std::vector<bool> base_mod_simplex_motif_hits;
 };
 
 struct runner {
@@ -34,6 +30,10 @@ struct runner {
     int64_t device_idx;
     openfish_gpubuf_t *gpubuf;
 #endif
+
+    // modbase stuff
+    at::Tensor input_sigs;
+    at::Tensor input_seqs;
 };
 
 #endif

@@ -33,7 +33,7 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh cpu
     - name: build
-      run: make -j2
+      run: make f16c=1 -j2
     - name: test
       run: export DEVICE=cpu && make test
   ubuntu_16_cuda:
@@ -68,8 +68,8 @@ jobs:
         apt-get -y --allow-unauthenticated install cuda
     - name: torch
       run: scripts/install-torch2.sh cuda 2.0.0
-    - name: build cuda=1
-      run: make cuda=1 -j2
+    - name: build cuda=1 f16c=1
+      run: make cuda=1 f16c=1 -j2
   ubuntu_18_cuda:
     name: Ubuntu 18 CUDA G++ 11 torch 2.4.0
     runs-on: ubuntu-24.04
@@ -143,7 +143,7 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh cpu
     - name: build
-      run: make -j2
+      run: make -j2 
     - name: test
       run: export DEVICE=cpu && make test
   ubuntu_20:

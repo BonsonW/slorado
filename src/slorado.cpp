@@ -48,13 +48,15 @@ SOFTWARE.
 #include <unistd.h>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
-void init_chunk_db(db_t *db);
-void free_chunk_db(db_t *db);
 void preprocess_signal(core_t* core, db_t* db, int32_t i);
-void stitch_chunks(chunk_db_t *chunk_db, size_t i, std::string &sequence, std::string &qstring);
+void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
+void free_read_dat(read_dat_t *read_dat);
+void preprocess_modbase(core_t *core, db_t *db, int32_t i);
+void postprocess_modbase(core_t *core, db_t *db, int32_t i);
 
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
@@ -68,6 +70,25 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     if (core->sp == NULL) {
         VERBOSE("Error opening SLOW5 file %s\n", slow5file);
         exit(EXIT_FAILURE);
+    }
+
+    // modbase stuff
+    if (opt.mod != NULL) {
+        INFO("%s", "modification calling detected, output will be in SAM format");
+        core->opt.flag |= SLORADO_SAM;
+        
+        LOG_TRACE("%s", "loading modbase configs...");
+        auto model_str = std::string(model);
+        if (model_str.back() == '/') {
+            model_str.pop_back(); // remove trailing slash if exists
+        }
+        auto modbase_config_path = model_str + "_" + opt.mod;
+        ModBaseModelConfig modbase_config = load_modbase_model_config(modbase_config_path.c_str());
+        auto configs = std::vector<ModBaseModelConfig>({modbase_config});
+        ModBaseInfo modbase_info = get_modbase_info(configs);
+        core->modbase_config = new ModBaseModelConfig(modbase_config);
+        core->modbase_info = new ModBaseInfo(modbase_info);
+        LOG_TRACE("%s", "modbase config loaded");
     }
 
     CRFModelConfig model_config;
@@ -107,8 +128,14 @@ void free_core(core_t* core, opt_t opt) {
 
     slow5_close(core->sp);
     delete core->runners;
+    delete core->mod_runners;
     delete core->runner_stats;
     delete core->model_config;
+
+    if (core->modbase_config != NULL) {
+        delete core->modbase_config;
+        delete core->modbase_info;
+    }
     free(core);
 }
 
@@ -131,9 +158,15 @@ db_t* init_db(core_t* core) {
     db->means = (double*)calloc(db->capacity_rec,sizeof(double));
     MALLOC_CHK(db->means);
 
-    init_chunk_db(db);
-    db->sequence = new std::vector<char *>(db->capacity_rec, NULL);
-    db->qstring = new std::vector<char *>(db->capacity_rec, NULL);
+    db->sequence = new std::vector<std::string>(db->capacity_rec);
+    db->qstring = new std::vector<std::string>(db->capacity_rec);
+    db->read_dats = new std::vector<read_dat_t *>(db->capacity_rec, NULL);
+    db->basecall_chunks = new std::vector<std::vector<basecall_chunk_t>>(db->capacity_rec, std::vector<basecall_chunk_t>());
+    db->mod_chunks = new std::vector<std::vector<mod_chunk_t>>(db->capacity_rec, std::vector<mod_chunk_t>());
+    db->moves = new std::vector<std::vector<uint8_t>>(db->capacity_rec, std::vector<uint8_t>());
+
+    db->mod_string = new std::vector<std::string>(db->capacity_rec);
+    db->mod_prob = new std::vector<std::vector<uint8_t>>(db->capacity_rec, std::vector<uint8_t>());
 
     db->total_reads = 0;
     db->sum_bytes = 0;
@@ -193,29 +226,31 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
     uint64_t len_raw_signal = rec->len_raw_signal;
 
     if (len_raw_signal > 0) {
-        std::string sequence;
-        std::string qstring;
-        stitch_chunks(db->chunk_db, i, sequence, qstring);
+        auto& sequence = (*db->sequence)[i];
+        sequence.clear();
+        auto& qstring = (*db->qstring)[i];
+        qstring.clear();
+        auto& moves = (*db->moves)[i];
+        moves.clear();
+
+        stitch_chunks(db, i, sequence, qstring, moves, len_raw_signal, core->model_stride);
         
         if (is_rna(core->model_config->sample_type)) {
             std::reverse(sequence.begin(), sequence.end());
             std::reverse(qstring.begin(), qstring.end());
+            std::reverse(moves.begin(), moves.end()); // might not need this, no idea
         }
 
-        (*db->sequence)[i] = strdup(sequence.c_str());
-        assert((*db->sequence)[i] != NULL);
-
-        (*db->qstring)[i] = strdup(qstring.c_str());
-        assert((*db->qstring)[i] != NULL);
     }
 }
 
 void process_db(core_t* core, db_t* db) {
     double proc_start = realtime();
+    double a, b;
 
-    double a = realtime();
+    a = realtime();
     work_db(core, db, parse_single);
-    double b = realtime();
+    b = realtime();
     core->time_parse += (b - a);
     LOG_DEBUG("%s", "parsed reads");
 
@@ -237,6 +272,26 @@ void process_db(core_t* core, db_t* db) {
     core->time_postproc += (b-a);
     LOG_DEBUG("%s", "postprocessed reads");
 
+    if (core->opt.mod != NULL) {
+        a = realtime();
+        work_db(core, db, preprocess_modbase);
+        b = realtime();
+        core->time_preproc_mod += (b-a);
+        LOG_DEBUG("%s", "mod preprocessed reads");
+
+        a = realtime();
+        mod_basecall_db(core, db);
+        b = realtime();
+        core->time_runners += (b-a);
+        LOG_DEBUG("%s", "mod basecalled reads");
+
+        a = realtime();
+        work_db(core, db, postprocess_modbase);
+        b = realtime();
+        core->time_postproc_mod += (b-a);
+        LOG_DEBUG("%s", "mod postprocessed reads");
+    }
+
     double proc_end = realtime();
     core->time_process_db += (proc_end-proc_start);
 }
@@ -247,8 +302,12 @@ void output_db(core_t* core, db_t* db) {
 
     int32_t i = 0;
     for (i = 0; i < db->n_rec; i++) {
-        if(db->slow5_rec[i]->len_raw_signal>0){
-            write_to_file(core->opt.out, (*db->sequence)[i], (*db->qstring)[i], db->slow5_rec[i]->read_id, (core->opt.flag & SLORADO_EFQ) != 0);
+        if (db->slow5_rec[i]->len_raw_signal > 0) {
+            if ((core->opt.flag & SLORADO_SAM) != 0) {
+                write_to_file_sam(core->opt.out, (*db->sequence)[i].c_str(), (*db->qstring)[i].c_str(), db->slow5_rec[i]->read_id, (*db->mod_string)[i].c_str(), (*db->mod_prob)[i]);
+            } else {
+                write_to_file_fastq(core->opt.out, (*db->sequence)[i].c_str(), (*db->qstring)[i].c_str(), db->slow5_rec[i]->read_id);
+            }
         }
     }
 
@@ -265,8 +324,7 @@ void free_db_tmp(db_t* db) {
     int32_t i = 0;
     for (i = 0; i < db->n_rec; ++i) {
         free(db->mem_records[i]);
-        free((*db->sequence)[i]);
-        free((*db->qstring)[i]);
+        db->mem_records[i] = NULL;
     }
 }
 
@@ -275,6 +333,7 @@ void free_db(db_t* db) {
     LOG_DEBUG("%s", "freeing db");
     int32_t i = 0;
     for (i = 0; i < db->capacity_rec; ++i) {
+        free_read_dat((*db->read_dats)[i]);
         slow5_rec_free(db->slow5_rec[i]);
     }
     free(db->slow5_rec);
@@ -283,16 +342,21 @@ void free_db(db_t* db) {
     free(db->means);
     delete db->sequence;
     delete db->qstring;
-    free_chunk_db(db);
+    delete db->moves;
+    delete db->mod_string;
+    delete db->mod_prob;
+    delete db->basecall_chunks;
+    delete db->mod_chunks;
+    delete db->read_dats;
     free(db);
 }
 
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 2000;
-    opt->gpu_batch_size = 500;
-    opt->batch_size_bytes = 500*1000*1000;
+    opt->batch_size = 4096;
+    opt->gpu_batch_size = 512;
+    opt->batch_size_bytes = 512*1000*1000;
     opt->num_thread = 8;
 
     opt->debug_break = -1;
@@ -303,11 +367,12 @@ void init_opt(opt_t* opt) {
     opt->device = "cpu";
 #endif
 
-    opt->chunk_size = 10000;
+    opt->chunk_size = 12288;
     opt->overlap = 150;
 
     opt->out = stdout;
 
-    opt->flag |= SLORADO_EFQ;
-}
+    opt->mod = NULL;
 
+    // opt->flag |= SLORADO_SAM;
+}

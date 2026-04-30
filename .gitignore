@@ -49,12 +49,22 @@ Thumbs.db
 cmake-build-debug/
 build/
 /models/*
-/minimap2
 /zstd
-test/tmp.fastq
-test/tmp.paf
-reads.fastq
+/test/slorado_test_ext_dat
+/test/tools
+test/slorado*
+/slorado-*/
 
 #Allowed files
 !CMakeLists.txt
 
+# output
+*.sam
+*.bam
+*.bai
+*.tsv
+*.fastq
+*.paf
+*.bedmethyl
+*.pdf
+*.temp*

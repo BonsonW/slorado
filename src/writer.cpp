@@ -34,24 +34,58 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include <vector>
+#include <string>
+
 #include "error.h"
+#include "writer.h"
 
-void write_to_file(FILE *out, char *sequence, char *qstring, char *read_id, bool emit_fastq) {
-    if (emit_fastq) {
-        int sequence_len = strlen(sequence);
-        int qstring_len = strlen(qstring);
-        if (sequence_len != qstring_len) {
-            ERROR("sequence len: %d != qstring len: %d", sequence_len, qstring_len);
-            exit(EXIT_FAILURE);
-        }
+void write_to_file_fastq(FILE *out, const char *sequence, const char *qstring, const char *read_id) {
+    ASSERT(strlen(sequence) == strlen(qstring));
 
-        int expected_len_bytes = strlen(read_id) + sequence_len + qstring_len + 6;
-        int ret = fprintf(out, "@%s\n%s\n+\n%s\n", read_id, sequence, qstring);
-        if (ret != expected_len_bytes) {
-            ERROR("error writing fastq: %s", strerror(ret));
-            exit(EXIT_FAILURE);
-        }
-    } else {
-        // todo: samline outuput
+    int ret = fprintf(out, "@%s\n%s\n+\n%s\n", read_id, sequence, qstring);
+
+    if (ret < 0) {
+        ERROR("error writing fastq: %s", strerror(ret));
+        exit(EXIT_FAILURE);
+    }
+}
+
+static std::string mod_prob_to_str(const std::vector<uint8_t>& ml) {
+    std::string s;
+    s.reserve(ml.size() * 4);
+
+    for (auto v : ml) {
+        s.push_back(',');
+        s += std::to_string(static_cast<int>(v));
+    }
+
+    return s;
+}
+
+void write_to_file_sam(FILE *out, const char *sequence, const char *qstring, const char *read_id, const char *mod_string, std::vector<uint8_t> &mod_prob) {
+    ASSERT(strlen(sequence) == strlen(qstring));
+
+    int flags = 4; // unmapped
+    int pos = 0;
+    int mapq = 0;
+    int pnext = 0;
+    int tlen = 0;
+
+    const char *rname = "*";
+    const char *cigar = "*";
+    const char *rnext = "*";
+    std::string mod_prob_string = mod_prob_to_str(mod_prob);
+
+    int ret = fprintf(
+        out,
+        "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\tMM:Z:%s\tML:B:C%s\n",
+        read_id, flags, rname, pos, mapq, cigar, rnext, pnext, tlen, sequence, qstring,
+        mod_string, mod_prob_string.c_str()
+    );
+    
+    if (ret < 0) {
+        ERROR("error writing sam file: %s", strerror(ret));
+        exit(EXIT_FAILURE);
     }
 }

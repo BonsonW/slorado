@@ -42,19 +42,21 @@ SOFTWARE.
 
 #include "dorado/model_config.h"
 
-#define SLORADO_VERSION "0.4.0-beta"
+#define SLORADO_VERSION "0.5.0-beta"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *
  *******************************************************/
 
-#define SLORADO_PRF 0x001 // cpu-profile mode
-#define SLORADO_ACC 0x002 // accelerator enable
-#define SLORADO_EFQ 0x004 // emit fastq enable
-#define SLORADO_FLS 0x008 // flash attention enable
+#define SLORADO_PRF         0x001 // cpu-profile mode
+#define SLORADO_ACC         0x002 // accelerator enable
+#define SLORADO_SAM         0x004 // emit sam enable
+#define SLORADO_FLASH       0x008 // flash attention enable
 
 #define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 // stealing threshold
+
+#define NUM_BASES (4)
 
 /* user specified options */
 typedef struct {
@@ -72,11 +74,42 @@ typedef struct {
     const char *device;         // specified device: x
     size_t chunk_size;          // size of chunks: c
     int32_t overlap;            // overlap: p
+
+    const char *mod;         // specified modbase: x
 } opt_t;
 
-typedef struct chunk_sig chunk_sig_t;
-typedef struct chunk_res chunk_res_t;
-typedef struct chunk_db chunk_db_t;
+typedef struct read_dat read_dat_t;
+
+// result + metadata of a chunk
+struct basecall_chunk {
+    size_t input_offset;    // raw signal offset
+    size_t idx_in_read;     // order in read
+    size_t raw_chunk_size;  // size in raw signal
+
+    std::string seq;
+    std::string qstring;
+    std::vector<uint8_t> moves;
+
+    read_dat_t *read_dat;
+};
+
+// result + metadata of a modbase chunk
+struct mod_chunk {
+    read_dat_t *read_dat;
+
+    int model_id;
+    int base_id;
+
+    size_t signal_offset;   // starting offset of the preprocessed signal
+    size_t hit_offset;      // starting offset of the context hits
+
+    int64_t num_states;   // number of states predicted by the modbase model `num_mods + 1`
+    
+    std::vector<float> scores;  // model predictions for this chunk arranged in `[canonical, mod1, .., modN, canonical, mod1, ..]`
+};
+typedef struct mod_chunk mod_chunk_t;
+
+typedef struct basecall_chunk basecall_chunk_t;
 
 /* a batch of read data (dynamic data based on the reads) */
 typedef struct {
@@ -90,10 +123,19 @@ typedef struct {
 
     double *means;
 
-    chunk_db_t *chunk_db;
+    // intermediate data
+    std::vector<std::vector<basecall_chunk_t>> *basecall_chunks;
+    std::vector<std::vector<mod_chunk_t>> *mod_chunks;
+    std::vector<read_dat_t *> *read_dats;
 
-    std::vector<char *> *sequence;
-    std::vector<char *> *qstring;
+    // basecall results
+    std::vector<std::string> *sequence;
+    std::vector<std::string> *qstring;
+    std::vector<std::vector<uint8_t>> *moves;
+
+    // modcall results
+    std::vector<std::string> *mod_string;
+    std::vector<std::vector<uint8_t>> *mod_prob;
 
     // stats
     int64_t sum_bytes;
@@ -131,6 +173,7 @@ typedef struct {
     double time_basecall;
     double time_infer;
     double time_decode;
+    double time_modcall;
 
     void *model_stats;
 
@@ -148,12 +191,15 @@ typedef struct {
     opt_t opt;
     openfish_opt_t decoder_opts;
     CRFModelConfig *model_config;
+    ModBaseModelConfig *modbase_config = NULL;
+    ModBaseInfo *modbase_info = NULL;
     size_t model_stride;
     size_t chunk_size;
 
     // create model runner
     // only one per GPU is used for now
     std::vector<runner_t *> *runners;
+    std::vector<runner_t *> *mod_runners;
 
     // realtime0
     double realtime0;
@@ -162,12 +208,24 @@ typedef struct {
     double time_init_runners;
     double time_load_db;
     double time_process_db;
+    double time_free_db;
     double time_parse;
     double time_preproc;
     double time_runners;
     double time_sync;
     double time_postproc;
+    double time_preproc_mod;
+    double time_postproc_mod;
     double time_output;
+
+    double time_tens_from_rec;
+    double time_init_base_mod_probs;
+    double time_seq_to_sig_map;
+    double time_seq_to_ints;
+    double time_populate_hits_sig;
+    double time_populate_signal;
+    double time_get_minimal_encoding_skips;
+    double time_populate_encoded_kmer;
 
     // stats for each runner
     std::vector<runner_stat_t *> *runner_stats;

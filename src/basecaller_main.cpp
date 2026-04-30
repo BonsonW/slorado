@@ -36,6 +36,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <unordered_set>
 
 #include <openfish/openfish_error.h>
 
@@ -43,9 +44,18 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
+// add supported modbase models here
+static const std::unordered_set<std::string> supported = std::unordered_set<std::string>({
+    "5mCG_5hmCG@v3",
+});
+
+static inline bool is_modbase_supported(const char *mod) {
+    return supported.find(std::string(mod)) != supported.end();
+}
+
 static struct option long_options[] = {
     {"threads", required_argument, 0, 't'},         //0 number of threads [8]
-    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [1000]
+    {"batchsize", required_argument, 0, 'K'},       //1 batchsize - number of reads loaded at once [4096]
     {"max-bytes", required_argument, 0, 'B'},       //2 batchsize - number of bytes loaded at once
     {"verbose", required_argument, 0, 'v'},         //3 verbosity level [1]
     {"help", no_argument, 0, 'h'},                  //4
@@ -54,13 +64,14 @@ static struct option long_options[] = {
     {"debug-break", required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
     {"profile-cpu", required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
     {"accel",required_argument, 0, 0},              //9 accelerator //not used, can be reused for something elese
-    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [8000]
+    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [12288]
     {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
     {"device", required_argument, 0, 'x'},          //12 device [cpu]
     {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
-    {"emit-fastq", required_argument, 0, 0},        //14 toggles emit fastq
+    {"emit-sam", no_argument, 0, 0},                //14 toggles emit sam
     {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
     {"flash", required_argument, 0, 0},             //16 toggles flash attention when possible
+    {"mod", required_argument, 0, 0},               //17 detect modified bases
     {0, 0, 0, 0}};
 
 
@@ -79,17 +90,19 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
-    fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLS) ? "yes" : "no");
+    fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
+    fprintf(fp_help, "  --mod STR                   detect modified bases (5mCG_5hmCG@v3) [%s]\n", opt.mod ? opt.mod : "NULL");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
-    // fprintf(fp_help, "  --emit-fastq=yes|no         emits fastq output format\n");
+    fprintf(fp_help, "  --emit-sam                  emits sam output format\n");
     fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 }
 
 int basecaller_main(int argc, char* argv[]) {
     double realtime0 = realtime();
+    double a, b;
 
     const char* optstring = "t:B:K:C:v:o:x:r:p:c:hV";
 
@@ -165,9 +178,11 @@ int basecaller_main(int argc, char* argv[]) {
         } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
             yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 14) { // emit fastq
-            yes_or_no(&opt.flag, SLORADO_EFQ, long_options[longindex].name, optarg, 1);
+            opt.flag |= SLORADO_SAM;
         } else if (c == 0 && longindex == 16) { // flash attention
-            yes_or_no(&opt.flag, SLORADO_FLS, long_options[longindex].name, optarg, 1);
+            yes_or_no(&opt.flag, SLORADO_FLASH, long_options[longindex].name, optarg, 1);
+        } else if (c == 0 && longindex == 17) { // flash attention
+            opt.mod = optarg;
         }
     }
 
@@ -194,6 +209,15 @@ int basecaller_main(int argc, char* argv[]) {
 
     model = argv[optind++];
 
+    if (opt.mod != NULL && !is_modbase_supported(opt.mod)) {
+        std::string error_msg = "unsupported modbase model \"" + std::string(opt.mod) + "\"curent supported modbase models are: ";
+        for (const auto &s : supported) {
+            error_msg += s + ", ";
+        }
+        ERROR("%s", error_msg.c_str());
+        exit(EXIT_FAILURE);
+    }
+
     if (model == NULL) {
         print_help_msg(fp_help, opt);
         if (fp_help == stdout) {
@@ -219,7 +243,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
     fprintf(stderr,"device:             %s\n", opt.device);
     fprintf(stderr,"chunk size:         %zu\n", opt.chunk_size);
-    fprintf(stderr,"batch size:         %d\n", opt.batch_size);
+    fprintf(stderr,"read batch size:    %d\n", opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
     fprintf(stderr,"overlap:            %d\n", opt.overlap);
@@ -255,7 +279,10 @@ int basecaller_main(int argc, char* argv[]) {
         output_db(core, db);
 
         // free temporary
+        a = realtime();
         free_db_tmp(db);
+        b = realtime();
+        core->time_free_db += b-a;
 
         if (opt.debug_break == counter) {
             break;
@@ -264,7 +291,10 @@ int basecaller_main(int argc, char* argv[]) {
     }
 
     // free the databatch
+    a = realtime();
     free_db(db);
+    b = realtime();
+    core->time_free_db += b-a;
 
     fprintf(stderr, "[%s] total entries: %ld", __func__, (long)core->total_reads);
     fprintf(stderr, "\n[%s] total bytes: %.1f M", __func__, core->sum_bytes/(float)(1000*1000));
@@ -279,7 +309,11 @@ int basecaller_main(int argc, char* argv[]) {
 
     auto runner_stats = *core->runner_stats;
     for (size_t i = 0; i < runner_stats.size(); ++i) {
-        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i, runner_stats[i]->time_basecall + runner_stats[i]->time_accept);
+        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i,
+            runner_stats[i]->time_basecall +
+            runner_stats[i]->time_accept +
+            runner_stats[i]->time_modcall
+        );
         fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_stats[i]->time_accept);
         fprintf(stderr, "\n[%s]             - basecall: %.3f sec", __func__, runner_stats[i]->time_basecall);
         fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_stats[i]->time_infer);
@@ -307,10 +341,20 @@ int basecaller_main(int argc, char* argv[]) {
             // fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
         }
         fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
+        fprintf(stderr, "\n[%s]             - modcall: %.3f sec", __func__, runner_stats[i]->time_modcall);
         // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
     }
     fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
+    fprintf(stderr, "\n[%s]     - mod_preprocess: %.3f sec", __func__, core->time_preproc_mod);
+    // fprintf(stderr, "\n[%s]         - seq_to_sig_map: %.3f sec", __func__, core->time_seq_to_sig_map);
+    // fprintf(stderr, "\n[%s]         - seq_to_ints: %.3f sec", __func__, core->time_seq_to_ints);
+    // fprintf(stderr, "\n[%s]         - populate_hits_sig: %.3f sec", __func__, core->time_populate_hits_sig);
+    // fprintf(stderr, "\n[%s]         - populate_signal: %.3f sec", __func__, core->time_populate_signal);
+    // fprintf(stderr, "\n[%s]         - get_minimal_encoding_skips: %.3f sec", __func__, core->time_get_minimal_encoding_skips);
+    // fprintf(stderr, "\n[%s]         - populate_encoded_kmer: %.3f sec", __func__, core->time_populate_encoded_kmer);
+    fprintf(stderr, "\n[%s]     - mod_postprocess: %.3f sec", __func__, core->time_postproc_mod);
     fprintf(stderr, "\n[%s] data output: %.3f sec", __func__, core->time_output);
+    fprintf(stderr, "\n[%s] data free: %.3f sec", __func__, core->time_free_db);
     fprintf(stderr,"\n");
 
     // free the core data structure
