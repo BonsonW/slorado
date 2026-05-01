@@ -61,13 +61,46 @@ Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems
 
 ## Testing
 
-After running on a test dataset, you can use minimap2 to align the reads to the reference and calculate the identity score statistics. If the identity score statistics are close enough to what we expect from these models then things are good.
+After running on a test dataset, you can use minimap2 to align the reads to the reference and calculate the identity score statistics. If the identity score statistics are close enough to what we expect from these models, then things are good.
 
 A script to calculate basecalling accuracy is provided:
 ```
 set environment variable MINIMAP2, if minimap2 is not in PATH.
 scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
 ```
+
+For a more exhaustive test of slorado's features (on GPU setups), we have provided an [extensive test script](test/extensive.sh). This will automatically download the requisite test data and tools to test DNA/RNA basecalling, methylation detection, and flash attention support on your device. We highly recommend running this to ensure basecalling works on your machine. Excluding the automated binary release test mode, this script is meant to work on both ARM and x86 architectures.
+
+Here is an example of how to run it:
+```
+# optionally customise parameters before running
+export FAST_BATCH=512   # FAST model GPU batch size
+export HAC_BATCH=256    # HAC model GPU batch size
+export SUP_BATCH=128    # SUP model GPU batch size
+export NTHREADS=8       # number of CPU threads (set to _NPROCESSORS_ONLN if unspecified)
+export READ_MEM=512M    # max read batch memory in host memory
+export READ_BATCH=2048  # max number of reads loaded into host memory
+
+# go into slorado root directory
+cd slorado
+
+# test an existing slorado binary by providing the path
+./test/extensive /path/to/slorado
+
+# test the latest binary (x86) release on your machine
+./test/extensive cuda bin
+# OR
+./test/extensive rocm bin
+
+# build and test from the repo (after installing the appropriate torch version)
+./test/extensive cuda build
+# OR
+./test/extensive rocm build
+
+```
+## Known issues
+
+As of May 1st 2026, LSTM models (HAC and FAST or SUP < v5.0.0) on the 9700 AI Pro (and possibly other newer AMD GPUs) produce incorrect outputs (Transformer models unaffected). This issue is known and can be tracked [here](https://github.com/pytorch/pytorch/issues/177834).
 
 ## Demultiplexing
 
@@ -116,7 +149,7 @@ A large batch size (-K and -B) may take up significant RAM during run-time. Simi
 
 Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v5.0.0 when compiled with CUDA Torch >= v2.4.0 and ROCm Torch >= 2.9.0. This is not guaranteed to work on older GPUs, so we have kept it disabled by default for maximum compatibility. For best runtime performance on modern GPUs (Ampere GPUs or newer on NVIDIA, CDNA2/RDNA3 or newer on AMD), enable Flash Attention with the option `--flash yes`. Other older GPUs maybe supported but are not tested yet.
 
-## Tested model
+## Tested models
 
 | slorado version | Tested models |
 | ---             | ---           |
@@ -124,7 +157,6 @@ Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v
 | 0.4.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; rna004_130bps v5.1.0 |
 | 0.3.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 and v5.0.0 |
 | 0.2.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 |
-
 
 ## Acknowledgement
 
