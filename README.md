@@ -77,7 +77,7 @@ Here is an example of how to run it:
 export FAST_BATCH=512   # FAST model GPU batch size
 export HAC_BATCH=256    # HAC model GPU batch size
 export SUP_BATCH=128    # SUP model GPU batch size
-export NTHREADS=8       # number of CPU threads used (set to _NPROCESSORS_ONLN in unspecified)
+export NTHREADS=8       # number of CPU threads (set to _NPROCESSORS_ONLN if unspecified)
 export READ_MEM=512M    # max read batch memory in host memory
 export READ_BATCH=2048  # max number of reads loaded into host memory
 
