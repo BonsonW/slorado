@@ -61,7 +61,7 @@ Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems
 
 ## Testing
 
-After running on a test dataset, you can use minimap2 to align the reads to the reference and calculate the identity score statistics. If the identity score statistics are close enough to what we expect from these models then things are good.
+After running on a test dataset, you can use minimap2 to align the reads to the reference and calculate the identity score statistics. If the identity score statistics are close enough to what we expect from these models, then things are good.
 
 A script to calculate basecalling accuracy is provided:
 ```
@@ -69,7 +69,7 @@ set environment variable MINIMAP2, if minimap2 is not in PATH.
 scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
 ```
 
-For a more exhaustive test of slorado's features (on GPU setups), we have provided a test script here: [extensive](test/extensive.sh). This script will automatically download the requisite test data and tools to test DNA/RNA basecalling, methylation detection, and flash attention support on your device. This is recommended if you want to be sure that basecalling works on your machine. Excluding the binary release tests, this script is meant to work on both ARM and x86 architectures.
+For a more exhaustive test of slorado's features (on GPU setups), we have provided an [extensive test script](test/extensive.sh). This will automatically download the requisite test data and tools to test DNA/RNA basecalling, methylation detection, and flash attention support on your device. We highly recommend running this to ensure basecalling works on your machine. Excluding the automated binary release test mode, this script is meant to work on both ARM and x86 architectures.
 
 Here is an example of how to run it:
 ```
