@@ -40,6 +40,8 @@ Compilation instructions differ based on the system. Please pick one of the foll
 - [AMD GPUs (rocm) on x84_64 systems](docs/rocm-build.md)
 - [ARM-based NVIDIA Jetson (cuda) systems](docs/jetson-build.md)
 
+Note: building from source will first require downloading and extracting Libtorch, which may take up to an hour depending on your network speed. Compilation should only take up to several minutes.
+
 ### Running
 
 We have tested slorado on a limited number of basecalling models listed [below](#tested-model). You can download them using the provided script (the binary releases already include these):
@@ -51,9 +53,9 @@ scripts/download-models.sh
 Now run on a test dataset:
 ```
 # for CPU
-./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
+./slorado basecaller -x cpu models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 test/PGXXXX230339/reads_1.blow5 -o reads.fastq
 # for GPU
-./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 test/5khz_r10/one_5khz.blow5 -o reads.fastq
+./slorado basecaller -x cuda:all models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 test/PGXXXX230339/reads_1k.blow5 -o reads.fastq
 ```
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
@@ -65,8 +67,14 @@ After running on a test dataset, you can use minimap2 to align the reads to the 
 
 A script to calculate basecalling accuracy is provided:
 ```
-set environment variable MINIMAP2, if minimap2 is not in PATH.
+# set environment variable MINIMAP2, if minimap2 is not in PATH (export MINIMAP2=/path/to/minimap2).
+# set environment variable DATAMASH, if datamash is not in PATH (export DATAMASH=/path/to/datamash).
 scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
+
+# expected median identity scores for test/PGXXXX230339/reads_1k.blow5:
+# FAST v5.0.0: 0.940696
+# HAC v5.0.0:  0.976852
+# SUP v5.0.0:  0.988194
 ```
 
 For a more exhaustive test of slorado's features (on GPU setups), we have provided an [extensive test script](test/extensive.sh). This will automatically download the requisite test data and tools to test DNA/RNA basecalling, methylation detection, and flash attention support on your device. We highly recommend running this to ensure basecalling works on your machine. Excluding the automated binary release test mode, this script is meant to work on both ARM and x86 architectures.
