@@ -19,6 +19,8 @@ cd slorado-$VERSION
 ./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5  -o out.fastq -x cuda:all
 ```
 
+This may take up to several minutes to download and extract.
+
 Detailed instructions are available at:
 - [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-bin.md)
 - [AMD GPUs (rocm) on x84_64 systems](docs/rocm-bin.md)

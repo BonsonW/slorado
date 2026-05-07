@@ -30,6 +30,8 @@ minimap2 -cx map-ont hg38noAlt.fa out.fastq --secondary=no -t16  | awk '{print $
 ```
 It should print the mean identity score, median identity score and the number of alignments. The numbers are expected to be close to the following (would not be identical due to floating point deviations):
 ```
+# HAC DNA v5.0.0
+# mean                  # median       # no. of alignments
 0.94113261325097        0.9771185       24768
 ```
 
