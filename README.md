@@ -69,6 +69,9 @@ After running on a test dataset, you can use minimap2 to align the reads to the 
 
 A script to calculate basecalling accuracy is provided:
 ```
+# Download the reference
+wget -O hg38noAlt.fa.gz seq.bioinf.science/hg38noAlt && gunzip hg38noAlt.fa.gz
+
 # set environment variable MINIMAP2, if minimap2 is not in PATH (export MINIMAP2=/path/to/minimap2).
 # set environment variable DATAMASH, if datamash is not in PATH (export DATAMASH=/path/to/datamash).
 scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
