@@ -29,6 +29,7 @@ Test if the output maps and identity scores are good (required  minimap2, the hu
 # Download the reference
 wget -O hg38noAlt.fa.gz seq.bioinf.science/hg38noAlt && gunzip hg38noAlt.fa.gz
 
+# Get identity scores
 minimap2 -cx map-ont hg38noAlt.fa out.fastq --secondary=no -t16  | awk '{print $10/$11}' | datamash mean 1 median 1 count 1
 ```
 It should print the mean identity score, median identity score and the number of alignments. The numbers are expected to be close to the following (would not be identical due to floating point deviations):
