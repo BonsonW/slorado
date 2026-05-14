@@ -68,3 +68,6 @@ test/slorado*
 *.bedmethyl
 *.pdf
 *.temp*
+
+tmp/*
+pyvenv
