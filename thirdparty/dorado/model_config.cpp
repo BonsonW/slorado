@@ -103,6 +103,15 @@ toml_datum_t toml_string_fallback(const toml_table_t *config_toml, std::vector<s
     return ret;
 }
 
+static void parse_basecaller_params(CRFModelConfig &config, toml_table_t *config_toml) {
+    toml_table_t *basecaller = toml_table_in(config_toml, "basecaller");
+    if (!basecaller) return;
+    toml_datum_t chunksize = toml_int_in(basecaller, "chunksize");
+    if (chunksize.ok) config.chunk_size = (int)chunksize.u.i;
+    toml_datum_t overlap = toml_int_in(basecaller, "overlap");
+    if (overlap.ok) config.overlap = (int)overlap.u.i;
+}
+
 bool toml_key_fallback(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
     toml_table_t *ret = config_toml;
     for (size_t i = 0; i < fallbacks.size(); ++i) {
@@ -518,6 +527,8 @@ CRFModelConfig load_lstm_model_config(const char *path) {
         exit(EXIT_FAILURE);
     }
 
+    parse_basecaller_params(config, config_toml);
+
     toml_free(config_toml);
 
     free(cpath);
@@ -597,6 +608,8 @@ CRFModelConfig load_tx_model_config(const char *path) {
     // Force downstream issue (negative lstm size) if a tx model config is incorrectly
     // used to define an LSTM model. Incorrect use should be guarded against by using is_tx_model()
     config.lstm_size = -1;
+
+    parse_basecaller_params(config, config_toml);
 
     toml_free(config_toml);
 

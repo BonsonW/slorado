@@ -58,6 +58,9 @@ SOFTWARE.
 
 #define NUM_BASES (4)
 
+#define DEFAULT_CHUNK_SIZE (10000)
+#define DEFAULT_OVERLAP (500)
+
 /* user specified options */
 typedef struct {
     uint64_t flag;              // flags

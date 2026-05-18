@@ -101,7 +101,16 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     model_config.sample_type = get_sample_type_from_model_name(model_config.model_path);
 
     core->model_stride = static_cast<size_t>(model_config.stride);
-    core->chunk_size = opt.chunk_size - (opt.chunk_size % core->model_stride);
+
+    size_t resolved_chunk_size = opt.chunk_size > 0 ? opt.chunk_size
+                                 : model_config.chunk_size > 0 ? (size_t)model_config.chunk_size
+                                 : DEFAULT_CHUNK_SIZE;
+    int32_t resolved_overlap = opt.overlap > 0 ? opt.overlap
+                               : model_config.overlap > 0 ? model_config.overlap
+                               : DEFAULT_OVERLAP;
+
+    core->chunk_size = resolved_chunk_size - (resolved_chunk_size % core->model_stride);
+    core->opt.overlap = resolved_overlap - (resolved_overlap % (int32_t)core->model_stride);
 
     core->decoder_opts = DECODER_INIT;
     core->decoder_opts.q_shift = model_config.qbias;
@@ -367,8 +376,8 @@ void init_opt(opt_t* opt) {
     opt->device = "cpu";
 #endif
 
-    opt->chunk_size = 12288;
-    opt->overlap = 150;
+    opt->chunk_size = 0;
+    opt->overlap = 0;
 
     opt->out = stdout;
 
