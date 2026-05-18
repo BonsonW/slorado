@@ -148,6 +148,10 @@ struct CRFModelConfig {
     std::string model_path;
 
     SampleType sample_type;
+
+    // Optional basecaller chunk/overlap from config.toml; -1 means not present
+    int chunk_size = -1;
+    int overlap = -1;
 };
 
 enum ModelType { CONV_LSTM_V1, CONV_LSTM_V2, CONV_LSTM_V3, CONV_V1, UNKNOWN };
