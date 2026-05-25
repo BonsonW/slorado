@@ -124,7 +124,7 @@ void init_runner(
         } else {
             LOG_TRACE("%s", "loading lstm model");
             lstm_stats_t *model_stats = init_lstm_stats();
-            runner->module = load_lstm_model(*core->model_config, runner->tensor_opts);
+            runner->module = load_lstm_model(*core->model_config, runner->tensor_opts, model_stats);
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         }
     }

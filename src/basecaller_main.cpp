@@ -332,12 +332,17 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
         } else { // lstm
             lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
-            (void)model_stats;
-            // fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
-            // fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
-            // fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
-            // fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
-            // fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
+            fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
+            fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
+            if (core->model_config->lstm_inner_dim >= 0) {
+                fprintf(stderr, "\n[%s]                         - precompute: %.3f sec", __func__, model_stats->time_flstm_precompute);
+                fprintf(stderr, "\n[%s]                         - linear1: %.3f sec", __func__, model_stats->time_flstm_linear1);
+                fprintf(stderr, "\n[%s]                         - linear2: %.3f sec", __func__, model_stats->time_flstm_linear2);
+                fprintf(stderr, "\n[%s]                         - epilogue: %.3f sec", __func__, model_stats->time_flstm_epilogue);
+            }
+            fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
+            fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
+            fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
         }
         fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
         fprintf(stderr, "\n[%s]             - modcall: %.3f sec", __func__, runner_stats[i]->time_modcall);
