@@ -83,7 +83,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "\nbasic options:\n");
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
     fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [auto]\n");
-    fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [%d]\n", opt.gpu_batch_size);
+    fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [auto]\n");
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
     fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
     fprintf(fp_help, "  -c INT                      chunk size [model config or %d]\n", DEFAULT_CHUNK_SIZE);
@@ -248,7 +248,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"device:             %s\n", opt.device);
     fprintf(stderr,"chunk size:         %zu\n", core->chunk_size);
     fprintf(stderr,"read batch size:    %d\n", core->opt.batch_size);
-    fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
+    fprintf(stderr,"gpu batch size:     %d\n", core->opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
     fprintf(stderr,"overlap:            %d\n", core->opt.overlap);
     fprintf(stderr, "\n");

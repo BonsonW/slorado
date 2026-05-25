@@ -61,6 +61,7 @@ SOFTWARE.
 #define DEFAULT_CHUNK_SIZE (10000)
 #define DEFAULT_OVERLAP (500)
 #define DEFAULT_BATCH_SIZE (4096)
+#define DEFAULT_GPU_BATCH_SIZE (512)
 #define BATCH_SIZE_SAMPLE_READS (256)
 
 /* user specified options */

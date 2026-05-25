@@ -41,6 +41,7 @@ SOFTWARE.
 
 #ifdef USE_GPU
 #include <c10/core/DeviceGuard.h>
+#include <cuda_runtime_api.h>
 #endif
 
 void free_read_dat(read_dat_t *read_dat) {
@@ -91,7 +92,7 @@ void init_runner(
     runner_t* runner,
     char *model_path,
     const std::string &device,
-    int batch_size,
+    int &batch_size,
     torch::ScalarType dtype,
     int runner_idx,
     bool modbase
@@ -104,17 +105,17 @@ void init_runner(
         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
         runner->device_idx = device_idx;
         runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(c10::kCUDA, device_idx);
-        c10::DeviceGuard device_guard(runner->tensor_opts.device());
-        runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
-#endif        
+#endif
     } else {
         runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(torch::kCPU);
     }
 
     LOG_TRACE("%s", "device str parsed");
+
+    // Load model first so we can query remaining GPU memory for auto batch size
     if (modbase == true) {
         LOG_TRACE("%s", "loading modbase model");
-        runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, core->opt.gpu_batch_size);
+        runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, batch_size);
     } else {
         if (core->model_config->tx != NULL) {
             LOG_TRACE("%s", "loading tx model");
@@ -128,8 +129,52 @@ void init_runner(
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         }
     }
-    
+
     LOG_TRACE("%s", "model populated");
+
+    // Auto GPU batch size: query free memory after model is loaded, compute from per-chunk costs
+    if (device != "cpu" && batch_size == 0) {
+#ifdef USE_GPU
+        {
+            c10::DeviceGuard device_guard(runner->tensor_opts.device());
+
+            uint64_t free_mem, total_mem;
+            cudaMemGetInfo(&free_mem, &total_mem);
+
+            const int T = (int)(core->chunk_size / core->model_stride);
+            const int state_len = core->model_config->state_len;
+            const int C = core->model_config->outsize;
+
+            // Memory that scales linearly with batch size N:
+            //   decoder buffer (CTC beam search), input signal tensor, output scores tensor
+            const size_t per_n_decoder = openfish_gpubuf_size(T, 1, state_len);
+            const size_t per_n_input   = core->chunk_size * sizeof(uint16_t);   // float16 input
+            const size_t per_n_output  = (size_t)T * C * sizeof(uint16_t);     // float16 scores
+            const size_t per_n_total   = per_n_decoder + per_n_input + per_n_output;
+
+            // Use 80% of free memory to leave headroom for activation tensors during inference
+            batch_size = (int)((double)free_mem * 0.8 / (double)per_n_total);
+            if (batch_size < 1) batch_size = 1;
+
+            const size_t max_input_len = 10000ULL * 6000ULL;
+            const int max_batch = (int)(max_input_len / core->chunk_size);
+            if (batch_size > max_batch) batch_size = max_batch;
+
+            fprintf(stderr, "[%s] %.1f MB free GPU memory on %s, %zu bytes/chunk (decoder:%zu input:%zu output:%zu), auto GPU batch size: %d\n",
+                    __func__, free_mem / 1e6, device.c_str(),
+                    per_n_total, per_n_decoder, per_n_input, per_n_output,
+                    batch_size);
+        }
+#endif
+    }
+
+    // Allocate openfish GPU buffer and input tensor with the resolved batch size
+    if (device != "cpu") {
+#ifdef USE_GPU
+        c10::DeviceGuard device_guard(runner->tensor_opts.device());
+        runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
+#endif
+    }
 
     if (modbase) {
         const int channels = NUM_BASES * core->modbase_config->general.kmer_len;
@@ -151,8 +196,13 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
     core->runners = new std::vector<runner_t *>();
     core->mod_runners = new std::vector<runner_t *>();
     core->runner_stats = new std::vector<runner_stat_t *>();
-    
+
     if (strcmp(opt->device, "cpu") == 0) {
+        // No GPU memory to query; fall back to default batch size for CPU
+        if (opt->gpu_batch_size == 0) {
+            opt->gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
+        }
+
         std::string device = opt->device;
         core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
         init_runner_stat((*core->runner_stats).back());
@@ -181,6 +231,8 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
             core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
             init_runner_stat((*core->runner_stats).back());
             core->runners->push_back(new runner_t());
+            // init_runner auto-detects when opt->gpu_batch_size == 0 and updates it in-place;
+            // subsequent runners (including modbase and other GPUs) then inherit the computed value
             init_runner(core, (*core->runners).back(), model, device, opt->gpu_batch_size, torch::kF16, runner_idx++, false);
 
             if (core->modbase_config != NULL) {
