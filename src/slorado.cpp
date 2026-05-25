@@ -58,11 +58,40 @@ void free_read_dat(read_dat_t *read_dat);
 void preprocess_modbase(core_t *core, db_t *db, int32_t i);
 void postprocess_modbase(core_t *core, db_t *db, int32_t i);
 
+static size_t estimate_bytes_per_read(const char *slow5file) {
+    slow5_file_t *sp = slow5_open(slow5file, "r");
+    if (!sp) return 0;
+
+    size_t total_bytes = 0;
+    int n = 0;
+    char *mem = NULL;
+    size_t bytes = 0;
+
+    while (n < BATCH_SIZE_SAMPLE_READS) {
+        if (slow5_get_next_bytes(&mem, &bytes, sp) < 0) break;
+        total_bytes += bytes;
+        free(mem);
+        mem = NULL;
+        n++;
+    }
+
+    slow5_close(sp);
+    return n > 0 ? total_bytes / n : 0;
+}
+
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)calloc(1, sizeof(core_t));
     MALLOC_CHK(core);
     core->opt = opt;
+
+    if (opt.batch_size == 0) {
+        size_t avg_bytes = estimate_bytes_per_read(slow5file);
+        core->opt.batch_size = avg_bytes > 0
+            ? (int32_t)(opt.batch_size_bytes / avg_bytes)
+            : DEFAULT_BATCH_SIZE;
+        if (core->opt.batch_size < 1) core->opt.batch_size = 1;
+    }
 
     core->realtime0 = realtime0;
 
@@ -363,7 +392,6 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 4096;
     opt->gpu_batch_size = 512;
     opt->batch_size_bytes = 512*1000*1000;
     opt->num_thread = 8;
@@ -375,9 +403,6 @@ void init_opt(opt_t* opt) {
 #else
     opt->device = "cpu";
 #endif
-
-    opt->chunk_size = 0;
-    opt->overlap = 0;
 
     opt->out = stdout;
 

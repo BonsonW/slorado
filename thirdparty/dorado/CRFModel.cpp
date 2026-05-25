@@ -3,6 +3,7 @@
 
 #include "CRFModel.h"
 #include "error.h"
+#include "misc.h"
 #include "tensor_chunk_utils.h"
 
 using namespace torch::nn;
@@ -75,6 +76,90 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
     return (rnns.size() & 1) ? x.flip(1) : x;
 }
 
+FLSTMLayerImpl::FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats) : C_(C), model_stats_(model_stats) {
+    dn_weight_ih_ = register_parameter("dn_weight_ih", torch::empty({K, C}));
+    dn_weight_hh_ = register_parameter("dn_weight_hh", torch::empty({K, C}));
+    up_weight_ih_ = register_parameter("up_weight_ih", torch::empty({4 * C, K}));
+    up_weight_hh_ = register_parameter("up_weight_hh", torch::empty({4 * C, K}));
+    up_bias_ih_   = register_parameter("up_bias_ih",   torch::empty({4 * C}));
+    up_bias_hh_   = register_parameter("up_bias_hh",   torch::empty({4 * C}));
+}
+
+torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
+    // x is [N, T, C]
+    x = x.transpose(0, 1).contiguous();  // [T, N, C]
+    const int T = x.size(0);
+    const int N = x.size(1);
+    const bool on_gpu = !x.device().is_cpu();
+    double a, b;
+
+    torch::Tensor hh = torch::empty({T + 1, N, C_}, x.options());
+    hh[0] = 0;
+    torch::Tensor c = torch::zeros({N, C_}, x.options());
+
+    // Hard activations used by the factorised LSTM
+    const auto sigmoid_hard = [](torch::Tensor a) {
+        return a.mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
+    };
+    const auto tanh_hard = [](torch::Tensor a) { return a.clamp_(-1.f, 1.f); };
+
+    // Pre-compute all input-hidden projections at once: [T, N, 4*C]
+    a = realtime();
+    const auto ih = torch::matmul(
+        torch::matmul(x, dn_weight_ih_.t()), up_weight_ih_.t()
+    ).add_(up_bias_ih_);
+    if (on_gpu) torch::cuda::synchronize(x.device().index());
+    b = realtime();
+    model_stats_->time_flstm_precompute += b - a;
+
+    for (int t = 0; t < T; ++t) {
+        // linear1
+        a = realtime();
+        auto x_hh = torch::matmul(hh[t], dn_weight_hh_.t());
+        if (on_gpu) torch::cuda::synchronize(x.device().index());
+        b = realtime();
+        model_stats_->time_flstm_linear1 += b - a;
+
+        // linear2
+        a = realtime();
+        auto gates = torch::matmul(x_hh, up_weight_hh_.t()).add_(up_bias_hh_).add_(ih[t]).chunk(4, 1);
+        if (on_gpu) torch::cuda::synchronize(x.device().index());
+        b = realtime();
+        model_stats_->time_flstm_linear2 += b - a;
+
+        // epilogue
+        a = realtime();
+        auto i = sigmoid_hard(gates[0]);
+        auto f = sigmoid_hard(gates[1]);
+        auto g = tanh_hard(gates[2]);
+        auto o = sigmoid_hard(gates[3]);
+        c = (f * c) + (i * g);
+        hh[t + 1] = o * torch::tanh(c);
+        if (on_gpu) torch::cuda::synchronize(x.device().index());
+        b = realtime();
+        model_stats_->time_flstm_epilogue += b - a;
+    }
+
+    using namespace torch::indexing;
+    // Return [N, T, C]
+    return hh.index({Slice(1, None)}).transpose(0, 1).contiguous();
+}
+
+FLSTMStackImpl::FLSTMStackImpl(int num_layers, int C, int K, lstm_stats_t *model_stats) {
+    for (int i = 0; i < num_layers; ++i) {
+        auto label = std::string("rnn") + std::to_string(i + 1);
+        layers_.emplace_back(register_module(label, FLSTMLayer(C, K, model_stats)));
+    }
+}
+
+torch::Tensor FLSTMStackImpl::forward(torch::Tensor x) {
+    // Flip before every layer (alternating directions); odd layer count → flip output
+    for (auto &layer : layers_) {
+        x = layer->forward(x.flip(1));
+    }
+    return (layers_.size() & 1) ? x.flip(1) : x;
+}
+
 ClampImpl::ClampImpl(float _min, float _max, bool _active)
         : active(_active), min(_min), max(_max) {}
 
@@ -85,28 +170,33 @@ torch::Tensor ClampImpl::forward(torch::Tensor x) {
     return x;
 }
 
-CRFModelImpl::CRFModelImpl(const CRFModelConfig &config) {
+CRFModelImpl::CRFModelImpl(const CRFModelConfig &config, lstm_stats_t *model_stats) : model_stats_(model_stats) {
     const auto cv = config.convs;
     const auto lstm_size = config.lstm_size;
     convs = register_module("convs", ConvStack(cv));
-    rnns = register_module("rnns", LSTMStack(5, lstm_size));
 
-    if (config.has_out_features) {
-        // The linear layer is decomposed into 2 matmuls.
+    if (config.lstm_inner_dim >= 0) {
+        // v6.0+ FLSTM model: decomposed linear + tanh in CRF encoder, no clamp
+        flstm_rnns = register_module("rnns", FLSTMStack(config.lstm_layers, lstm_size, config.lstm_inner_dim, model_stats));
+        const int decomposition = config.out_features;
+        linear1 = register_module("linear1", LinearCRF(lstm_size, decomposition, config.bias, false));
+        linear2 = register_module("linear2", LinearCRF(decomposition, config.outsize, false, true));
+    } else if (config.has_out_features) {
+        // v4.x model with linear decomposition
+        rnns = register_module("rnns", LSTMStack(config.lstm_layers, lstm_size));
         const int decomposition = config.out_features;
         linear1 = register_module("linear1", LinearCRF(lstm_size, decomposition, true, false));
         linear2 = register_module("linear2", LinearCRF(decomposition, config.outsize, false, false));
         clamp1 = Clamp(-5.0, 5.0, config.clamp);
-        encoder = Sequential(convs, rnns, linear1, linear2, clamp1);
     } else if ((config.convs[0].size > 4) && (config.num_features == 1)) {
-        // v4.x model without linear decomposition
+        // v4.x / v5.x model without linear decomposition
+        rnns = register_module("rnns", LSTMStack(config.lstm_layers, lstm_size));
         linear1 = register_module("linear1", LinearCRF(lstm_size, config.outsize, false, false));
         clamp1 = Clamp(-5.0, 5.0, config.clamp);
-        encoder = Sequential(convs, rnns, linear1, clamp1);
     } else {
-        // Pre v4 model
+        // Pre-v4 model
+        rnns = register_module("rnns", LSTMStack(config.lstm_layers, lstm_size));
         linear1 = register_module("linear1", LinearCRF(lstm_size, config.outsize, true, true));
-        encoder = Sequential(convs, rnns, linear1);
     }
 }
 
@@ -115,52 +205,103 @@ void CRFModelImpl::load_state_dict(const std::vector<torch::Tensor> &weights) {
 }
 
 torch::Tensor CRFModelImpl::forward(const torch::Tensor &x) {
-    // Output is [N, T, C]
-    return encoder->forward(x);
-}
+    const bool on_gpu = !x.device().is_cpu();
+    double a, b;
+    torch::Tensor h;
 
-std::vector<torch::Tensor> load_lstm_model_weights(const std::string &dir,
-                                                  bool decomposition,
-                                                  bool bias) {
-    auto tensors = std::vector<std::string>{
-        "0.conv.weight.tensor",      "0.conv.bias.tensor",
+    a = realtime();
+    h = convs->forward(x);
+    if (on_gpu) torch::cuda::synchronize(x.device().index());
+    b = realtime();
+    model_stats_->time_conv_stack += b - a;
 
-        "1.conv.weight.tensor",      "1.conv.bias.tensor",
+    a = realtime();
+    if (flstm_rnns) {
+        h = flstm_rnns->forward(h);
+    } else {
+        h = rnns->forward(h);
+    }
+    if (on_gpu) torch::cuda::synchronize(x.device().index());
+    b = realtime();
+    model_stats_->time_rnns += b - a;
 
-        "2.conv.weight.tensor",      "2.conv.bias.tensor",
+    a = realtime();
+    h = linear1->forward(h);
+    if (on_gpu) torch::cuda::synchronize(x.device().index());
+    b = realtime();
+    model_stats_->time_crf_1 += b - a;
 
-        "4.rnn.weight_ih_l0.tensor", "4.rnn.weight_hh_l0.tensor",
-        "4.rnn.bias_ih_l0.tensor",   "4.rnn.bias_hh_l0.tensor",
-
-        "5.rnn.weight_ih_l0.tensor", "5.rnn.weight_hh_l0.tensor",
-        "5.rnn.bias_ih_l0.tensor",   "5.rnn.bias_hh_l0.tensor",
-
-        "6.rnn.weight_ih_l0.tensor", "6.rnn.weight_hh_l0.tensor",
-        "6.rnn.bias_ih_l0.tensor",   "6.rnn.bias_hh_l0.tensor",
-
-        "7.rnn.weight_ih_l0.tensor", "7.rnn.weight_hh_l0.tensor",
-        "7.rnn.bias_ih_l0.tensor",   "7.rnn.bias_hh_l0.tensor",
-
-        "8.rnn.weight_ih_l0.tensor", "8.rnn.weight_hh_l0.tensor",
-        "8.rnn.bias_ih_l0.tensor",   "8.rnn.bias_hh_l0.tensor",
-
-        "9.linear.weight.tensor"
-    };
-
-    if (bias) {
-        tensors.push_back("9.linear.bias.tensor");
+    if (linear2) {
+        a = realtime();
+        h = linear2->forward(h);
+        if (on_gpu) torch::cuda::synchronize(x.device().index());
+        b = realtime();
+        model_stats_->time_crf_2 += b - a;
     }
 
-    if (decomposition) {
-        tensors.push_back("10.linear.weight.tensor");
+    if (clamp1) {
+        a = realtime();
+        h = clamp1->forward(h);
+        if (on_gpu) torch::cuda::synchronize(x.device().index());
+        b = realtime();
+        model_stats_->time_clamp += b - a;
+    }
+
+    // Output is [N, T, C]
+    return h;
+}
+
+std::vector<torch::Tensor> load_lstm_model_weights(const CRFModelConfig &config) {
+    const auto &dir = config.model_path;
+    auto tensors = std::vector<std::string>{
+        "0.conv.weight.tensor", "0.conv.bias.tensor",
+        "1.conv.weight.tensor", "1.conv.bias.tensor",
+        "2.conv.weight.tensor", "2.conv.bias.tensor",
+    };
+
+    // RNN layers start at sublayer index 4 (after 3 convs + 1 permute)
+    const int rnn_start = 4;
+
+    if (config.lstm_inner_dim >= 0) {
+        // FLSTM: 6 parameters per layer (dn_weight_ih/hh, up_weight_ih/hh, up_bias_ih/hh)
+        for (int i = 0; i < config.lstm_layers; ++i) {
+            auto p = std::to_string(rnn_start + i) + ".rnn.";
+            tensors.push_back(p + "dn_weight_ih.tensor");
+            tensors.push_back(p + "dn_weight_hh.tensor");
+            tensors.push_back(p + "up_weight_ih.tensor");
+            tensors.push_back(p + "up_weight_hh.tensor");
+            tensors.push_back(p + "up_bias_ih.tensor");
+            tensors.push_back(p + "up_bias_hh.tensor");
+        }
+        // Intermediate linear then CRF linear (both bias=false)
+        const int lin_idx = rnn_start + config.lstm_layers;
+        tensors.push_back(std::to_string(lin_idx)     + ".linear.weight.tensor");
+        tensors.push_back(std::to_string(lin_idx + 1) + ".linear.weight.tensor");
+    } else {
+        // Standard LSTM: 4 parameters per layer (weight_ih/hh, bias_ih/hh)
+        for (int i = 0; i < config.lstm_layers; ++i) {
+            auto p = std::to_string(rnn_start + i) + ".rnn.";
+            tensors.push_back(p + "weight_ih_l0.tensor");
+            tensors.push_back(p + "weight_hh_l0.tensor");
+            tensors.push_back(p + "bias_ih_l0.tensor");
+            tensors.push_back(p + "bias_hh_l0.tensor");
+        }
+        const int lin_idx = rnn_start + config.lstm_layers;
+        tensors.push_back(std::to_string(lin_idx) + ".linear.weight.tensor");
+        if (config.bias) {
+            tensors.push_back(std::to_string(lin_idx) + ".linear.bias.tensor");
+        }
+        if (config.has_out_features) {
+            tensors.push_back(std::to_string(lin_idx + 1) + ".linear.weight.tensor");
+        }
     }
 
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const torch::TensorOptions &options) {
-    auto model = CRFModel(model_config);
-    auto state_dict = load_lstm_model_weights(model_config.model_path, model_config.has_out_features, model_config.bias);
+ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, lstm_stats_t *model_stats) {
+    auto model = CRFModel(model_config, model_stats);
+    auto state_dict = load_lstm_model_weights(model_config);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());
     model->to(options.device());

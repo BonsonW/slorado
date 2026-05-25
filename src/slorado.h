@@ -60,6 +60,8 @@ SOFTWARE.
 
 #define DEFAULT_CHUNK_SIZE (10000)
 #define DEFAULT_OVERLAP (500)
+#define DEFAULT_BATCH_SIZE (4096)
+#define BATCH_SIZE_SAMPLE_READS (256)
 
 /* user specified options */
 typedef struct {
@@ -151,6 +153,11 @@ typedef struct {
     double time_crf_1;
     double time_crf_2;
     double time_clamp;
+    // FLSTM per-section timings (accumulated across all layers × timesteps)
+    double time_flstm_precompute;  // x @ dn_wih.t() @ up_wih.t() + bias_ih (pre-loop)
+    double time_flstm_linear1;    // hh[t] @ dn_whh.t() (per timestep)
+    double time_flstm_linear2;    // x @ up_whh.t() + bias_hh + ih[t] (per timestep)
+    double time_flstm_epilogue;   // gate activations + cell update + hh[t+1] (per timestep)
 } lstm_stats_t;
 
 typedef struct {

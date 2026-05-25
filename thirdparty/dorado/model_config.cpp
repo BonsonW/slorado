@@ -21,10 +21,11 @@ static const std::string ERR_STR = "Invalid modbase model parameter in ";
 // Indicates that a value has no default and is therefore required
 static constexpr std_optional<int> REQUIRED = STD_NULLOPT;
 
-enum SublayerType { CLAMP, CONVOLUTION, LINEAR, LINEAR_CRF_ENCODER, LSTM, PERMUTE, UPSAMPLE, UNRECOGNISED };
+enum SublayerType { CLAMP, CONVOLUTION, FLSTM_SOFTOUT, LINEAR, LINEAR_CRF_ENCODER, LSTM, PERMUTE, UPSAMPLE, UNRECOGNISED };
 static const std::unordered_map<std::string, SublayerType> sublayer_map = {
     {"clamp", SublayerType::CLAMP},
     {"convolution", SublayerType::CONVOLUTION},
+    {"flstm_softout", SublayerType::FLSTM_SOFTOUT},
     {"linear", SublayerType::LINEAR},
     {"linearcrfencoder", SublayerType::LINEAR_CRF_ENCODER},
     {"lstm", SublayerType::LSTM},
@@ -459,20 +460,32 @@ CRFModelConfig load_lstm_model_config(const char *path) {
         }
         config.lstm_size = config.convs.back().size;
 
+        config.lstm_layers = 0;
         for (const auto &segment : sublayers) {
             const auto type = sublayer_type(segment);
-            if (type == SublayerType::LINEAR) {
-                // Specifying out_features implies a decomposition of the linear layer matrix
-                // multiply with a bottleneck before the final feature size.
+            if (type == SublayerType::LSTM) {
+                config.lstm_layers++;
+            } else if (type == SublayerType::FLSTM_SOFTOUT) {
+                config.lstm_layers++;
+                toml_datum_t inner_dim = toml_int_in(segment, "inner_dim");
+                check_toml_datum(inner_dim);
+                config.lstm_inner_dim = inner_dim.u.i;
+            } else if (type == SublayerType::LINEAR) {
                 toml_datum_t out_features = toml_int_in(segment, "out_features");
                 check_toml_datum(out_features);
                 config.out_features = out_features.u.i;
                 config.has_out_features = true;
-                config.bias = config.lstm_size > 128;
+                toml_datum_t bias_d = toml_bool_in(segment, "bias");
+                config.bias = bias_d.ok ? (bool)bias_d.u.b : (config.lstm_size > 128);
             } else if (type == SublayerType::LINEAR_CRF_ENCODER) {
                 toml_datum_t blank_score = toml_double_in(segment, "blank_score");
                 check_toml_datum(blank_score);
                 config.blank_score = blank_score.u.d;
+                toml_datum_t activation = toml_string_in(segment, "activation");
+                if (activation.ok) {
+                    config.crf_encoder_has_tanh = (strcmp(activation.u.s, "tanh") == 0);
+                    free(activation.u.s);
+                }
             }
         }
         

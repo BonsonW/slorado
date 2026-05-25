@@ -82,7 +82,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  data FILE                   the data directory.\n");
     fprintf(fp_help, "\nbasic options:\n");
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
-    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size);
+    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [auto]\n");
     fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [%d]\n", opt.gpu_batch_size);
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
     fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
@@ -235,6 +235,7 @@ int basecaller_main(int argc, char* argv[]) {
         }
         exit(EXIT_FAILURE);
     }
+/////////////////////////////////////////////////////////////////////////////
 
     // initialise the core data structure
     core_t* core = init_core(data, opt, model, realtime0);
@@ -246,7 +247,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
     fprintf(stderr,"device:             %s\n", opt.device);
     fprintf(stderr,"chunk size:         %zu\n", core->chunk_size);
-    fprintf(stderr,"read batch size:    %d\n", opt.batch_size);
+    fprintf(stderr,"read batch size:    %d\n", core->opt.batch_size);
     fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
     fprintf(stderr,"overlap:            %d\n", core->opt.overlap);
@@ -331,12 +332,17 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
         } else { // lstm
             lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
-            (void)model_stats;
-            // fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
-            // fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
-            // fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
-            // fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
-            // fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
+            fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
+            fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
+            if (core->model_config->lstm_inner_dim >= 0) {
+                fprintf(stderr, "\n[%s]                         - precompute: %.3f sec", __func__, model_stats->time_flstm_precompute);
+                fprintf(stderr, "\n[%s]                         - linear1: %.3f sec", __func__, model_stats->time_flstm_linear1);
+                fprintf(stderr, "\n[%s]                         - linear2: %.3f sec", __func__, model_stats->time_flstm_linear2);
+                fprintf(stderr, "\n[%s]                         - epilogue: %.3f sec", __func__, model_stats->time_flstm_epilogue);
+            }
+            fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
+            fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
+            fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
         }
         fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
         fprintf(stderr, "\n[%s]             - modcall: %.3f sec", __func__, runner_stats[i]->time_modcall);

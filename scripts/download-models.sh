@@ -26,6 +26,9 @@ download_model dna_r10.4.1_e8.2_400bps_fast@v5.0.0
 download_model dna_r10.4.1_e8.2_400bps_hac@v5.0.0
 download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0
 
+# v6.0.0: only HAC exists for DNA (FLSTM architecture)
+download_model dna_r10.4.1_e8.2_400bps_hac@v6.0.0
+
 # download_model dna_r10.4.1_e8.2_400bps_fast@v5.0.0_5mCG_5hmCG@v3
 download_model dna_r10.4.1_e8.2_400bps_hac@v5.0.0_5mCG_5hmCG@v3
 download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0_5mCG_5hmCG@v3
@@ -33,6 +36,11 @@ download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0_5mCG_5hmCG@v3
 # download_model dna_r10.4.1_e8.2_400bps_fast@v4.2.0
 # download_model dna_r10.4.1_e8.2_400bps_hac@v4.2.0
 # download_model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
+
+# v6.0.0 RNA models (note: no "130bps" in name)
+download_model rna004_fast@v6.0.0
+download_model rna004_hac@v6.0.0
+download_model rna004_sup@v6.0.0
 
 download_model rna004_130bps_fast@v5.1.0
 download_model rna004_130bps_hac@v5.1.0

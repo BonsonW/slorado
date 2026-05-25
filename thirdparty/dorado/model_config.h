@@ -152,6 +152,13 @@ struct CRFModelConfig {
     // Optional basecaller chunk/overlap from config.toml; -1 means not present
     int chunk_size = -1;
     int overlap = -1;
+
+    // Number of RNN layers (LSTM or FLSTM)
+    int lstm_layers = 5;
+    // FLSTM inner (down-projection) dimension K; -1 means standard LSTM
+    int lstm_inner_dim = -1;
+    // linearcrfencoder uses tanh activation (v6.0+ FLSTM models)
+    bool crf_encoder_has_tanh = false;
 };
 
 enum ModelType { CONV_LSTM_V1, CONV_LSTM_V2, CONV_LSTM_V3, CONV_V1, UNKNOWN };
