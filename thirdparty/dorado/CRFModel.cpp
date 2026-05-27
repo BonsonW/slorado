@@ -46,8 +46,14 @@ LinearCRFImpl::LinearCRFImpl(int insize, int outsize, bool bias_, bool tanh_and_
     }
 };
 
+void LinearCRFImpl::set_calib(const std::string &name, calib_stats_t *calib) {
+    calib_stats_ = calib;
+    calib_layer_ = calib->register_layer(name, linear->weight);
+}
+
 torch::Tensor LinearCRFImpl::forward(const torch::Tensor &x) {
     // Input x is [N, T, C], contiguity optional
+    if (calib_layer_) calib_stats_->accumulate(calib_layer_, x);
     auto scores = linear(x);
     if (activation) {
         scores = activation(scores) * scale;
@@ -76,13 +82,21 @@ torch::Tensor LSTMStackImpl::forward(torch::Tensor x) {
     return (rnns.size() & 1) ? x.flip(1) : x;
 }
 
-FLSTMLayerImpl::FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats) : C_(C), model_stats_(model_stats) {
+FLSTMLayerImpl::FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats, const std::string &name_prefix) : C_(C), model_stats_(model_stats) {
     dn_weight_ih_ = register_parameter("dn_weight_ih", torch::empty({K, C}));
     dn_weight_hh_ = register_parameter("dn_weight_hh", torch::empty({K, C}));
     up_weight_ih_ = register_parameter("up_weight_ih", torch::empty({4 * C, K}));
     up_weight_hh_ = register_parameter("up_weight_hh", torch::empty({4 * C, K}));
     up_bias_ih_   = register_parameter("up_bias_ih",   torch::empty({4 * C}));
     up_bias_hh_   = register_parameter("up_bias_hh",   torch::empty({4 * C}));
+
+    if (!name_prefix.empty() && model_stats && model_stats->calib_stats) {
+        calib_stats_ = model_stats->calib_stats;
+        cl_dn_ih_ = calib_stats_->register_layer(name_prefix + ".dn_ih", dn_weight_ih_);
+        cl_up_ih_ = calib_stats_->register_layer(name_prefix + ".up_ih", up_weight_ih_);
+        cl_dn_hh_ = calib_stats_->register_layer(name_prefix + ".dn_hh", dn_weight_hh_);
+        cl_up_hh_ = calib_stats_->register_layer(name_prefix + ".up_hh", up_weight_hh_);
+    }
 }
 
 torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
@@ -105,9 +119,22 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
 
     // Pre-compute all input-hidden projections at once: [T, N, 4*C]
     a = realtime();
-    const auto ih = torch::matmul(
-        torch::matmul(x, dn_weight_ih_.t()), up_weight_ih_.t()
-    ).add_(up_bias_ih_);
+    torch::Tensor ih;
+    if (cl_dn_ih_) {
+        // Update weight stats on first call — weights weren't loaded at construction time.
+        if (cl_dn_ih_->n_batches == 0) {
+            calib_stats_->update_weight(cl_dn_ih_, dn_weight_ih_);
+            calib_stats_->update_weight(cl_up_ih_, up_weight_ih_);
+            calib_stats_->update_weight(cl_dn_hh_, dn_weight_hh_);
+            calib_stats_->update_weight(cl_up_hh_, up_weight_hh_);
+        }
+        const auto dn_ih_out = torch::matmul(x, dn_weight_ih_.t());
+        calib_stats_->accumulate(cl_dn_ih_, x);
+        calib_stats_->accumulate(cl_up_ih_, dn_ih_out);
+        ih = torch::matmul(dn_ih_out, up_weight_ih_.t()).add_(up_bias_ih_);
+    } else {
+        ih = torch::matmul(torch::matmul(x, dn_weight_ih_.t()), up_weight_ih_.t()).add_(up_bias_ih_);
+    }
     if (on_gpu) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats_->time_flstm_precompute += b - a;
@@ -115,6 +142,7 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     for (int t = 0; t < T; ++t) {
         // linear1
         a = realtime();
+        if (cl_dn_hh_) calib_stats_->accumulate(cl_dn_hh_, hh[t]);
         auto x_hh = torch::matmul(hh[t], dn_weight_hh_.t());
         if (on_gpu) torch::cuda::synchronize(x.device().index());
         b = realtime();
@@ -122,6 +150,7 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
 
         // linear2
         a = realtime();
+        if (cl_up_hh_) calib_stats_->accumulate(cl_up_hh_, x_hh);
         auto gates = torch::matmul(x_hh, up_weight_hh_.t()).add_(up_bias_hh_).add_(ih[t]).chunk(4, 1);
         if (on_gpu) torch::cuda::synchronize(x.device().index());
         b = realtime();
@@ -148,7 +177,8 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
 FLSTMStackImpl::FLSTMStackImpl(int num_layers, int C, int K, lstm_stats_t *model_stats) {
     for (int i = 0; i < num_layers; ++i) {
         auto label = std::string("rnn") + std::to_string(i + 1);
-        layers_.emplace_back(register_module(label, FLSTMLayer(C, K, model_stats)));
+        auto prefix = std::string("rnns.") + label;
+        layers_.emplace_back(register_module(label, FLSTMLayer(C, K, model_stats, prefix)));
     }
 }
 
@@ -197,6 +227,11 @@ CRFModelImpl::CRFModelImpl(const CRFModelConfig &config, lstm_stats_t *model_sta
         // Pre-v4 model
         rnns = register_module("rnns", LSTMStack(config.lstm_layers, lstm_size));
         linear1 = register_module("linear1", LinearCRF(lstm_size, config.outsize, true, true));
+    }
+
+    if (model_stats && model_stats->calib_stats) {
+        linear1->set_calib("linear1", model_stats->calib_stats);
+        if (linear2) linear2->set_calib("linear2", model_stats->calib_stats);
     }
 }
 
@@ -306,6 +341,17 @@ ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, cons
     model->to(options.dtype().toScalarType());
     model->to(options.device());
     model->eval();
+
+    // Register weight-only stats for standard LSTM layers (no activation hooks possible).
+    if (model_stats && model_stats->calib_stats) {
+        for (const auto &named : model->named_parameters()) {
+            const auto &n = named.key();
+            if (n.find("weight_ih_l0") != std::string::npos ||
+                n.find("weight_hh_l0") != std::string::npos) {
+                model_stats->calib_stats->register_layer(n, named.value());
+            }
+        }
+    }
 
     auto module = AnyModule(model);
     auto holder = ModuleHolder<AnyModule>(module);

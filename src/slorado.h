@@ -42,6 +42,9 @@ SOFTWARE.
 
 #include "dorado/model_config.h"
 
+// Forward declaration — full definition in calib.h (requires torch headers).
+struct calib_stats_t;
+
 #define SLORADO_VERSION "0.5.0-beta"
 
 /*******************************************************
@@ -82,6 +85,7 @@ typedef struct {
     int32_t overlap;            // overlap: p
 
     const char *mod;         // specified modbase: x
+    const char *calibrate_out;  // path for calibration JSON output (NULL = disabled)
 } opt_t;
 
 typedef struct read_dat read_dat_t;
@@ -159,6 +163,8 @@ typedef struct {
     double time_flstm_linear1;    // hh[t] @ dn_whh.t() (per timestep)
     double time_flstm_linear2;    // x @ up_whh.t() + bias_hh + ih[t] (per timestep)
     double time_flstm_epilogue;   // gate activations + cell update + hh[t+1] (per timestep)
+
+    calib_stats_t *calib_stats = nullptr;
 } lstm_stats_t;
 
 typedef struct {
@@ -176,6 +182,8 @@ typedef struct {
     double time_rotary_emb;
     double time_sdp_attn;
     double time_out_proj;
+
+    calib_stats_t *calib_stats = nullptr;
 } tx_stats_t;
 
 /* time stamps */
@@ -244,6 +252,9 @@ typedef struct {
     // stats, set by output_db
     int64_t sum_bytes;
     int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
+
+    // calibration stats (NULL unless --calibrate is set)
+    calib_stats_t *calib_stats = nullptr;
 } core_t;
 
 /* argument wrapper for the multithreaded framework used for data processing */

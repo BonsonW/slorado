@@ -54,13 +54,22 @@ torch::Tensor RMSNormImpl::forward(torch::Tensor x) {
     return x;
 }
 
-GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_) : in_features(in_features_), hidden_features(hidden_features_) {
+GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_,
+                           tx_stats_t *stats, const std::string &name_prefix)
+    : in_features(in_features_), hidden_features(hidden_features_) {
     fc1 = register_module("fc1", Linear(LinearOptions(in_features, 2 * hidden_features).bias(false)));
     fc2 = register_module("fc2", Linear(LinearOptions(hidden_features, in_features).bias(false)));
+
+    if (!name_prefix.empty() && stats && stats->calib_stats) {
+        calib_stats_ = stats->calib_stats;
+        cl_fc1_ = calib_stats_->register_layer(name_prefix + ".fc1", fc1->weight);
+        cl_fc2_ = calib_stats_->register_layer(name_prefix + ".fc2", fc2->weight);
+    }
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
+    if (cl_fc1_) calib_stats_->accumulate(cl_fc1_, x);
     t = fc1(x);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
@@ -74,6 +83,7 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     const auto &gate = chunks[1];
     t = functional::silu(gate).mul_(y);
 #endif
+    if (cl_fc2_) calib_stats_->accumulate(cl_fc2_, t);
     return fc2(t);
 }
 
@@ -227,6 +237,12 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     model_stats = _model_stats;
 };
 
+void MultiHeadAttentionImpl::set_calib(const std::string &name_prefix, calib_stats_t *calib) {
+    calib_stats_ = calib;
+    cl_wqkv_    = calib->register_layer(name_prefix + ".wqkv",    wqkv->weight);
+    cl_out_proj_ = calib->register_layer(name_prefix + ".out_proj", out_proj->weight);
+}
+
 torch::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
     const auto key = MaskKey{size, options.device()};
     if (mask_cache.find(key) == mask_cache.end()) {
@@ -252,6 +268,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     double a, b;
     
     a = realtime();
+    if (cl_wqkv_) calib_stats_->accumulate(cl_wqkv_, x);
     auto qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
@@ -326,6 +343,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_sdp_attn += b-a;
 
     a = realtime();
+    if (cl_out_proj_) calib_stats_->accumulate(cl_out_proj_, attn_output_ntc);
     x = out_proj(attn_output_ntc);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
@@ -334,13 +352,21 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash, int nthreads) : params(params_) {
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash, int nthreads, int layer_idx) : params(params_) {
     self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats, use_flash, nthreads));
-    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
+    const std::string ff_prefix = layer_idx >= 0
+        ? "transformer_encoder." + std::to_string(layer_idx) + ".ff"
+        : "";
+    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward, _model_stats, ff_prefix));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
     device_idx = options.device_index();
     model_stats = _model_stats;
+
+    if (layer_idx >= 0 && _model_stats && _model_stats->calib_stats) {
+        const std::string attn_prefix = "transformer_encoder." + std::to_string(layer_idx) + ".self_attn";
+        self_attn->set_calib(attn_prefix, _model_stats->calib_stats);
+    }
 
     const torch::Tensor deepnorm_alpha = torch::tensor(params.deepnorm_alpha);
     register_buffer("deepnorm_alpha", deepnorm_alpha);
@@ -405,7 +431,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
-        TxEncoder encoder(params, options, model_stats, use_flash, nthreads);
+        TxEncoder encoder(params, options, model_stats, use_flash, nthreads, i);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
         layer_vec.push_back(encoder);
     }
@@ -447,6 +473,12 @@ TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOption
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
     model_stats = _model_stats;
+
+    if (_model_stats && _model_stats->calib_stats) {
+        calib_stats_ = _model_stats->calib_stats;
+        cl_upsample_ = calib_stats_->register_layer("upsample.linear", tx_decoder->linear->weight);
+        cl_crf_      = calib_stats_->register_layer("crf.linear",      crf->linear->weight);
+    }
 }
 
 torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
@@ -466,12 +498,14 @@ torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
     model_stats->time_tx_encoder += b-a;
 
     a = realtime();
+    if (cl_upsample_) calib_stats_->accumulate(cl_upsample_, h);
     h = tx_decoder(h);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_tx_decoder += b-a;
 
     a = realtime();
+    if (cl_crf_) calib_stats_->accumulate(cl_crf_, h);
     h = crf(h);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();

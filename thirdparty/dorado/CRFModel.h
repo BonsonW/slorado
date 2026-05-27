@@ -7,6 +7,7 @@
 
 #include "model_config.h"
 #include "tensor_chunk_utils.h"
+#include "calib.h"
 
 using namespace torch::nn;
 
@@ -29,11 +30,15 @@ struct ConvStackImpl : torch::nn::Module {
 struct LinearCRFImpl : torch::nn::Module {
     LinearCRFImpl(int insize, int outsize, bool bias_, bool tanh_and_scale);
     torch::Tensor forward(const torch::Tensor &x);
+    void set_calib(const std::string &name, calib_stats_t *calib);
 
     bool bias;
     static constexpr int scale = 5;
     torch::nn::Linear linear{nullptr};
     torch::nn::Tanh activation{nullptr};
+
+    calib_stats_t *calib_stats_ = nullptr;
+    calib_layer_t *calib_layer_ = nullptr;
 };
 
 struct LSTMStackImpl : torch::nn::Module {
@@ -44,7 +49,7 @@ struct LSTMStackImpl : torch::nn::Module {
 };
 
 struct FLSTMLayerImpl : torch::nn::Module {
-    FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats);
+    FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats, const std::string &name_prefix = "");
     torch::Tensor forward(torch::Tensor x);
 private:
     int C_;
@@ -52,6 +57,11 @@ private:
     torch::Tensor dn_weight_ih_, dn_weight_hh_;
     torch::Tensor up_weight_ih_, up_weight_hh_;
     torch::Tensor up_bias_ih_,   up_bias_hh_;
+
+    // calibration (null when --calibrate not set)
+    calib_stats_t *calib_stats_ = nullptr;
+    calib_layer_t *cl_dn_ih_ = nullptr, *cl_up_ih_ = nullptr;
+    calib_layer_t *cl_dn_hh_ = nullptr, *cl_up_hh_ = nullptr;
 };
 
 struct FLSTMStackImpl : torch::nn::Module {

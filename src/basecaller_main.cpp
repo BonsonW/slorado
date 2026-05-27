@@ -72,6 +72,7 @@ static struct option long_options[] = {
     {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
     {"flash", required_argument, 0, 0},             //16 toggles flash attention when possible
     {"mod", required_argument, 0, 0},               //17 detect modified bases
+    {"calibrate", required_argument, 0, 0},         //18 output calibration stats JSON
     {0, 0, 0, 0}};
 
 
@@ -92,6 +93,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
     fprintf(fp_help, "  --mod STR                   detect modified bases (5mCG_5hmCG@v3) [%s]\n", opt.mod ? opt.mod : "NULL");
+    fprintf(fp_help, "  --calibrate FILE            write per-layer quantization calibration stats to FILE\n");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
@@ -183,6 +185,8 @@ int basecaller_main(int argc, char* argv[]) {
             yes_or_no(&opt.flag, SLORADO_FLASH, long_options[longindex].name, optarg, 1);
         } else if (c == 0 && longindex == 17) { // flash attention
             opt.mod = optarg;
+        } else if (c == 0 && longindex == 18) { // calibration output
+            opt.calibrate_out = optarg;
         }
     }
 

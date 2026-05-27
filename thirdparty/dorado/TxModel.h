@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CRFModel.h"
+#include "calib.h"
 #include "error.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
@@ -38,7 +39,8 @@ struct RMSNormImpl : torch::nn::Module {
 TORCH_MODULE(RMSNorm);
 
 struct GatedMLPImpl : torch::nn::Module {
-    GatedMLPImpl(int in_features, int hidden_features);
+    GatedMLPImpl(int in_features, int hidden_features,
+                 tx_stats_t *stats = nullptr, const std::string &name_prefix = "");
 
     torch::Tensor forward(const torch::Tensor &x);
 
@@ -46,6 +48,9 @@ struct GatedMLPImpl : torch::nn::Module {
     int in_features;
     int hidden_features;
     torch::nn::Linear fc1{nullptr}, fc2{nullptr};
+
+    calib_stats_t *calib_stats_ = nullptr;
+    calib_layer_t *cl_fc1_ = nullptr, *cl_fc2_ = nullptr;
 };
 
 TORCH_MODULE(GatedMLP);
@@ -98,6 +103,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     );
 
     torch::Tensor forward(torch::Tensor x);
+    void set_calib(const std::string &name_prefix, calib_stats_t *calib);
 
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;
@@ -115,12 +121,15 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     RotaryEmbedding rotary_emb{nullptr};
 
     tx_stats_t *model_stats;
+
+    calib_stats_t *calib_stats_ = nullptr;
+    calib_layer_t *cl_wqkv_ = nullptr, *cl_out_proj_ = nullptr;
 };
 
 TORCH_MODULE(MultiHeadAttention);
 
 struct TxEncoderImpl : torch::nn::Module {
-    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads);
+    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads, int layer_idx = -1);
 
     torch::Tensor forward(torch::Tensor x);
 
@@ -190,6 +199,9 @@ struct TxModelImpl : torch::nn::Module {
     tx_stats_t *model_stats;
 
     const torch::TensorOptions m_options;
+
+    calib_stats_t *calib_stats_ = nullptr;
+    calib_layer_t *cl_upsample_ = nullptr, *cl_crf_ = nullptr;
 };
 
 TORCH_MODULE(TxModel);

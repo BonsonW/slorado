@@ -40,6 +40,7 @@ SOFTWARE.
 #include "slorado.h"
 #include "misc.h"
 #include "error.h"
+#include "calib.h"
 
 #include "basecall.h"
 #include "writer.h"
@@ -148,6 +149,11 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->model_config = new CRFModelConfig(model_config);
     LOG_TRACE("%s", "model config loaded");
 
+    if (opt.calibrate_out != NULL) {
+        core->calib_stats = new calib_stats_t();
+        fprintf(stderr, "[init_core] calibration mode enabled, stats will be written to %s\n", opt.calibrate_out);
+    }
+
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
     core->opt.gpu_batch_size = opt.gpu_batch_size; // sync auto-detected value back to core
@@ -163,6 +169,12 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
 /* free the core data structure */
 void free_core(core_t* core, opt_t opt) {
+    if (core->calib_stats != nullptr && opt.calibrate_out != nullptr) {
+        core->calib_stats->save_json(std::string(opt.calibrate_out));
+        delete core->calib_stats;
+        core->calib_stats = nullptr;
+    }
+
     free_runners(core);
 
     slow5_close(core->sp);
