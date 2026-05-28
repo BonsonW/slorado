@@ -293,9 +293,9 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
         float softmax_scale = 1.0 / std::sqrt(head_dim);
 
         auto qkv_chunks = qkv.chunk(3, 2);
-        auto q = qkv_chunks[0].squeeze();
-        auto k = qkv_chunks[1].squeeze();
-        auto v = qkv_chunks[2].squeeze();
+        auto q = qkv_chunks[0].squeeze(2);
+        auto k = qkv_chunks[1].squeeze(2);
+        auto v = qkv_chunks[2].squeeze(2);
         
         auto flash_res = at::_flash_attention_forward(
             q, k, v,
