@@ -51,6 +51,7 @@ struct LSTMStackImpl : torch::nn::Module {
 struct FLSTMLayerImpl : torch::nn::Module {
     FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats, const std::string &name_prefix = "");
     torch::Tensor forward(torch::Tensor x);
+    void fuse_weights();
 private:
     int C_;
     lstm_stats_t *model_stats_;
@@ -58,15 +59,20 @@ private:
     torch::Tensor up_weight_ih_, up_weight_hh_;
     torch::Tensor up_bias_ih_,   up_bias_hh_;
 
+    // Fused projection matrices: dn.t() @ up.t(), computed once after load_state_dict + to(device)
+    torch::Tensor W_ih_fused_;   // (C, 4*C)
+    torch::Tensor W_hh_fused_;   // (C, 4*C)
+
     // calibration (null when --calibrate not set)
     calib_stats_t *calib_stats_ = nullptr;
-    calib_layer_t *cl_dn_ih_ = nullptr, *cl_up_ih_ = nullptr;
-    calib_layer_t *cl_dn_hh_ = nullptr, *cl_up_hh_ = nullptr;
+    std::string calib_prefix_;
+    calib_layer_t *cl_ih_fused_ = nullptr, *cl_hh_fused_ = nullptr;
 };
 
 struct FLSTMStackImpl : torch::nn::Module {
     FLSTMStackImpl(int num_layers, int C, int K, lstm_stats_t *model_stats);
     torch::Tensor forward(torch::Tensor x);
+    void fuse_weights();
     std::vector<torch::nn::ModuleHolder<FLSTMLayerImpl>> layers_;
 };
 
@@ -87,6 +93,7 @@ TORCH_MODULE(Clamp);
 struct CRFModelImpl : torch::nn::Module {
     explicit CRFModelImpl(const CRFModelConfig &config, lstm_stats_t *model_stats);
     void load_state_dict(const std::vector<torch::Tensor> &weights);
+    void fuse_weights();
 
     torch::Tensor forward(const torch::Tensor &x);
     ConvStack convs{nullptr};

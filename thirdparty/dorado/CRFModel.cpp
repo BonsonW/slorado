@@ -6,6 +6,10 @@
 #include "misc.h"
 #include "tensor_chunk_utils.h"
 
+#ifdef USE_GPU
+#include <openfish/openfish.h>
+#endif
+
 using namespace torch::nn;
 
 ConvStackImpl::ConvStackImpl(const std::vector<ConvParams> &layer_params) {
@@ -92,10 +96,20 @@ FLSTMLayerImpl::FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats, const st
 
     if (!name_prefix.empty() && model_stats && model_stats->calib_stats) {
         calib_stats_ = model_stats->calib_stats;
-        cl_dn_ih_ = calib_stats_->register_layer(name_prefix + ".dn_ih", dn_weight_ih_);
-        cl_up_ih_ = calib_stats_->register_layer(name_prefix + ".up_ih", up_weight_ih_);
-        cl_dn_hh_ = calib_stats_->register_layer(name_prefix + ".dn_hh", dn_weight_hh_);
-        cl_up_hh_ = calib_stats_->register_layer(name_prefix + ".up_hh", up_weight_hh_);
+        calib_prefix_ = name_prefix;
+    }
+}
+
+void FLSTMLayerImpl::fuse_weights() {
+    // Fuse two sequential matmuls into one: x @ dn.T @ up.T == x @ W_fused
+    // W_fused = dn.T @ up.T, shape (C, 4*C)
+    W_ih_fused_ = torch::matmul(dn_weight_ih_.t(), up_weight_ih_.t()).contiguous();
+    W_hh_fused_ = torch::matmul(dn_weight_hh_.t(), up_weight_hh_.t()).contiguous();
+
+    // Register fused matrices with calibration if active (these are what get quantized)
+    if (calib_stats_) {
+        cl_ih_fused_ = calib_stats_->register_layer(calib_prefix_ + ".ih_fused", W_ih_fused_);
+        cl_hh_fused_ = calib_stats_->register_layer(calib_prefix_ + ".hh_fused", W_hh_fused_);
     }
 }
 
@@ -107,67 +121,49 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     const bool on_gpu = !x.device().is_cpu();
     double a, b;
 
-    torch::Tensor hh = torch::empty({T + 1, N, C_}, x.options());
-    hh[0] = 0;
-    torch::Tensor c = torch::zeros({N, C_}, x.options());
-
-    // Hard activations used by the factorised LSTM
-    const auto sigmoid_hard = [](torch::Tensor a) {
-        return a.mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
-    };
-    const auto tanh_hard = [](torch::Tensor a) { return a.clamp_(-1.f, 1.f); };
-
-    // Pre-compute all input-hidden projections at once: [T, N, 4*C]
+    // ih precompute: one addmm over full sequence [T*N, C] @ [C, 4*C] -> [T, N, 4*C]
     a = realtime();
-    torch::Tensor ih;
-    if (cl_dn_ih_) {
-        // Update weight stats on first call — weights weren't loaded at construction time.
-        if (cl_dn_ih_->n_batches == 0) {
-            calib_stats_->update_weight(cl_dn_ih_, dn_weight_ih_);
-            calib_stats_->update_weight(cl_up_ih_, up_weight_ih_);
-            calib_stats_->update_weight(cl_dn_hh_, dn_weight_hh_);
-            calib_stats_->update_weight(cl_up_hh_, up_weight_hh_);
-        }
-        const auto dn_ih_out = torch::matmul(x, dn_weight_ih_.t());
-        calib_stats_->accumulate(cl_dn_ih_, x);
-        calib_stats_->accumulate(cl_up_ih_, dn_ih_out);
-        ih = torch::matmul(dn_ih_out, up_weight_ih_.t()).add_(up_bias_ih_);
-    } else {
-        ih = torch::matmul(torch::matmul(x, dn_weight_ih_.t()), up_weight_ih_.t()).add_(up_bias_ih_);
-    }
+    auto x_flat = x.view({T * N, x.size(2)});
+    if (cl_ih_fused_) calib_stats_->accumulate(cl_ih_fused_, x_flat);
+    auto ih = torch::addmm(up_bias_ih_, x_flat, W_ih_fused_).view({T, N, 4 * C_});
     if (on_gpu) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats_->time_flstm_precompute += b - a;
 
+    auto hh = torch::empty({T + 1, N, C_}, x.options());
+    hh[0].zero_();
+    auto c       = torch::zeros({N, C_},     x.options());
+    auto scratch = torch::empty({N, 4 * C_}, x.options());
+
+    a = realtime();
     for (int t = 0; t < T; ++t) {
-        // linear1
-        a = realtime();
-        if (cl_dn_hh_) calib_stats_->accumulate(cl_dn_hh_, hh[t]);
-        auto x_hh = torch::matmul(hh[t], dn_weight_hh_.t());
-        if (on_gpu) torch::cuda::synchronize(x.device().index());
-        b = realtime();
-        model_stats_->time_flstm_linear1 += b - a;
+        // One addmm per step: scratch = up_bias_hh_ + hh[t] @ W_hh_fused_
+        // a = realtime();
+        if (cl_hh_fused_) calib_stats_->accumulate(cl_hh_fused_, hh[t]);
+        torch::addmm_out(scratch, up_bias_hh_, hh[t], W_hh_fused_);
+        // if (on_gpu) torch::cuda::synchronize(x.device().index());
+        // b = realtime();
+        // model_stats_->time_flstm_linear2 += b - a;
 
-        // linear2
-        a = realtime();
-        if (cl_up_hh_) calib_stats_->accumulate(cl_up_hh_, x_hh);
-        auto gates = torch::matmul(x_hh, up_weight_hh_.t()).add_(up_bias_hh_).add_(ih[t]).chunk(4, 1);
-        if (on_gpu) torch::cuda::synchronize(x.device().index());
-        b = realtime();
-        model_stats_->time_flstm_linear2 += b - a;
-
-        // epilogue
-        a = realtime();
-        auto i = sigmoid_hard(gates[0]);
-        auto f = sigmoid_hard(gates[1]);
-        auto g = tanh_hard(gates[2]);
-        auto o = sigmoid_hard(gates[3]);
+        // Fused epilogue: scratch + ih[t] -> gates -> cell update -> hh[t+1]
+        
+#ifdef USE_GPU
+        openfish_flstm_step_gpu(scratch.data_ptr(), ih[t].data_ptr(),
+                                c.data_ptr(), hh[t + 1].data_ptr(), N, C_);
+#else
+        auto gates = scratch.add(ih[t]).chunk(4, 1);
+        auto i = gates[0].mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
+        auto f = gates[1].mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
+        auto g = gates[2].clamp_(-1.f, 1.f);
+        auto o = gates[3].mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
         c = (f * c) + (i * g);
         hh[t + 1] = o * torch::tanh(c);
-        if (on_gpu) torch::cuda::synchronize(x.device().index());
-        b = realtime();
-        model_stats_->time_flstm_epilogue += b - a;
+#endif
+        // if (on_gpu) torch::cuda::synchronize(x.device().index());
+        
     }
+    b = realtime();
+    model_stats_->time_flstm_recurrence += b - a;
 
     using namespace torch::indexing;
     // Return [N, T, C]
@@ -188,6 +184,12 @@ torch::Tensor FLSTMStackImpl::forward(torch::Tensor x) {
         x = layer->forward(x.flip(1));
     }
     return (layers_.size() & 1) ? x.flip(1) : x;
+}
+
+void FLSTMStackImpl::fuse_weights() {
+    for (auto &layer : layers_) {
+        layer->fuse_weights();
+    }
 }
 
 ClampImpl::ClampImpl(float _min, float _max, bool _active)
@@ -237,6 +239,12 @@ CRFModelImpl::CRFModelImpl(const CRFModelConfig &config, lstm_stats_t *model_sta
 
 void CRFModelImpl::load_state_dict(const std::vector<torch::Tensor> &weights) {
     module_load_state_dict(*this, weights);
+}
+
+void CRFModelImpl::fuse_weights() {
+    if (flstm_rnns) {
+        flstm_rnns->fuse_weights();
+    }
 }
 
 torch::Tensor CRFModelImpl::forward(const torch::Tensor &x) {
@@ -341,6 +349,9 @@ ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, cons
     model->to(options.dtype().toScalarType());
     model->to(options.device());
     model->eval();
+
+    // Fuse FLSTM projection matrices after weights are loaded and on the correct device.
+    model->fuse_weights();
 
     // Register weight-only stats for standard LSTM layers (no activation hooks possible).
     if (model_stats && model_stats->calib_stats) {

@@ -13,17 +13,22 @@
 SLORADO_CUDA_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQBksuPWnfpaTbnkIC9k05I3AY_Dhe1uz_Rj5sO9JxT2n64?download=1"
 SLORADO_ROCM_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQC0nnJ4s3foSJDd8Qaw7124AX_STnHRsg0bZaZ7zSeEcgk?download=1"
 
-# batch sizes for each model
-FAST_BATCH="${FAST_BATCH:-512}"
-HAC_BATCH="${HAC_BATCH:-256}"
-SUP_BATCH="${SUP_BATCH:-256}"
+# gpu batch size per model (empty = let slorado auto-detect)
+FAST_BATCH="${FAST_BATCH:-}"
+HAC_BATCH="${HAC_BATCH:-}"
+SUP_BATCH="${SUP_BATCH:-}"
+FAST_BATCH_ARG="${FAST_BATCH:+-C $FAST_BATCH}"
+HAC_BATCH_ARG="${HAC_BATCH:+-C $HAC_BATCH}"
+SUP_BATCH_ARG="${SUP_BATCH:+-C $SUP_BATCH}"
 
 # basecaller options
 READ_MEM="${READ_MEM:-512M}"
 
 # basecaller advanced options
-READ_BATCH="${READ_BATCH:-4096}"
-CHUNKSIZE="${CHUNKSIZE:-10000}"
+READ_BATCH="${READ_BATCH:-}"
+CHUNKSIZE="${CHUNKSIZE:-}"
+READ_BATCH_ARG="${READ_BATCH:+-K $READ_BATCH}"
+CHUNKSIZE_ARG="${CHUNKSIZE:+-c $CHUNKSIZE}"
 
 # default number of threads automatically 
 export NTHREADS=${NTHREADS:-$(getconf _NPROCESSORS_ONLN)}
@@ -40,6 +45,9 @@ SUP="dna_r10.4.1_e8.2_400bps_sup@v5.0.0"
 FAST_RNA="rna004_130bps_fast@v5.1.0"
 HAC_RNA="rna004_130bps_hac@v5.1.0"
 SUP_RNA="rna004_130bps_sup@v5.1.0"
+
+HAC_V6="dna_r10.4.1_e8.2_400bps_hac@v6.0.0"
+HAC_RNA_V6="rna004_hac@v6.0.0"
 
 # mod
 METH=5mCG_5hmCG@v3
@@ -125,6 +133,18 @@ check_accuracy() {
         ;;
     $SUP_RNA )
         if (( $(echo "$2 >= 0.97" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    $HAC_V6 )
+        if (( $(echo "$2 >= 0.97" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    $HAC_RNA_V6 )
+        if (( $(echo "$2 >= 0.95" | bc -l) ));
         then
             return 0
         fi
@@ -325,12 +345,14 @@ download_slorado_binary() {
 check_acc_dna() {
     $MINIMAP2 -cx map-ont $REF_DNA -t $NTHREADS tmp.fastq --secondary=no > tmp.paf || die "minimap2 failed"
     MEDIAN=$(awk '{print $10/$11}' tmp.paf | $DATAMASH median 1)
+    echo "accuracy: $MEDIAN"
     check_accuracy $1 $MEDIAN
 }
 
 check_acc_rna() {
     $MINIMAP2 -cx splice -uf -k14 $REF_RNA -t $NTHREADS --secondary=no tmp.fastq > tmp.paf || die "minimap2 failed"
     MEDIAN=$(awk '{print $10/$11}' tmp.paf | $DATAMASH median 1)
+    echo "accuracy: $MEDIAN"
     check_accuracy $1 $MEDIAN
 }
 
@@ -411,6 +433,9 @@ test -d models/$SUP_RNA || download_model $SUP_RNA
 test -d models/${HAC}_${METH} || download_model ${HAC}_${METH}
 test -d models/${SUP}_${METH} || download_model ${SUP}_${METH}
 
+test -d models/$HAC_V6 || download_model $HAC_V6
+test -d models/$HAC_RNA_V6 || download_model $HAC_RNA_V6
+
 # memory check with asan if building from source
 if [ "$SLORADO_MODE" = "build" ]; then
     make clean && make -j $NTHREADS asan=1 cxx11_abi=1
@@ -454,58 +479,70 @@ fi
 # accuracy check DNA
 if [ $RUN_500K -eq 1 ]; then
     echo "GPU - HAC model - 500k reads"
-    ex $SLORADO basecaller models/$HAC $SUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.fastq || die "Running the tool failed"
+    ex $SLORADO basecaller models/$HAC $SUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.fastq || die "Running the tool failed"
     check_accuracy_dna $HAC
     echo ""
     echo "********************************************************************"
 fi
 
 echo "GPU - FAST model - 20k reads"
-ex $SLORADO basecaller models/$FAST $SUBSUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $FAST_BATCH > tmp.fastq || die "Running the tool failed"
+ex $SLORADO basecaller models/$FAST $SUBSUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $FAST_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_dna $FAST
 echo ""
 echo "********************************************************************"
 
 echo "GPU - HAC model - 20k reads"
-ex $SLORADO basecaller models/$HAC $SUBSUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.fastq || die "Running the tool failed"
+ex $SLORADO basecaller models/$HAC $SUBSUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_dna $HAC
 echo ""
 echo "********************************************************************"
 
+echo "GPU - HAC v6.0.0 model (FLSTM) - 20k reads"
+ex $SLORADO basecaller models/$HAC_V6 $SUBSUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_dna $HAC_V6
+echo ""
+echo "********************************************************************"
+
 echo "GPU - SUP model - 20k reads"
-ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq || die "Running the tool failed"
+ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_dna $SUP
 echo ""
 echo "********************************************************************"
 
 # accuracy check RNA
 echo "GPU - FAST RNA model - 20k reads"
-ex $SLORADO basecaller models/$FAST_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $FAST_BATCH > tmp.fastq || die "Running the tool failed"
+ex $SLORADO basecaller models/$FAST_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $FAST_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_rna $FAST_RNA
 echo ""
 echo "********************************************************************"
 
 echo "GPU - HAC RNA model - 20k reads"
-ex $SLORADO basecaller models/$HAC_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.fastq || die "Running the tool failed"
+ex $SLORADO basecaller models/$HAC_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_rna $HAC_RNA
 echo ""
 echo "********************************************************************"
 
+echo "GPU - HAC RNA v6.0.0 model - 20k reads"
+ex $SLORADO basecaller models/$HAC_RNA_V6 $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_rna $HAC_RNA_V6
+echo ""
+echo "********************************************************************"
+
 echo "GPU - SUP RNA model - 20k reads"
-ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq || die "Running the tool failed"
+ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_rna $SUP_RNA
 echo ""
 echo "********************************************************************"
 
 # correlation check modified basecalling with 5mCG_5hmCG
 echo "GPU - HAC meth model - chr22"
-ex $SLORADO basecaller models/$HAC $CHR22 --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $HAC_BATCH > tmp.sam || die "Running the tool failed"
+ex $SLORADO basecaller models/$HAC $CHR22 --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.sam || die "Running the tool failed"
 check_corr_mod $HAC
 echo ""
 echo "********************************************************************"
 
 echo "GPU - SUP meth model - chr22"
-ex $SLORADO basecaller models/$SUP $CHR22 --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.sam || die "Running the tool failed"
+ex $SLORADO basecaller models/$SUP $CHR22 --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.sam || die "Running the tool failed"
 check_corr_mod $SUP
 echo ""
 echo "********************************************************************"
@@ -514,7 +551,7 @@ echo "********************************************************************"
 FLASH_SUPPORTED=1
 
 echo "GPU - SUP model (flash) - 20k reads"
-if ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq; then
+if ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq; then
     if ! (check_acc_dna $SUP); then
         FLASH_SUPPORTED=0
     fi
@@ -525,7 +562,7 @@ echo ""
 echo "********************************************************************"
 
 echo "GPU - SUP RNA model (flash) - 20k reads"
-if ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM -K $READ_BATCH -c $CHUNKSIZE -C $SUP_BATCH > tmp.fastq; then
+if ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq; then
     if ! (check_acc_rna $SUP_RNA); then
         FLASH_SUPPORTED=0
     fi

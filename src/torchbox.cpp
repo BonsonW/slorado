@@ -42,7 +42,13 @@ SOFTWARE.
 
 #ifdef USE_GPU
 #include <c10/core/DeviceGuard.h>
+#ifdef HAVE_CUDA
 #include <cuda_runtime_api.h>
+#include <c10/cuda/CUDACachingAllocator.h>
+#elif defined(HAVE_ROCM)
+#include <hip/hip_runtime_api.h>
+#include <c10/hip/HIPCachingAllocator.h>
+#endif
 #endif
 
 void free_read_dat(read_dat_t *read_dat) {
@@ -135,38 +141,113 @@ void init_runner(
 
     LOG_TRACE("%s", "model populated");
 
-    // Auto GPU batch size: query free memory after model is loaded, compute from per-chunk costs
+    // Auto GPU batch size: run a dry N=1 forward pass and measure the actual peak activation
+    // memory via PyTorch's allocator stats, then scale to fit available GPU memory.
+    // This is more robust than hand-counting each model's layer activations.
     if (device != "cpu" && batch_size == 0) {
 #ifdef USE_GPU
-        {
+        if (!modbase) {
             c10::DeviceGuard device_guard(runner->tensor_opts.device());
+            const auto device_idx = (c10::DeviceIndex)runner->device_idx;
 
-            uint64_t free_mem, total_mem;
-            cudaMemGetInfo(&free_mem, &total_mem);
+            // Two dry forward passes (N=1 then N=2) to isolate the truly linear-in-N activation
+            // cost via marginal difference. Fixed overhead (MIOpen workspace, first-call algorithm
+            // search, per-layer buffers) cancels out: per_chunk = peak_N2 - peak_N1.
+            // Both CUDA and ROCm libtorch expose the same c10::cuda::CUDACachingAllocator namespace.
+            auto run_trial = [&](int n) -> size_t {
+                c10::cuda::CUDACachingAllocator::resetPeakStats(device_idx);
+                {
+                    torch::InferenceMode no_grad;
+                    auto trial = torch::zeros({n, 1, (int64_t)core->chunk_size},
+                        torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
+                    auto out = runner->module->forward(trial.to(runner->tensor_opts.device()));
+                    // Replicate call_chunks: transpose(0,1).contiguous() allocates a second
+                    // N×T×C copy while the original scores tensor is still alive.
+                    // Without this the trial misses half the output tensor cost.
+                    out.transpose(0, 1).contiguous();
+                    torch::cuda::synchronize(device_idx);
+                }
+                return (size_t)c10::cuda::CUDACachingAllocator::getDeviceStats(device_idx)
+                                   .allocated_bytes[0].peak;
+            };
 
-            const int T = (int)(core->chunk_size / core->model_stride);
-            const int state_len = core->model_config->state_len;
-            const int C = core->model_config->outsize;
+            size_t peak_n1 = 0, peak_n2 = 0;
+            bool trial_ok = true;
+            try {
+                peak_n1 = run_trial(1);
+                peak_n2 = run_trial(2);
+            } catch (const c10::Error &e) {
+                WARNING("auto GPU batch size: trial forward pass OOM on %s (%s), falling back to %d",
+                        device.c_str(), e.what(), DEFAULT_GPU_BATCH_SIZE);
+                trial_ok = false;
+            }
 
-            // Memory that scales linearly with batch size N:
-            //   decoder buffer (CTC beam search), input signal tensor, output scores tensor
-            const size_t per_n_decoder = openfish_gpubuf_size(T, 1, state_len);
-            const size_t per_n_input   = core->chunk_size * sizeof(uint16_t);   // float16 input
-            const size_t per_n_output  = (size_t)T * C * sizeof(uint16_t);     // float16 scores
-            const size_t per_n_total   = per_n_decoder + per_n_input + per_n_output;
+            if (trial_ok) {
+                // Reset peak for real runs
+                c10::cuda::CUDACachingAllocator::resetPeakStats(device_idx);
+                size_t free_mem, total_mem;
+#ifdef HAVE_CUDA
+                cudaMemGetInfo(&free_mem, &total_mem);
+#elif defined(HAVE_ROCM)
+                hipMemGetInfo(&free_mem, &total_mem);
+#endif
+                // Marginal cost: the truly linear-in-N component only.
+                // Guard against measurement noise flipping the sign.
+                const size_t per_n_pytorch = (peak_n2 > peak_n1) ? (peak_n2 - peak_n1) : peak_n1;
 
-            // Use 80% of free memory to leave headroom for activation tensors during inference
-            batch_size = (int)((double)free_mem * 0.8 / (double)per_n_total);
-            if (batch_size < 1) batch_size = 1;
+                // After the trials, activations are freed back to PyTorch's cache.
+                // Available = truly free CUDA memory + the cached (reusable) PyTorch memory.
+                auto stats_final = c10::cuda::CUDACachingAllocator::getDeviceStats(device_idx);
+                const size_t pytorch_cache = (size_t)stats_final.reserved_bytes[0].current
+                                           - (size_t)stats_final.allocated_bytes[0].current;
+                const size_t available = free_mem + pytorch_cache;
 
-            const size_t max_input_len = 10000ULL * 6000ULL;
-            const int max_batch = (int)(max_input_len / core->chunk_size);
-            if (batch_size > max_batch) batch_size = max_batch;
+                // openfish gpubuf uses raw CUDA malloc, invisible to the PyTorch allocator
+                const int T = (int)(core->chunk_size / core->model_stride);
+                const size_t per_n_openfish = openfish_gpubuf_size(T, 1, core->model_config->state_len);
+                const size_t per_n_total = per_n_pytorch + per_n_openfish;
 
-            fprintf(stderr, "[%s] %.1f MB free GPU memory on %s, %zu bytes/chunk (decoder:%zu input:%zu output:%zu), auto GPU batch size: %d\n",
-                    __func__, free_mem / 1e6, device.c_str(),
-                    per_n_total, per_n_decoder, per_n_input, per_n_output,
-                    batch_size);
+                // peak_n1 captures fixed overhead (cuBLAS/cuDNN workspace, algorithm search,
+                // per-layer buffers) that is present regardless of batch size.  Subtracting it
+                // from the available budget prevents overestimating how many chunks fit —
+                // this is especially significant for large transformer (SUP) models.
+                const size_t budget = (available > peak_n1) ? (size_t)((available - peak_n1) * 0.8) : 0;
+
+                batch_size = (per_n_total > 0) ? (int)(budget / per_n_total) : 1;
+
+                // openfish uses raw cudaMalloc, so its buffer can only come from physical free
+                // memory — not from PyTorch's reserved cache. Large custom chunk sizes cause the
+                // trial to map more pages into PyTorch's pool, shrinking free_mem even though
+                // available = free_mem + pytorch_cache looks fine. Cap batch size independently.
+                if (per_n_openfish > 0) {
+                    const int batch_from_openfish = (int)(free_mem * 0.8 / per_n_openfish);
+                    if (batch_from_openfish < batch_size) batch_size = batch_from_openfish;
+                }
+
+                if (batch_size < 1) batch_size = 1;
+
+                const size_t max_input_len = 10000ULL * 6000ULL;
+                const int max_batch = (int)(max_input_len / core->chunk_size);
+                if (batch_size > max_batch) batch_size = max_batch;
+
+                // Round down to nearest power of 2
+                if (batch_size > 1) {
+                    int p = 1;
+                    while (p * 2 <= batch_size) p *= 2;
+                    batch_size = p;
+                }
+
+                fprintf(stderr, "[%s] %.1f MB free + %.1f MB pytorch cache = %.1f MB available "
+                        "(%.1f MB fixed overhead) on %s, "
+                        "%zu bytes/chunk (pytorch:%zu openfish:%zu), auto GPU batch size: %d\n",
+                        __func__, free_mem / 1e6, pytorch_cache / 1e6, available / 1e6,
+                        peak_n1 / 1e6, device.c_str(),
+                        per_n_total, per_n_pytorch, per_n_openfish, batch_size);
+            } else {
+                batch_size = DEFAULT_GPU_BATCH_SIZE;
+            }
+        } else {
+            batch_size = DEFAULT_GPU_BATCH_SIZE;
         }
 #endif
     }

@@ -214,6 +214,7 @@ void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstri
         assert(overlap_size % model_stride == 0);
         int overlap_down_sampled = overlap_size / model_stride;
         int mid_point_rear = overlap_down_sampled / 2;
+        mid_point_rear = std::max(0, std::min(mid_point_rear, (int)current_chunk.moves.size()));
 
         const int current_chunk_bases_to_trim = std::accumulate(std::prev(current_chunk.moves.end(), mid_point_rear), current_chunk.moves.end(), 0);
         // for (int i = current_chunk.moves.size() - 1; i > (int)(current_chunk.moves.size() - mid_point_rear); i--){
@@ -226,6 +227,7 @@ void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstri
         sequences.push_back(current_chunk.seq.substr(start_pos, trimmed_len));
         qstrings.push_back(current_chunk.qstring.substr(start_pos, trimmed_len));
 
+        mid_point_front = std::max(0, std::min(mid_point_front, (int)current_chunk.moves.size()));
         moves.insert(moves.end(), std::next(current_chunk.moves.begin(), mid_point_front), std::prev(current_chunk.moves.end(), mid_point_rear));
 
         mid_point_front = overlap_down_sampled - mid_point_rear;

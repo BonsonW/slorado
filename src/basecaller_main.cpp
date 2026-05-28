@@ -340,9 +340,7 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
             if (core->model_config->lstm_inner_dim >= 0) {
                 fprintf(stderr, "\n[%s]                         - precompute: %.3f sec", __func__, model_stats->time_flstm_precompute);
-                fprintf(stderr, "\n[%s]                         - linear1: %.3f sec", __func__, model_stats->time_flstm_linear1);
-                fprintf(stderr, "\n[%s]                         - linear2: %.3f sec", __func__, model_stats->time_flstm_linear2);
-                fprintf(stderr, "\n[%s]                         - epilogue: %.3f sec", __func__, model_stats->time_flstm_epilogue);
+                fprintf(stderr, "\n[%s]                         - recurrence: %.3f sec", __func__, model_stats->time_flstm_recurrence);
             }
             fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
             fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);

@@ -141,8 +141,12 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->chunk_size = resolved_chunk_size - (resolved_chunk_size % core->model_stride);
     core->opt.overlap = resolved_overlap - (resolved_overlap % (int32_t)core->model_stride);
+    // Overlap must be strictly less than chunk_size (model default can exceed a user-specified -c).
+    if ((size_t)core->opt.overlap >= core->chunk_size) {
+        core->opt.overlap = (int32_t)(core->chunk_size - (int32_t)core->model_stride);
+    }
 
-    core->decoder_opts = DECODER_INIT;
+    core->decoder_opts = openfish_decoder_default_opts();
     core->decoder_opts.q_shift = model_config.qbias;
     core->decoder_opts.q_scale = model_config.qscale;
 
