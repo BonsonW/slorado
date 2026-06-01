@@ -39,15 +39,20 @@ SOFTWARE.
 #include "dorado/ModBaseModel.h"
 #include "dorado/modbase.h"
 #include "dorado/simd.h"
+#ifdef HAVE_CUDA
+#include <c10/cuda/CUDACachingAllocator.h>
+#define CACHING_ALLOCATOR_NS c10::cuda::CUDACachingAllocator
+#elif defined(HAVE_ROCM)
+#include <c10/hip/HIPCachingAllocator.h>
+#define CACHING_ALLOCATOR_NS c10::hip::HIPCachingAllocator
+#endif
 
 #ifdef USE_GPU
 #include <c10/core/DeviceGuard.h>
 #ifdef HAVE_CUDA
 #include <cuda_runtime_api.h>
-#include <c10/cuda/CUDACachingAllocator.h>
 #elif defined(HAVE_ROCM)
 #include <hip/hip_runtime_api.h>
-#include <c10/hip/HIPCachingAllocator.h>
 #endif
 #endif
 
@@ -153,9 +158,9 @@ void init_runner(
             // Two dry forward passes (N=1 then N=2) to isolate the truly linear-in-N activation
             // cost via marginal difference. Fixed overhead (MIOpen workspace, first-call algorithm
             // search, per-layer buffers) cancels out: per_chunk = peak_N2 - peak_N1.
-            // Both CUDA and ROCm libtorch expose the same c10::cuda::CUDACachingAllocator namespace.
+            // CUDA uses c10::cuda::CUDACachingAllocator; ROCm uses c10::hip::HIPCachingAllocator (via CACHING_ALLOCATOR_NS).
             auto run_trial = [&](int n) -> size_t {
-                c10::cuda::CUDACachingAllocator::resetPeakStats(device_idx);
+                CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
                 {
                     torch::InferenceMode no_grad;
                     auto trial = torch::zeros({n, 1, (int64_t)core->chunk_size},
@@ -167,7 +172,7 @@ void init_runner(
                     out.transpose(0, 1).contiguous();
                     torch::cuda::synchronize(device_idx);
                 }
-                return (size_t)c10::cuda::CUDACachingAllocator::getDeviceStats(device_idx)
+                return (size_t)CACHING_ALLOCATOR_NS::getDeviceStats(device_idx)
                                    .allocated_bytes[0].peak;
             };
 
@@ -184,7 +189,7 @@ void init_runner(
 
             if (trial_ok) {
                 // Reset peak for real runs
-                c10::cuda::CUDACachingAllocator::resetPeakStats(device_idx);
+                CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
                 size_t free_mem, total_mem;
 #ifdef HAVE_CUDA
                 cudaMemGetInfo(&free_mem, &total_mem);
@@ -197,7 +202,7 @@ void init_runner(
 
                 // After the trials, activations are freed back to PyTorch's cache.
                 // Available = truly free CUDA memory + the cached (reusable) PyTorch memory.
-                auto stats_final = c10::cuda::CUDACachingAllocator::getDeviceStats(device_idx);
+                auto stats_final = CACHING_ALLOCATOR_NS::getDeviceStats(device_idx);
                 const size_t pytorch_cache = (size_t)stats_final.reserved_bytes[0].current
                                            - (size_t)stats_final.allocated_bytes[0].current;
                 const size_t available = free_mem + pytorch_cache;
