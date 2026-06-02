@@ -39,12 +39,15 @@ SOFTWARE.
 #include "dorado/ModBaseModel.h"
 #include "dorado/modbase.h"
 #include "dorado/simd.h"
+
+#ifdef USE_GPU
 #ifdef HAVE_CUDA
 #include <c10/cuda/CUDACachingAllocator.h>
 #define CACHING_ALLOCATOR_NS c10::cuda::CUDACachingAllocator
 #elif defined(HAVE_ROCM)
 #include <c10/hip/HIPCachingAllocator.h>
 #define CACHING_ALLOCATOR_NS c10::hip::HIPCachingAllocator
+#endif
 #endif
 
 #ifdef USE_GPU
@@ -158,7 +161,6 @@ void init_runner(
             // Two dry forward passes (N=1 then N=2) to isolate the truly linear-in-N activation
             // cost via marginal difference. Fixed overhead (MIOpen workspace, first-call algorithm
             // search, per-layer buffers) cancels out: per_chunk = peak_N2 - peak_N1.
-            // CUDA uses c10::cuda::CUDACachingAllocator; ROCm uses c10::hip::HIPCachingAllocator (via CACHING_ALLOCATOR_NS).
             auto run_trial = [&](int n) -> size_t {
                 CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
                 {
@@ -187,8 +189,15 @@ void init_runner(
                 trial_ok = false;
             }
 
+            // Sanity check: if peak stats return 0, tracking is not working on this platform.
+            if (trial_ok && peak_n1 == 0 && peak_n2 == 0) {
+                WARNING("auto GPU batch size: allocator peak stats returned 0 on %s "
+                        "(HIP peak tracking may be unavailable), falling back to %d",
+                        device.c_str(), DEFAULT_GPU_BATCH_SIZE);
+                trial_ok = false;
+            }
+
             if (trial_ok) {
-                // Reset peak for real runs
                 CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
                 size_t free_mem, total_mem;
 #ifdef HAVE_CUDA
@@ -196,6 +205,17 @@ void init_runner(
 #elif defined(HAVE_ROCM)
                 hipMemGetInfo(&free_mem, &total_mem);
 #endif
+                // On multi-GCD ROCm setups (e.g. MI250X in unified partition mode),
+                // hipMemGetInfo reports the combined HBM pool across both GCDs.  Each GCD
+                // can only access half of that pool at local bandwidth; cap free_mem at
+                // total_mem/2 so we budget for one GCD's share.  On CUDA, free <= total
+                // by definition so the guard is just a sanity check.
+#ifdef HAVE_ROCM
+                if (free_mem > total_mem / 2) free_mem = total_mem / 2;
+#else
+                if (free_mem > total_mem) free_mem = total_mem;
+#endif
+
                 // Marginal cost: the truly linear-in-N component only.
                 // Guard against measurement noise flipping the sign.
                 const size_t per_n_pytorch = (peak_n2 > peak_n1) ? (peak_n2 - peak_n1) : peak_n1;
@@ -212,32 +232,28 @@ void init_runner(
                 const size_t per_n_openfish = openfish_gpubuf_size(T, 1, core->model_config->state_len);
                 const size_t per_n_total = per_n_pytorch + per_n_openfish;
 
-                // peak_n1 captures fixed overhead (cuBLAS/cuDNN workspace, algorithm search,
-                // per-layer buffers) that is present regardless of batch size.  Subtracting it
-                // from the available budget prevents overestimating how many chunks fit —
-                // this is especially significant for large transformer (SUP) models.
-                // Use 0.5 rather than a higher fraction: the N=1/N=2 trials benchmark cuDNN for
-                // small shapes, but the first forward call at the actual (large) batch size
-                // triggers a fresh benchmark for the new shape — this transient overhead can
-                // substantially exceed the steady-state estimate, so extra headroom is warranted.
-                const size_t budget = (available > peak_n1) ? (size_t)((available - peak_n1) * 0.5) : 0;
-
+                // peak_n1 = fixed overhead (algorithm search, per-layer buffers) regardless of N.
+                const size_t budget = (available > peak_n1) ? (size_t)((available - peak_n1) * 0.45) : 0;
                 batch_size = (per_n_total > 0) ? (int)(budget / per_n_total) : 1;
-
-                // openfish uses raw cudaMalloc, so its buffer can only come from physical free
-                // memory — not from PyTorch's reserved cache. Large custom chunk sizes cause the
-                // trial to map more pages into PyTorch's pool, shrinking free_mem even though
-                // available = free_mem + pytorch_cache looks fine. Cap batch size independently.
-                if (per_n_openfish > 0) {
-                    const int batch_from_openfish = (int)(free_mem * 0.5 / per_n_openfish);
-                    if (batch_from_openfish < batch_size) batch_size = batch_from_openfish;
-                }
 
                 if (batch_size < 1) batch_size = 1;
 
                 const size_t max_input_len = 10000ULL * 6000ULL;
                 const int max_batch = (int)(max_input_len / core->chunk_size);
                 if (batch_size > max_batch) batch_size = max_batch;
+
+                // Guard against MIOpen/cuDNN RNN int32 overflow.  MIOpen computes
+                // sequence descriptor lengths as T × N × hidden_size using 32-bit
+                // integers.  When this product exceeds INT_MAX the value wraps negative
+                // and miopenRNN* throws "Lengths must be > 0".
+                // e.g. DNA fast v5.0 (T=2499, hidden=256): max safe N = INT_MAX/(2499×256) = 3356 → 2048
+                {
+                    const int lstm_sz = core->model_config->lstm_size;
+                    if (lstm_sz > 0 && T > 0) {
+                        const int max_rnn = (int)(2147483647LL / ((int64_t)T * lstm_sz));
+                        if (batch_size > max_rnn) batch_size = max_rnn;
+                    }
+                }
 
                 // Round down to nearest power of 2
                 if (batch_size > 1) {
