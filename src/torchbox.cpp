@@ -216,7 +216,11 @@ void init_runner(
                 // per-layer buffers) that is present regardless of batch size.  Subtracting it
                 // from the available budget prevents overestimating how many chunks fit —
                 // this is especially significant for large transformer (SUP) models.
-                const size_t budget = (available > peak_n1) ? (size_t)((available - peak_n1) * 0.8) : 0;
+                // Use 0.5 rather than a higher fraction: the N=1/N=2 trials benchmark cuDNN for
+                // small shapes, but the first forward call at the actual (large) batch size
+                // triggers a fresh benchmark for the new shape — this transient overhead can
+                // substantially exceed the steady-state estimate, so extra headroom is warranted.
+                const size_t budget = (available > peak_n1) ? (size_t)((available - peak_n1) * 0.5) : 0;
 
                 batch_size = (per_n_total > 0) ? (int)(budget / per_n_total) : 1;
 
@@ -225,7 +229,7 @@ void init_runner(
                 // trial to map more pages into PyTorch's pool, shrinking free_mem even though
                 // available = free_mem + pytorch_cache looks fine. Cap batch size independently.
                 if (per_n_openfish > 0) {
-                    const int batch_from_openfish = (int)(free_mem * 0.8 / per_n_openfish);
+                    const int batch_from_openfish = (int)(free_mem * 0.5 / per_n_openfish);
                     if (batch_from_openfish < batch_size) batch_size = batch_from_openfish;
                 }
 
