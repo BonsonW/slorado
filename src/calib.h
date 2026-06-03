@@ -11,12 +11,14 @@ struct calib_layer_t {
 
     // Weight stats — computed once from the weight matrix at registration.
     // weight shape: (out_features, in_features); operation: output = input @ weight.T
+    int64_t out_features = 0, in_features = 0;
     float w_min = 0.f, w_max = 0.f, w_amax = 0.f;
     at::Tensor w_per_out_ch_amax;   // CPU float32, shape (out_features,)
 
     // Input activation stats — accumulated across forward calls.
+    // Input is expected in (..., T, C) layout so that the sequence dim is second-to-last.
     float x_min =  1e38f, x_max = -1e38f, x_amax = 0.f;
-    at::Tensor x_per_in_ch_amax;    // CPU float32, shape (in_features,), lazy-initialized
+    at::Tensor x_per_token_amax;    // CPU float32, shape (T,) — max over features per seq position
     int64_t n_batches = 0;
 };
 

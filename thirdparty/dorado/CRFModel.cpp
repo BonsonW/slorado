@@ -106,10 +106,11 @@ void FLSTMLayerImpl::fuse_weights() {
     W_ih_fused_ = torch::matmul(dn_weight_ih_.t(), up_weight_ih_.t()).contiguous();
     W_hh_fused_ = torch::matmul(dn_weight_hh_.t(), up_weight_hh_.t()).contiguous();
 
-    // Register fused matrices with calibration if active (these are what get quantized)
+    // Register fused matrices with calibration if active (these are what get quantized).
+    // Transpose to (out, in) = (4*C, C) so compute_weight_stats sees the standard convention.
     if (calib_stats_) {
-        cl_ih_fused_ = calib_stats_->register_layer(calib_prefix_ + ".ih_fused", W_ih_fused_);
-        cl_hh_fused_ = calib_stats_->register_layer(calib_prefix_ + ".hh_fused", W_hh_fused_);
+        cl_ih_fused_ = calib_stats_->register_layer(calib_prefix_ + ".ih_fused", W_ih_fused_.t().contiguous());
+        cl_hh_fused_ = calib_stats_->register_layer(calib_prefix_ + ".hh_fused", W_hh_fused_.t().contiguous());
     }
 }
 
@@ -124,7 +125,8 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     // ih precompute: one addmm over full sequence [T*N, C] @ [C, 4*C] -> [T, N, 4*C]
     a = realtime();
     auto x_flat = x.view({T * N, x.size(2)});
-    if (cl_ih_fused_) calib_stats_->accumulate(cl_ih_fused_, x_flat);
+    // x is (T, N, C); transpose to (N, T, C) for standard (..., T, C) layout.
+    if (cl_ih_fused_) calib_stats_->accumulate(cl_ih_fused_, x.transpose(0, 1));
     auto ih = torch::addmm(up_bias_ih_, x_flat, W_ih_fused_).view({T, N, 4 * C_});
     if (on_gpu) torch::cuda::synchronize(x.device().index());
     b = realtime();
@@ -139,7 +141,6 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     for (int t = 0; t < T; ++t) {
         // One addmm per step: scratch = up_bias_hh_ + hh[t] @ W_hh_fused_
         // a = realtime();
-        if (cl_hh_fused_) calib_stats_->accumulate(cl_hh_fused_, hh[t]);
         torch::addmm_out(scratch, up_bias_hh_, hh[t], W_hh_fused_);
         // if (on_gpu) torch::cuda::synchronize(x.device().index());
         // b = realtime();
@@ -166,6 +167,14 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     model_stats_->time_flstm_recurrence += b - a;
 
     using namespace torch::indexing;
+
+    // Accumulate hh calib stats once post-loop with the full [N, T, C] batch.
+    // hh[0..T-1] are the hidden-state inputs fed into W_hh_fused_ each step.
+    if (cl_hh_fused_) {
+        calib_stats_->accumulate(cl_hh_fused_,
+            hh.index({Slice(0, T)}).transpose(0, 1).contiguous());  // (N, T, C)
+    }
+
     // Return [N, T, C]
     return hh.index({Slice(1, None)}).transpose(0, 1).contiguous();
 }
