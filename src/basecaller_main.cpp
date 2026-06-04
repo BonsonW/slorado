@@ -239,6 +239,12 @@ int basecaller_main(int argc, char* argv[]) {
         }
         exit(EXIT_FAILURE);
     }
+
+    if (opt.calibrate_out != NULL) {
+        opt.device = (char *)"cuda:0";
+        fprintf(stderr, "[basecaller_main] calibration mode: forcing device to cuda:0\n");
+    }
+
 /////////////////////////////////////////////////////////////////////////////
 
     // initialise the core data structure
