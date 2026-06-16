@@ -1,0 +1,11 @@
+model,layers,scope,format,weight_scale,act_scale,kl_mean,kl_max,n_batches,identity_pct,mean_len_diff_bases
+HAC v6,all 5 LSTM,hh only,INT8,per_channel,per_token,0.00852661,0.228884,82,18.9,4.3
+HAC v6,all 5 LSTM,hh only,INT8,per_channel,fixed (1/127),0.00877576,0.20652,82,,
+HAC v6,all 5 LSTM,hh only,INT8,per_tensor,per_tensor,0.2429,0.7317,82,,
+HAC v6,all 5 LSTM,ih only,INT8,per_channel,per_token,0.00756151,0.247096,82,,
+HAC v6,all 5 LSTM,ih only,INT8,per_tensor,per_tensor,0.122311,0.48922,82,,
+SUP v5,all 18 encoder,wqkv+fc1+fc2,INT8,per_channel,per_token,0.0128726,0.0230089,82,,
+SUP v5,all 18 encoder,wqkv+fc1+fc2,INT8,per_channel,per_token (rerun),pending,pending,,,
+SUP v5,all 18 encoder,wqkv+fc1+fc2,INT8,per_channel,wqkv: fixed_4 / rest: per_token,pending,pending,,,
+SUP v5,all 18 encoder,wqkv+fc1+fc2,INT8,per_channel,fc1: fixed_4 / rest: per_token,pending,pending,,,
+SUP v5,all 18 encoder,wqkv+fc1+fc2,INT8,per_channel,wqkv+fc1: fixed_4 / fc2: per_token,pending,pending,,,

@@ -96,9 +96,11 @@ FLSTMLayerImpl::FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats, const st
     up_bias_ih_   = register_parameter("up_bias_ih",   torch::empty({4 * C}));
     up_bias_hh_   = register_parameter("up_bias_hh",   torch::empty({4 * C}));
 
-    if (!name_prefix.empty() && model_stats && model_stats->calib_stats) {
-        calib_stats_ = model_stats->calib_stats;
+    if (!name_prefix.empty() && model_stats) {
         calib_prefix_ = name_prefix;
+        if (model_stats->calib_stats) {
+            calib_stats_ = model_stats->calib_stats;
+        }
     }
 }
 
@@ -122,6 +124,11 @@ void FLSTMLayerImpl::fuse_weights() {
         if (it != cfg.end()) qm_ih_fused_ = it->second;
         it = cfg.find(calib_prefix_ + ".hh_fused");
         if (it != cfg.end()) qm_hh_fused_ = it->second;
+        // Optional .act suffix overrides activation granularity independently from weight.
+        it = cfg.find(calib_prefix_ + ".ih_fused.act");
+        qm_ih_fused_act_ = (it != cfg.end()) ? it->second : qm_ih_fused_;
+        it = cfg.find(calib_prefix_ + ".hh_fused.act");
+        qm_hh_fused_act_ = (it != cfg.end()) ? it->second : qm_hh_fused_;
     }
 }
 
@@ -139,7 +146,7 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     // x is (T, N, C); transpose to (N, T, C) for standard (..., T, C) layout.
     if (cl_ih_fused_) calib_stats_->accumulate(cl_ih_fused_, x.transpose(0, 1));
     auto W_ih = maybe_fake_quant(W_ih_fused_, qm_ih_fused_, /*transposed=*/true);
-    auto ih = torch::addmm(up_bias_ih_, maybe_fake_quant_act(x_flat, qm_ih_fused_), W_ih).view({T, N, 4 * C_});
+    auto ih = torch::addmm(up_bias_ih_, maybe_fake_quant_act(x_flat, qm_ih_fused_act_), W_ih).view({T, N, 4 * C_});
     if (on_gpu) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats_->time_flstm_precompute += b - a;
@@ -154,7 +161,7 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     for (int t = 0; t < T; ++t) {
         // One addmm per step: scratch = up_bias_hh_ + hh[t] @ W_hh_fused_
         // a = realtime();
-        torch::addmm_out(scratch, up_bias_hh_, maybe_fake_quant_act(hh[t], qm_hh_fused_), W_hh);
+        torch::addmm_out(scratch, up_bias_hh_, maybe_fake_quant_act(hh[t], qm_hh_fused_act_), W_hh);
         // if (on_gpu) torch::cuda::synchronize(x.device().index());
         // b = realtime();
         // model_stats_->time_flstm_linear2 += b - a;

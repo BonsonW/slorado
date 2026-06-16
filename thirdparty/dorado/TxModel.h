@@ -52,6 +52,7 @@ struct GatedMLPImpl : torch::nn::Module {
     calib_stats_t *calib_stats_ = nullptr;
     calib_layer_t *cl_fc1_ = nullptr, *cl_fc2_ = nullptr;
     std::string qm_fc1_, qm_fc2_;
+    std::string qm_fc1_act_, qm_fc2_act_;
 };
 
 TORCH_MODULE(GatedMLP);
@@ -128,6 +129,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     calib_stats_t *calib_stats_ = nullptr;
     calib_layer_t *cl_wqkv_ = nullptr, *cl_out_proj_ = nullptr;
     std::string qm_wqkv_, qm_out_proj_;
+    std::string qm_wqkv_act_;
 };
 
 TORCH_MODULE(MultiHeadAttention);

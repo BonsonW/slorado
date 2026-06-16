@@ -72,13 +72,17 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_,
         if (it != cfg.end()) qm_fc1_ = it->second;
         it = cfg.find(name_prefix + ".fc2");
         if (it != cfg.end()) qm_fc2_ = it->second;
+        it = cfg.find(name_prefix + ".fc1.act");
+        qm_fc1_act_ = (it != cfg.end()) ? it->second : qm_fc1_;
+        it = cfg.find(name_prefix + ".fc2.act");
+        qm_fc2_act_ = (it != cfg.end()) ? it->second : qm_fc2_;
     }
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
     if (cl_fc1_) calib_stats_->accumulate(cl_fc1_, x);
-    t = at::linear(maybe_fake_quant_act(x, qm_fc1_), maybe_fake_quant(fc1->weight, qm_fc1_), fc1->bias);
+    t = at::linear(maybe_fake_quant_act(x, qm_fc1_act_), maybe_fake_quant(fc1->weight, qm_fc1_), fc1->bias);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -92,7 +96,7 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     t = functional::silu(gate).mul_(y);
 #endif
     if (cl_fc2_) calib_stats_->accumulate(cl_fc2_, t);
-    return at::linear(maybe_fake_quant_act(t, qm_fc2_), maybe_fake_quant(fc2->weight, qm_fc2_), fc2->bias);
+    return at::linear(maybe_fake_quant_act(t, qm_fc2_act_), maybe_fake_quant(fc2->weight, qm_fc2_), fc2->bias);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -259,6 +263,8 @@ void MultiHeadAttentionImpl::set_quant_methods(
         const std::unordered_map<std::string, std::string> &cfg) {
     auto it = cfg.find(name_prefix + ".wqkv");
     if (it != cfg.end()) qm_wqkv_ = it->second;
+    it = cfg.find(name_prefix + ".wqkv.act");
+    qm_wqkv_act_ = (it != cfg.end()) ? it->second : qm_wqkv_;
     it = cfg.find(name_prefix + ".out_proj");
     if (it != cfg.end()) qm_out_proj_ = it->second;
 }
@@ -289,7 +295,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     
     a = realtime();
     if (cl_wqkv_) calib_stats_->accumulate(cl_wqkv_, x);
-    auto qkv = at::linear(maybe_fake_quant_act(x, qm_wqkv_), maybe_fake_quant(wqkv->weight, qm_wqkv_), wqkv->bias)
+    auto qkv = at::linear(maybe_fake_quant_act(x, qm_wqkv_act_), maybe_fake_quant(wqkv->weight, qm_wqkv_), wqkv->bias)
                    .view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();

@@ -70,7 +70,8 @@ private:
     std::string calib_prefix_;
     calib_layer_t *cl_ih_fused_ = nullptr, *cl_hh_fused_ = nullptr;
     // quantization methods (empty = fp16 pass-through)
-    std::string qm_ih_fused_, qm_hh_fused_;
+    std::string qm_ih_fused_, qm_hh_fused_;         // weight quant
+    std::string qm_ih_fused_act_, qm_hh_fused_act_; // activation quant (falls back to weight method if not set)
 };
 
 struct FLSTMStackImpl : torch::nn::Module {
