@@ -109,3 +109,51 @@ at::Tensor maybe_fake_quant(const at::Tensor &W, const std::string &method, bool
     if (fp8) return fake_quant_fp8(W, per_channel, transposed);
     return fake_quant_int8(W, per_channel, transposed);
 }
+
+// ---------------------------------------------------------------------------
+// Activation fake quantization
+// ---------------------------------------------------------------------------
+
+static at::Tensor fake_quant_int8_act(const at::Tensor &x, bool per_token) {
+    auto orig_shape = x.sizes().vec();
+    // Flatten to (M, C) to handle both 2D and 3D inputs uniformly.
+    auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
+    at::Tensor scale;
+    if (per_token) {
+        scale = std::get<0>(x_f.abs().max(1, /*keepdim=*/true)) / 127.f;
+        scale.clamp_min_(1e-6f);
+    } else {
+        float amax = x_f.abs().max().item<float>();
+        if (amax == 0.f) return x;
+        scale = torch::full({1}, amax / 127.f, x_f.options());
+    }
+    return (x_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).reshape(orig_shape).to(x.dtype());
+}
+
+static at::Tensor fake_quant_fp8_act(const at::Tensor &x, bool per_token) {
+    static constexpr float fp8_max = 448.f;
+    auto orig_shape = x.sizes().vec();
+    auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
+    at::Tensor scale;
+    if (per_token) {
+        scale = std::get<0>(x_f.abs().max(1, /*keepdim=*/true)) / fp8_max;
+        scale.clamp_min_(1e-6f);
+    } else {
+        float amax = x_f.abs().max().item<float>();
+        if (amax == 0.f) return x;
+        scale = torch::full({1}, amax / fp8_max, x_f.options());
+    }
+    auto x_s = x_f / scale;
+    auto x_q = (x_s.abs() * 8.f).round().div_(8.f) * x_s.sign();
+    return x_q.clamp_(-fp8_max, fp8_max).mul_(scale).reshape(orig_shape).to(x.dtype());
+}
+
+at::Tensor maybe_fake_quant_act(const at::Tensor &x, const std::string &method) {
+    if (!g_quant_active || method.empty() || method == "dummy" || method == "fp16") {
+        return x;
+    }
+    bool per_token = method.find("per_channel") != std::string::npos;
+    bool fp8 = method.find("fp8") != std::string::npos;
+    if (fp8) return fake_quant_fp8_act(x, per_token);
+    return fake_quant_int8_act(x, per_token);
+}

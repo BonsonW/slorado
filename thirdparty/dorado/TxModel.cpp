@@ -78,7 +78,7 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_,
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
     if (cl_fc1_) calib_stats_->accumulate(cl_fc1_, x);
-    t = at::linear(x, maybe_fake_quant(fc1->weight, qm_fc1_), fc1->bias);
+    t = at::linear(maybe_fake_quant_act(x, qm_fc1_), maybe_fake_quant(fc1->weight, qm_fc1_), fc1->bias);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -92,7 +92,7 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     t = functional::silu(gate).mul_(y);
 #endif
     if (cl_fc2_) calib_stats_->accumulate(cl_fc2_, t);
-    return at::linear(t, maybe_fake_quant(fc2->weight, qm_fc2_), fc2->bias);
+    return at::linear(maybe_fake_quant_act(t, qm_fc2_), maybe_fake_quant(fc2->weight, qm_fc2_), fc2->bias);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -289,7 +289,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     
     a = realtime();
     if (cl_wqkv_) calib_stats_->accumulate(cl_wqkv_, x);
-    auto qkv = at::linear(x, maybe_fake_quant(wqkv->weight, qm_wqkv_), wqkv->bias)
+    auto qkv = at::linear(maybe_fake_quant_act(x, qm_wqkv_), maybe_fake_quant(wqkv->weight, qm_wqkv_), wqkv->bias)
                    .view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
@@ -365,7 +365,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     a = realtime();
     if (cl_out_proj_) calib_stats_->accumulate(cl_out_proj_, attn_output_ntc);
-    x = at::linear(attn_output_ntc, maybe_fake_quant(out_proj->weight, qm_out_proj_), out_proj->bias);
+    x = at::linear(maybe_fake_quant_act(attn_output_ntc, qm_out_proj_), maybe_fake_quant(out_proj->weight, qm_out_proj_), out_proj->bias);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_out_proj += b-a;
@@ -534,7 +534,7 @@ torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
     if (!qm_upsample_.empty()) {
         auto W = maybe_fake_quant(tx_decoder->linear->weight, qm_upsample_);
         const int64_t N = h.size(0), T = h.size(1), C = h.size(2);
-        h = at::linear(h, W, tx_decoder->linear->bias).reshape({N, tx_decoder->scale_factor * T, C});
+        h = at::linear(maybe_fake_quant_act(h, qm_upsample_), W, tx_decoder->linear->bias).reshape({N, tx_decoder->scale_factor * T, C});
     } else {
         h = tx_decoder(h);
     }
@@ -550,7 +550,7 @@ torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
             crf->linear->weight *= crf->m_params.scale;
             crf->scale_applied = true;
         }
-        h = at::linear(h, maybe_fake_quant(crf->linear->weight, qm_crf_), crf->linear->bias);
+        h = at::linear(maybe_fake_quant_act(h, qm_crf_), maybe_fake_quant(crf->linear->weight, qm_crf_), crf->linear->bias);
     } else {
         h = crf(h);
     }
