@@ -31,6 +31,7 @@ struct LinearCRFImpl : torch::nn::Module {
     LinearCRFImpl(int insize, int outsize, bool bias_, bool tanh_and_scale);
     torch::Tensor forward(const torch::Tensor &x);
     void set_calib(const std::string &name, calib_stats_t *calib);
+    void set_quant_method(const std::string &method) { qm_ = method; }
 
     bool bias;
     static constexpr int scale = 5;
@@ -39,6 +40,7 @@ struct LinearCRFImpl : torch::nn::Module {
 
     calib_stats_t *calib_stats_ = nullptr;
     calib_layer_t *calib_layer_ = nullptr;
+    std::string qm_;
 };
 
 struct LSTMStackImpl : torch::nn::Module {
@@ -67,6 +69,8 @@ private:
     calib_stats_t *calib_stats_ = nullptr;
     std::string calib_prefix_;
     calib_layer_t *cl_ih_fused_ = nullptr, *cl_hh_fused_ = nullptr;
+    // quantization methods (empty = fp16 pass-through)
+    std::string qm_ih_fused_, qm_hh_fused_;
 };
 
 struct FLSTMStackImpl : torch::nn::Module {

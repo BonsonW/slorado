@@ -51,6 +51,7 @@ struct GatedMLPImpl : torch::nn::Module {
 
     calib_stats_t *calib_stats_ = nullptr;
     calib_layer_t *cl_fc1_ = nullptr, *cl_fc2_ = nullptr;
+    std::string qm_fc1_, qm_fc2_;
 };
 
 TORCH_MODULE(GatedMLP);
@@ -104,6 +105,8 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 
     torch::Tensor forward(torch::Tensor x);
     void set_calib(const std::string &name_prefix, calib_stats_t *calib);
+    void set_quant_methods(const std::string &name_prefix,
+                           const std::unordered_map<std::string, std::string> &cfg);
 
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;
@@ -124,6 +127,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 
     calib_stats_t *calib_stats_ = nullptr;
     calib_layer_t *cl_wqkv_ = nullptr, *cl_out_proj_ = nullptr;
+    std::string qm_wqkv_, qm_out_proj_;
 };
 
 TORCH_MODULE(MultiHeadAttention);
@@ -202,6 +206,7 @@ struct TxModelImpl : torch::nn::Module {
 
     calib_stats_t *calib_stats_ = nullptr;
     calib_layer_t *cl_upsample_ = nullptr, *cl_crf_ = nullptr;
+    std::string qm_upsample_, qm_crf_;
 };
 
 TORCH_MODULE(TxModel);

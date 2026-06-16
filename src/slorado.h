@@ -37,6 +37,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <slow5/slow5.h>
 #include <openfish/openfish.h>
+#include <unordered_map>
 #include <vector>
 #include <string>
 
@@ -44,6 +45,7 @@ SOFTWARE.
 
 // Forward declaration — full definition in calib.h (requires torch headers).
 struct calib_stats_t;
+struct sensitivity_stats_t;
 
 #define SLORADO_VERSION "0.5.0-beta"
 
@@ -85,7 +87,9 @@ typedef struct {
     int32_t overlap;            // overlap: p
 
     const char *mod;         // specified modbase: x
-    const char *calibrate_out;  // path for calibration JSON output (NULL = disabled)
+    const char *calibrate_out;   // path for calibration JSON output (NULL = disabled)
+    const char *quant_config_path; // path for per-layer quant config JSON (NULL = disabled)
+    const char *sensitivity_out;   // path for sensitivity KL output JSON (NULL = disabled)
 } opt_t;
 
 typedef struct read_dat read_dat_t;
@@ -163,6 +167,7 @@ typedef struct {
     double time_flstm_recurrence;   // full per-step loop: addmm(W_hh_fused) + gate update
 
     calib_stats_t *calib_stats = nullptr;
+    const std::unordered_map<std::string, std::string> *quant_config = nullptr;
 } lstm_stats_t;
 
 typedef struct {
@@ -182,6 +187,7 @@ typedef struct {
     double time_out_proj;
 
     calib_stats_t *calib_stats = nullptr;
+    const std::unordered_map<std::string, std::string> *quant_config = nullptr;
 } tx_stats_t;
 
 /* time stamps */
@@ -253,6 +259,12 @@ typedef struct {
 
     // calibration stats (NULL unless --calibrate is set)
     calib_stats_t *calib_stats = nullptr;
+
+    // quantization config (NULL unless --quant-config is set)
+    std::unordered_map<std::string, std::string> *quant_config = nullptr;
+
+    // sensitivity stats (NULL unless --sensitivity is set)
+    sensitivity_stats_t *sensitivity_stats = nullptr;
 } core_t;
 
 /* argument wrapper for the multithreaded framework used for data processing */

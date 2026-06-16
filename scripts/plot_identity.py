@@ -23,6 +23,15 @@ import subprocess
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
+matplotlib.rcParams['svg.fonttype'] = 'none'   # keep text as text in SVG (not paths)
+matplotlib.rcParams['pdf.fonttype'] = 42        # embed TrueType fonts in PDF (editable)
+matplotlib.rcParams['ps.fonttype'] = 42
+matplotlib.rcParams['font.size'] = 14
+matplotlib.rcParams['axes.titlesize'] = 16
+matplotlib.rcParams['axes.labelsize'] = 15
+matplotlib.rcParams['xtick.labelsize'] = 13
+matplotlib.rcParams['ytick.labelsize'] = 13
+matplotlib.rcParams['legend.fontsize'] = 12
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 
@@ -160,6 +169,8 @@ def main():
     parser.add_argument('--xlim', nargs=2, type=float, default=[0.8, 1.0], metavar=('MIN', 'MAX'),
                         help='X-axis limits (default: 0.8 1.0)')
     parser.add_argument('--bw', type=float, default=None, help='KDE bandwidth (default: Scott\'s rule)')
+    parser.add_argument('--sample', type=int, default=200000,
+                        help='Max points to use for KDE (stats always use all; default: 200000)')
     args = parser.parse_args()
 
     labels = args.labels or [os.path.basename(p) for p in args.inputs]
@@ -180,6 +191,13 @@ def main():
         # Clip to xlim range for KDE (avoids long tails distorting bandwidth)
         lo, hi = args.xlim
         clipped = scores[(scores >= lo) & (scores <= hi)]
+
+        # Subsample for KDE — stats were already computed from all points above.
+        # gaussian_kde evaluates every sample at every x position, so 18M points
+        # would take hours; 200k gives an indistinguishable density estimate.
+        if len(clipped) > args.sample:
+            rng = np.random.default_rng(42)
+            clipped = rng.choice(clipped, size=args.sample, replace=False)
 
         bw = args.bw if args.bw else 'scott'
         kde = gaussian_kde(clipped, bw_method=bw)
@@ -203,7 +221,11 @@ def main():
     ax.set_xlim(args.xlim)
     ax.legend(fontsize=8)
     plt.tight_layout()
-    plt.savefig(args.out, dpi=150)
+    ext = os.path.splitext(args.out)[1].lower()
+    if ext in ('.pdf', '.svg', '.eps'):
+        plt.savefig(args.out)  # vector formats ignore dpi
+    else:
+        plt.savefig(args.out, dpi=150)
     print(f'Saved to {args.out}', file=sys.stderr)
 
 

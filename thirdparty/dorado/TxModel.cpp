@@ -1,4 +1,5 @@
 #include "TxModel.h"
+#include "quant.h"
 
 #include <ATen/Functions.h>
 #include <ATen/TensorIndexing.h>
@@ -65,12 +66,19 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_,
         cl_fc1_ = calib_stats_->register_layer(name_prefix + ".fc1", fc1->weight);
         cl_fc2_ = calib_stats_->register_layer(name_prefix + ".fc2", fc2->weight);
     }
+    if (!name_prefix.empty() && stats && stats->quant_config) {
+        const auto &cfg = *stats->quant_config;
+        auto it = cfg.find(name_prefix + ".fc1");
+        if (it != cfg.end()) qm_fc1_ = it->second;
+        it = cfg.find(name_prefix + ".fc2");
+        if (it != cfg.end()) qm_fc2_ = it->second;
+    }
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
     if (cl_fc1_) calib_stats_->accumulate(cl_fc1_, x);
-    t = fc1(x);
+    t = at::linear(x, maybe_fake_quant(fc1->weight, qm_fc1_), fc1->bias);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -84,7 +92,7 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     t = functional::silu(gate).mul_(y);
 #endif
     if (cl_fc2_) calib_stats_->accumulate(cl_fc2_, t);
-    return fc2(t);
+    return at::linear(t, maybe_fake_quant(fc2->weight, qm_fc2_), fc2->bias);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -246,6 +254,15 @@ void MultiHeadAttentionImpl::set_calib(const std::string &name_prefix, calib_sta
     cl_out_proj_ = calib->register_layer(name_prefix + ".out_proj", out_proj->weight);
 }
 
+void MultiHeadAttentionImpl::set_quant_methods(
+        const std::string &name_prefix,
+        const std::unordered_map<std::string, std::string> &cfg) {
+    auto it = cfg.find(name_prefix + ".wqkv");
+    if (it != cfg.end()) qm_wqkv_ = it->second;
+    it = cfg.find(name_prefix + ".out_proj");
+    if (it != cfg.end()) qm_out_proj_ = it->second;
+}
+
 torch::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
     const auto key = MaskKey{size, options.device()};
     if (mask_cache.find(key) == mask_cache.end()) {
@@ -272,7 +289,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     
     a = realtime();
     if (cl_wqkv_) calib_stats_->accumulate(cl_wqkv_, x);
-    auto qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
+    auto qkv = at::linear(x, maybe_fake_quant(wqkv->weight, qm_wqkv_), wqkv->bias)
+                   .view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_mm += b-a;
@@ -347,7 +365,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     a = realtime();
     if (cl_out_proj_) calib_stats_->accumulate(cl_out_proj_, attn_output_ntc);
-    x = out_proj(attn_output_ntc);
+    x = at::linear(attn_output_ntc, maybe_fake_quant(out_proj->weight, qm_out_proj_), out_proj->bias);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_out_proj += b-a;
@@ -369,6 +387,10 @@ TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::Tensor
     if (layer_idx >= 0 && _model_stats && _model_stats->calib_stats) {
         const std::string attn_prefix = "transformer_encoder." + std::to_string(layer_idx) + ".self_attn";
         self_attn->set_calib(attn_prefix, _model_stats->calib_stats);
+    }
+    if (layer_idx >= 0 && _model_stats && _model_stats->quant_config) {
+        const std::string attn_prefix = "transformer_encoder." + std::to_string(layer_idx) + ".self_attn";
+        self_attn->set_quant_methods(attn_prefix, *_model_stats->quant_config);
     }
 
     const torch::Tensor deepnorm_alpha = torch::tensor(params.deepnorm_alpha);
@@ -482,6 +504,13 @@ TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOption
         cl_upsample_ = calib_stats_->register_layer("upsample.linear", tx_decoder->linear->weight);
         cl_crf_      = calib_stats_->register_layer("crf.linear",      crf->linear->weight);
     }
+    if (_model_stats && _model_stats->quant_config) {
+        const auto &cfg = *_model_stats->quant_config;
+        auto it = cfg.find("upsample.linear");
+        if (it != cfg.end()) qm_upsample_ = it->second;
+        it = cfg.find("crf.linear");
+        if (it != cfg.end()) qm_crf_ = it->second;
+    }
 }
 
 torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
@@ -502,14 +531,29 @@ torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
 
     a = realtime();
     if (cl_upsample_) calib_stats_->accumulate(cl_upsample_, h);
-    h = tx_decoder(h);
+    if (!qm_upsample_.empty()) {
+        auto W = maybe_fake_quant(tx_decoder->linear->weight, qm_upsample_);
+        const int64_t N = h.size(0), T = h.size(1), C = h.size(2);
+        h = at::linear(h, W, tx_decoder->linear->bias).reshape({N, tx_decoder->scale_factor * T, C});
+    } else {
+        h = tx_decoder(h);
+    }
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_tx_decoder += b-a;
 
     a = realtime();
     if (cl_crf_) calib_stats_->accumulate(cl_crf_, h);
-    h = crf(h);
+    if (!qm_crf_.empty()) {
+        // Ensure scale is applied (matches LinearScaledCRFImpl::forward logic).
+        if (!crf->scale_applied) {
+            crf->linear->weight *= crf->m_params.scale;
+            crf->scale_applied = true;
+        }
+        h = at::linear(h, maybe_fake_quant(crf->linear->weight, qm_crf_), crf->linear->bias);
+    } else {
+        h = crf(h);
+    }
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_crf += b-a;

@@ -74,3 +74,6 @@ test/slorado*
 
 tmp/*
 pyvenv
+*.svg
+*.png
+*.json
