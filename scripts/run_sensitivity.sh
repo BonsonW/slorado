@@ -85,28 +85,46 @@ run_batch \
 echo ""
 echo "=== Phase 1: weights only ==="
 run_batch \
-    0 lstm_hh_w_pc $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_pc.json \
-    1 lstm_hh_w_pt $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_pt.json \
-    2 lstm_ih_w_pc $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_pc.json \
-    3 lstm_ih_w_pt $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_pt.json
+    0 lstm_hh_w_pc    $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_pc.json \
+    1 lstm_hh_w_pt    $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_pt.json \
+    2 lstm_hh_w_fp8pc $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_fp8pc.json \
+    3 lstm_hh_w_fp8pt $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_fp8pt.json
 
 run_batch \
-    0 tx_w_pc $MODEL_TX $READS_TX /tmp/qc_tx_w_pc.json \
-    1 tx_w_pt $MODEL_TX $READS_TX /tmp/qc_tx_w_pt.json
+    0 lstm_ih_w_pc    $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_pc.json \
+    1 lstm_ih_w_pt    $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_pt.json \
+    2 lstm_ih_w_fp8pc $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_fp8pc.json \
+    3 lstm_ih_w_fp8pt $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_fp8pt.json
+
+run_batch \
+    0 tx_w_pc    $MODEL_TX $READS_TX /tmp/qc_tx_w_pc.json \
+    1 tx_w_pt    $MODEL_TX $READS_TX /tmp/qc_tx_w_pt.json \
+    2 tx_w_fp8pc $MODEL_TX $READS_TX /tmp/qc_tx_w_fp8pc.json \
+    3 tx_w_fp8pt $MODEL_TX $READS_TX /tmp/qc_tx_w_fp8pt.json
 
 echo ""
 echo "=== Phase 2: activations only ==="
 run_batch \
-    0 lstm_hh_a_ptoken  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_ptoken.json \
-    1 lstm_hh_a_ptensor $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_ptensor.json \
-    2 lstm_hh_a_fixed   $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_fixed.json \
-    3 lstm_ih_a_ptoken  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_ptoken.json
+    0 lstm_hh_a_ptoken     $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_ptoken.json \
+    1 lstm_hh_a_ptensor    $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_ptensor.json \
+    2 lstm_hh_a_fp8ptoken  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_fp8ptoken.json \
+    3 lstm_hh_a_fp8ptensor $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_fp8ptensor.json
 
 run_batch \
-    0 lstm_ih_a_ptensor $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_ptensor.json \
-    1 tx_a_ptoken       $MODEL_TX   $READS_TX   /tmp/qc_tx_a_ptoken.json \
-    2 tx_a_ptensor      $MODEL_TX   $READS_TX   /tmp/qc_tx_a_ptensor.json \
-    3 tx_a_fixed        $MODEL_TX   $READS_TX   /tmp/qc_tx_a_fixed.json
+    0 lstm_hh_a_fixed      $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_fixed.json \
+    1 lstm_ih_a_ptoken     $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_ptoken.json \
+    2 lstm_ih_a_ptensor    $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_ptensor.json \
+    3 lstm_ih_a_fp8ptoken  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_fp8ptoken.json
+
+run_batch \
+    0 lstm_ih_a_fp8ptensor $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_fp8ptensor.json \
+    1 tx_a_ptoken          $MODEL_TX   $READS_TX   /tmp/qc_tx_a_ptoken.json \
+    2 tx_a_ptensor         $MODEL_TX   $READS_TX   /tmp/qc_tx_a_ptensor.json \
+    3 tx_a_fixed           $MODEL_TX   $READS_TX   /tmp/qc_tx_a_fixed.json
+
+run_batch \
+    0 tx_a_fp8ptoken  $MODEL_TX $READS_TX /tmp/qc_tx_a_fp8ptoken.json \
+    1 tx_a_fp8ptensor $MODEL_TX $READS_TX /tmp/qc_tx_a_fp8ptensor.json
 
 echo ""
 echo "Done. Results in $RESULTS/"

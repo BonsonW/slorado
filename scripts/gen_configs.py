@@ -54,26 +54,38 @@ def tx_all(w_method, a_method=None, fc2_a_method=None):
 
 # ──────────────────────────────────────────────────────────────────────────────
 print("FLSTM — Phase 1: weights only (act = fp16)")
-write("lstm_hh_w_pc", lstm_hh("int8_per_channel", "fp16"))
-write("lstm_hh_w_pt", lstm_hh("int8_per_tensor",  "fp16"))
-write("lstm_ih_w_pc", lstm_ih("int8_per_channel", "fp16"))
-write("lstm_ih_w_pt", lstm_ih("int8_per_tensor",  "fp16"))
+write("lstm_hh_w_pc",    lstm_hh("int8_per_channel",  "fp16"))
+write("lstm_hh_w_pt",    lstm_hh("int8_per_tensor",   "fp16"))
+write("lstm_hh_w_fp8pc", lstm_hh("fp8_per_channel",   "fp16"))
+write("lstm_hh_w_fp8pt", lstm_hh("fp8_per_tensor",    "fp16"))
+write("lstm_ih_w_pc",    lstm_ih("int8_per_channel",  "fp16"))
+write("lstm_ih_w_pt",    lstm_ih("int8_per_tensor",   "fp16"))
+write("lstm_ih_w_fp8pc", lstm_ih("fp8_per_channel",   "fp16"))
+write("lstm_ih_w_fp8pt", lstm_ih("fp8_per_tensor",    "fp16"))
 
 print("FLSTM — Phase 2: activations only (weight key absent = fp16)")
-write("lstm_hh_a_ptoken",  lstm_hh(None, "int8_per_channel"))
-write("lstm_hh_a_ptensor", lstm_hh(None, "int8_per_tensor"))
-write("lstm_hh_a_fixed",   lstm_hh(None, "int8_fixed"))       # hh[t] ∈ [-1,1]
-write("lstm_ih_a_ptoken",  lstm_ih(None, "int8_per_channel"))
-write("lstm_ih_a_ptensor", lstm_ih(None, "int8_per_tensor"))
+write("lstm_hh_a_ptoken",    lstm_hh(None, "int8_per_channel"))
+write("lstm_hh_a_ptensor",   lstm_hh(None, "int8_per_tensor"))
+write("lstm_hh_a_fixed",     lstm_hh(None, "int8_fixed"))       # hh[t] ∈ [-1,1]
+write("lstm_hh_a_fp8ptoken", lstm_hh(None, "fp8_per_channel"))
+write("lstm_hh_a_fp8ptensor",lstm_hh(None, "fp8_per_tensor"))
+write("lstm_ih_a_ptoken",    lstm_ih(None, "int8_per_channel"))
+write("lstm_ih_a_ptensor",   lstm_ih(None, "int8_per_tensor"))
+write("lstm_ih_a_fp8ptoken", lstm_ih(None, "fp8_per_channel"))
+write("lstm_ih_a_fp8ptensor",lstm_ih(None, "fp8_per_tensor"))
 
 print("Transformer — Phase 1: weights only (act = fp16)")
-write("tx_w_pc", tx_all("int8_per_channel", "fp16"))
-write("tx_w_pt", tx_all("int8_per_tensor",  "fp16"))
+write("tx_w_pc",    tx_all("int8_per_channel", "fp16"))
+write("tx_w_pt",    tx_all("int8_per_tensor",  "fp16"))
+write("tx_w_fp8pc", tx_all("fp8_per_channel",  "fp16"))
+write("tx_w_fp8pt", tx_all("fp8_per_tensor",   "fp16"))
 
 print("Transformer — Phase 2: activations only (weight key absent = fp16)")
-write("tx_a_ptoken",  tx_all(None, "int8_per_channel"))
-write("tx_a_ptensor", tx_all(None, "int8_per_tensor"))
+write("tx_a_ptoken",     tx_all(None, "int8_per_channel"))
+write("tx_a_ptensor",    tx_all(None, "int8_per_tensor"))
+write("tx_a_fp8ptoken",  tx_all(None, "fp8_per_channel"))
+write("tx_a_fp8ptensor", tx_all(None, "fp8_per_tensor"))
 # fc2 input is post-SiLU (not post-RMSNorm) so keep it dynamic
-write("tx_a_fixed",   tx_all(None, "int8_fixed_4", fc2_a_method="int8_per_channel"))
+write("tx_a_fixed",      tx_all(None, "int8_fixed_4", fc2_a_method="int8_per_channel"))
 
 print("Done.")
