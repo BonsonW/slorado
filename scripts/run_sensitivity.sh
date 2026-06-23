@@ -31,7 +31,8 @@ fi
 # ── run_one: sensitivity + identity → combined <tag>.tsv ──────────────────────
 run_one() {
     local gpu=$1 tag=$2 model=$3 reads=$4 qc=$5
-    local out="$RESULTS/${tag}.tsv"
+    local kl_out="$RESULTS/${tag}.tsv"
+    local id_out="$RESULTS/${tag}_id.tsv"
     local n_batches="NA" kl_mean="NA" kl_max="NA"
 
     # Sensitivity (skip for fp16 baselines)
@@ -47,23 +48,24 @@ run_one() {
         echo "  [gpu$gpu] $tag: kl_mean=$kl_mean  kl_max=$kl_max"
     fi
 
-    # Identity: basecall → minimap2 → per-read scores
+    # KL summary: one row per config
+    printf 'tag\tn_batches\tkl_mean\tkl_max\n' > "$kl_out"
+    printf '%s\t%s\t%s\t%s\n' "$tag" "$n_batches" "$kl_mean" "$kl_max" >> "$kl_out"
+
+    # Identity: basecall → minimap2 → per-read scores in separate file
     local tmp; tmp=$(mktemp /tmp/identity_XXXXXX.fastq)
     local base_args=(--flash=yes -C 128 -o "$tmp" "$model" "$reads")
     [[ "$qc" != "none" ]] && base_args=(--quant-config "$qc" "${base_args[@]}")
     CUDA_VISIBLE_DEVICES=$gpu ./slorado basecaller "${base_args[@]}" 2>/dev/null
 
-    # Write combined TSV: header + one row per aligned read
-    printf 'tag\tn_batches\tkl_mean\tkl_max\tidentity\n' > "$out"
     "$MINIMAP2" -cx map-ont "$REF" -t"$NTHREADS" --secondary=no "$tmp" 2>/dev/null \
-        | awk -v tag="$tag" -v nb="$n_batches" -v km="$kl_mean" -v kx="$kl_max" \
-              '$10>0 && $11>0 {printf "%s\t%s\t%s\t%s\t%.6f\n", tag, nb, km, kx, $10/$11}' \
-        >> "$out"
+        | awk '$10>0 && $11>0 {printf "%.6f\n", $10/$11}' \
+        > "$id_out"
     rm -f "$tmp"
 
     local n mean
-    n=$(awk 'NR>1' "$out" | wc -l)
-    mean=$(awk 'NR>1 {s+=$5; c++} END {printf "%.4f", s/c}' "$out")
+    n=$(wc -l < "$id_out")
+    mean=$(awk '{s+=$1; c++} END {printf "%.4f", s/c}' "$id_out")
     echo "  [gpu$gpu] $tag: aligned=$n  mean_identity=$mean"
 }
 
@@ -159,4 +161,4 @@ run_batch \
 
 echo ""
 echo "Done. Results in $RESULTS/"
-ls "$RESULTS"/*.tsv
+ls "$RESULTS"/*.tsv "$RESULTS"/*_id.tsv 2>/dev/null | sort -u

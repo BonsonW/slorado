@@ -63,7 +63,7 @@ RUNS = [
 ]
 
 def load(tag):
-    # Combined TSV: tag  n_batches  kl_mean  kl_max  identity (one row per read)
+    # KL summary TSV: tag  n_batches  kl_mean  kl_max  (one row per config)
     path = os.path.join(RESULTS, f"{tag}.tsv")
     try:
         with open(path) as f:
