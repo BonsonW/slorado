@@ -96,15 +96,21 @@ def make_config(model_key, scope, w, a, fc2_a=None):
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def load_kl(tag):
-    path = os.path.join(RESULTS, f"sens_{tag}.json")
+    # Combined TSV: tag  n_batches  kl_mean  kl_max  identity
+    path = os.path.join(RESULTS, f"{tag}.tsv")
     try:
-        d = json.load(open(path))
-        return d["kl_mean"], d["kl_max"]
+        with open(path) as f:
+            f.readline()  # header
+            parts = f.readline().split("\t")
+        kl_mean, kl_max = parts[2], parts[3]
+        if kl_mean == "NA":
+            return None, None
+        return float(kl_mean), float(kl_max)
     except Exception:
         return None, None
 
 def run_sensitivity(tag, qc_path, model, reads, env=None):
-    sens_path = os.path.join(RESULTS, f"sens_{tag}.json")
+    sens_path = os.path.join(RESULTS, f"sens_{tag}.tsv")
     subprocess.run([
         SLORADO, "basecaller",
         "--quant-config", qc_path,

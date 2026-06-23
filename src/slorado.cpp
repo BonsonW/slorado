@@ -195,7 +195,7 @@ void free_core(core_t* core, opt_t opt) {
     }
 
     if (core->sensitivity_stats != nullptr && opt.sensitivity_out != nullptr) {
-        core->sensitivity_stats->save_json(std::string(opt.sensitivity_out), opt.quant_config_path);
+        core->sensitivity_stats->save_tsv(std::string(opt.sensitivity_out), opt.quant_config_path);
         delete core->sensitivity_stats;
         core->sensitivity_stats = nullptr;
     }

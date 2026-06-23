@@ -31,10 +31,18 @@ RUNS = [
 ]
 
 def load(tag):
-    path = os.path.join(RESULTS, f"sens_{tag}.json")
+    # Combined TSV: tag  n_batches  kl_mean  kl_max  identity (one row per read)
+    path = os.path.join(RESULTS, f"{tag}.tsv")
     try:
-        d = json.load(open(path))
-        return d.get("kl_mean"), d.get("kl_max"), d.get("n_batches")
+        with open(path) as f:
+            f.readline()  # header
+            parts = f.readline().split("\t")
+        n_batches = parts[1]
+        kl_mean   = parts[2]
+        kl_max    = parts[3]
+        if kl_mean == "NA":
+            return None, None, None
+        return float(kl_mean), float(kl_max), int(n_batches)
     except Exception:
         return None, None, None
 

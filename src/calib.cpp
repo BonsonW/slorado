@@ -36,19 +36,20 @@ void calib_stats_t::update_weight(calib_layer_t *layer, const at::Tensor &weight
 
 void calib_stats_t::accumulate(calib_layer_t *layer, const at::Tensor &input) {
     // Caller must pass input in (..., T, C) layout: last dim = features, second-to-last = seq pos.
-    // Move to CPU as float32 before any reduction.
-    auto x = input.detach().to(torch::kFloat32).cpu();
+    // All reductions run on the input's device (GPU) — only small scalar/vector results come to CPU.
+    auto x = input.detach().to(torch::kFloat32);
 
     layer->x_min = std::min(layer->x_min, x.min().item<float>());
     layer->x_max = std::max(layer->x_max, x.max().item<float>());
 
     // Per-token max and min: reduce over the feature dim (last) → (..., T).
     // Then max/min over all batch/leading dims → (T,), one value per sequence position.
-    auto tok_max = std::get<0>(x.max(-1));                          // (..., T)
-    auto tok_min = std::get<0>(x.min(-1));                          // (..., T)
+    // Only copy the compact (T,) result to CPU, not the full activation tensor.
+    auto tok_max = std::get<0>(x.max(-1));                                       // (..., T) on device
+    auto tok_min = std::get<0>(x.min(-1));                                       // (..., T) on device
     int64_t T = tok_max.size(-1);
-    auto pos_max = std::get<0>(tok_max.reshape({-1, T}).max(0));    // (T,) running max
-    auto pos_min = std::get<0>(tok_min.reshape({-1, T}).min(0));    // (T,) running min
+    auto pos_max = std::get<0>(tok_max.reshape({-1, T}).max(0)).cpu();           // (T,) on CPU
+    auto pos_min = std::get<0>(tok_min.reshape({-1, T}).min(0)).cpu();           // (T,) on CPU
 
     if (!layer->x_per_token_max.defined()) {
         layer->x_per_token_max = pos_max;
@@ -92,9 +93,11 @@ void calib_stats_t::save_json(const std::string &path) const {
         fprintf(fp, "      \"in_features\": %ld,\n", (long)in_f);
         fprintf(fp, "      \"seq_len\": %ld,\n", (long)seq_len);
 
-        // Weight stats — per-channel and per-tensor ranges (max - min).
+        // Weight stats — per-channel and per-tensor ranges (max - min) plus amax for scale computation.
+        float w_amax = std::max(std::abs(L->w_max), std::abs(L->w_min));
         fprintf(fp, "      \"weight\": {\n");
-        fprintf(fp, "        \"per_tensor_range\": %.6g", L->w_max - L->w_min);
+        fprintf(fp, "        \"per_tensor_range\": %.6g,\n", L->w_max - L->w_min);
+        fprintf(fp, "        \"per_tensor_amax\": %.6g", w_amax);
         if (L->w_per_out_ch_max.defined()) {
             auto ch_range = L->w_per_out_ch_max - L->w_per_out_ch_min;
             fprintf(fp, ",\n        \"per_out_channel_range\": {\"mean\": %.6g, \"median\": %.6g, \"max\": %.6g}",
@@ -104,9 +107,11 @@ void calib_stats_t::save_json(const std::string &path) const {
         }
         fprintf(fp, "\n      },\n");
 
-        // Input activation stats — per-token and per-tensor ranges (max - min).
+        // Input activation stats — per-token and per-tensor ranges (max - min) plus amax for scale computation.
+        float x_amax = std::max(std::abs(L->x_max), std::abs(L->x_min));
         fprintf(fp, "      \"input\": {\n");
-        fprintf(fp, "        \"per_tensor_range\": %.6g", L->x_max - L->x_min);
+        fprintf(fp, "        \"per_tensor_range\": %.6g,\n", L->x_max - L->x_min);
+        fprintf(fp, "        \"per_tensor_amax\": %.6g", x_amax);
         if (L->x_per_token_max.defined()) {
             auto tok_range = L->x_per_token_max - L->x_per_token_min;
             fprintf(fp, ",\n        \"per_token_range\": {\"mean\": %.6g, \"median\": %.6g, \"max\": %.6g}",

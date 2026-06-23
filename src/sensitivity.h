@@ -15,5 +15,5 @@ struct sensitivity_stats_t {
     // Inputs: [N, T, vocab] raw logits (any device/dtype — moved to CPU float32 internally).
     void accumulate(const at::Tensor &fp16_logits, const at::Tensor &quant_logits);
 
-    void save_json(const std::string &path, const char *quant_config_path) const;
+    void save_tsv(const std::string &path, const char *quant_config_path) const;
 };

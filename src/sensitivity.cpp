@@ -21,22 +21,18 @@ void sensitivity_stats_t::accumulate(const at::Tensor &fp16_logits, const at::Te
     n_batches++;
 }
 
-void sensitivity_stats_t::save_json(const std::string &path, const char *quant_config_path) const {
+void sensitivity_stats_t::save_tsv(const std::string &path, const char *quant_config_path) const {
     FILE *fp = fopen(path.c_str(), "w");
     if (!fp) {
         fprintf(stderr, "[sensitivity] error: cannot open output file %s\n", path.c_str());
         return;
     }
     float kl_mean = n_batches > 0 ? (float)(kl_sum / n_batches) : 0.f;
-    fprintf(fp, "{\n");
-    if (quant_config_path) {
-        fprintf(fp, "  \"quant_config\": \"%s\",\n", quant_config_path);
-    }
-    fprintf(fp, "  \"n_batches\": %ld,\n", (long)n_batches);
-    fprintf(fp, "  \"kl_mean\": %.6g,\n", kl_mean);
-    fprintf(fp, "  \"kl_max\": %.6g\n", kl_max);
-    fprintf(fp, "}\n");
+    fprintf(fp, "quant_config\tn_batches\tkl_mean\tkl_max\n");
+    fprintf(fp, "%s\t%ld\t%.6g\t%.6g\n",
+            quant_config_path ? quant_config_path : "fp16",
+            (long)n_batches, kl_mean, kl_max);
     fclose(fp);
-    fprintf(stderr, "[sensitivity] saved sensitivity stats to %s (n_batches=%ld, kl_mean=%.4g, kl_max=%.4g)\n",
+    fprintf(stderr, "[sensitivity] saved to %s (n_batches=%ld, kl_mean=%.4g, kl_max=%.4g)\n",
             path.c_str(), (long)n_batches, kl_mean, kl_max);
 }

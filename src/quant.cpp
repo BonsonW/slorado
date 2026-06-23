@@ -147,6 +147,12 @@ at::Tensor maybe_fake_quant(const at::Tensor &W, const std::string &method, bool
     if (!g_quant_active || method.empty() || method == "dummy" || method == "fp16") {
         return W;
     }
+    // Calibrated fixed scale: "int8_s<scale>" where <scale> is a pre-computed float value.
+    if (method.rfind("int8_s", 0) == 0) {
+        float scale = std::stof(method.c_str() + 6);
+        auto W_f = W.to(torch::kFloat32);
+        return (W_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(W.dtype());
+    }
     bool per_channel = method.find("per_channel") != std::string::npos;
     if (method.find("fp8")  != std::string::npos) return fake_quant_fp8(W, per_channel, transposed);
     if (method.find("fp4")  != std::string::npos) return fake_quant_fp4(W, per_channel, transposed);
@@ -225,6 +231,13 @@ static at::Tensor fake_quant_fp4_act(const at::Tensor &x, bool per_token) {
 at::Tensor maybe_fake_quant_act(const at::Tensor &x, const std::string &method) {
     if (!g_quant_active || method.empty() || method == "dummy" || method == "fp16") {
         return x;
+    }
+    // Calibrated fixed scale: "int8_s<scale>" where <scale> is a pre-computed float value.
+    if (method.rfind("int8_s", 0) == 0) {
+        float scale = std::stof(method.c_str() + 6);
+        auto orig_shape = x.sizes().vec();
+        auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
+        return (x_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).reshape(orig_shape).to(x.dtype());
     }
     // Fixed-scale variants for activations with known bounded range (e.g. FLSTM hh in [-1,1]).
     if (method == "int8_fixed") {
