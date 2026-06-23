@@ -41,7 +41,7 @@ run_one() {
             --flash=yes \
             --quant-config "$qc" \
             --sensitivity "$sens_tmp" \
-            -C 64 -o /dev/null "$model" "$reads" 2>/dev/null
+            -C 128 -o /dev/null "$model" "$reads" 2>/dev/null
         read -r n_batches kl_mean kl_max < <(awk 'NR==2 {print $2, $3, $4}' "$sens_tmp")
         rm -f "$sens_tmp"
         echo "  [gpu$gpu] $tag: kl_mean=$kl_mean  kl_max=$kl_max"
@@ -49,7 +49,7 @@ run_one() {
 
     # Identity: basecall → minimap2 → per-read scores
     local tmp; tmp=$(mktemp /tmp/identity_XXXXXX.fastq)
-    local base_args=(-C 64 -o "$tmp" "$model" "$reads")
+    local base_args=(--flash=yes -C 128 -o "$tmp" "$model" "$reads")
     [[ "$qc" != "none" ]] && base_args=(--quant-config "$qc" "${base_args[@]}")
     CUDA_VISIBLE_DEVICES=$gpu ./slorado basecaller "${base_args[@]}" 2>/dev/null
 
