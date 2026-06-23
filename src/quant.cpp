@@ -127,6 +127,99 @@ static at::Tensor apply_fp4_grid(const at::Tensor &x_scaled) {
     return grid.index({idx.flatten()}).reshape_as(abs_) * sign;
 }
 
+// Apply INT8 rounding to a float32 tensor already divided by its group scale.
+static at::Tensor apply_int8_grid(const at::Tensor &x_scaled) {
+    return x_scaled.round().clamp_(-128.f, 127.f);
+}
+
+// Apply MXFP6 E2M3 rounding to a float32 tensor already divided by its group scale.
+// 1 sign + 2 exponent (bias=1) + 3 mantissa bits; max representable = 7.5.
+// Step sizes: 1/8 for [0, 2), 1/4 for [2, 4), 1/2 for [4, 7.5].
+static at::Tensor apply_fp6e2m3_grid(const at::Tensor &x_scaled) {
+    static constexpr float fp6_max = 7.5f;
+    auto sign = x_scaled.sign();
+    auto abs_ = x_scaled.abs().clamp_max_(fp6_max);
+    auto q = torch::where(abs_ < 2.f,
+                          (abs_ * 8.f).round() / 8.f,
+             torch::where(abs_ < 4.f,
+                          (abs_ * 4.f).round() / 4.f,
+                          (abs_ * 2.f).round() / 2.f)).clamp_max_(fp6_max);
+    return q * sign;
+}
+
+// FP8 E4M3FN grid via native dtype cast: input already divided by scale, in [-448, 448].
+static at::Tensor apply_fp8e4m3_grid(const at::Tensor &x_scaled) {
+    static constexpr float fp8_max = 448.f;
+    return x_scaled.clamp_(-fp8_max, fp8_max).to(torch::kFloat8_e4m3fn).to(torch::kFloat32);
+}
+
+// ---------------------------------------------------------------------------
+// Group-32 microscaling (MX) helpers
+// ---------------------------------------------------------------------------
+
+typedef at::Tensor(*GridFn)(const at::Tensor&);
+
+// Fake-quantize a 2D weight [out, in] (or [in, out] when transposed) with one scale per 32
+// input-channel elements.  po2_scale=true snaps scales to the nearest power-of-2 (E8M0), as
+// required by the OCP MXINT8 spec.
+static at::Tensor group32_weight(const at::Tensor &W, bool transposed, float qmax, GridFn grid_fn,
+                                  bool po2_scale = false) {
+    static constexpr int64_t G = 32;
+    auto W_f = W.to(torch::kFloat32);
+    int64_t n_quant = transposed ? W_f.size(0) : W_f.size(1);  // input channels
+    int64_t n_other = transposed ? W_f.size(1) : W_f.size(0);  // output channels
+
+    auto W_2d = (transposed ? W_f.t() : W_f).contiguous();  // [n_other, n_quant]
+
+    int64_t n_groups = (n_quant + G - 1) / G;
+    int64_t padded   = n_groups * G;
+    if (padded != n_quant) {
+        W_2d = at::constant_pad_nd(W_2d, {0, padded - n_quant});
+    }
+    auto W_g   = W_2d.reshape({n_other, n_groups, G});
+    auto scale = std::get<0>(W_g.abs().max(-1, true)) / qmax;
+    if (po2_scale) {
+        scale = torch::exp2(torch::ceil(torch::log2(scale.clamp_min(1e-38f))));
+    }
+    scale.clamp_min_(1e-6f);
+    auto W_q = grid_fn(W_g / scale).mul_(scale).reshape({n_other, padded});
+    if (padded != n_quant) {
+        W_q = W_q.slice(1, 0, n_quant);
+    }
+    if (transposed) {
+        W_q = W_q.t().contiguous();
+    }
+    return W_q.to(W.dtype());
+}
+
+// Fake-quantize activation tensor [..., features] with one scale per 32 features.
+// po2_scale=true uses E8M0 power-of-2 scales (MXINT8).
+static at::Tensor group32_act(const at::Tensor &x, float qmax, GridFn grid_fn,
+                               bool po2_scale = false) {
+    static constexpr int64_t G = 32;
+    auto orig_shape = x.sizes().vec();
+    auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32).contiguous();
+    int64_t rows  = x_f.size(0);
+    int64_t feats = x_f.size(1);
+
+    int64_t n_groups = (feats + G - 1) / G;
+    int64_t padded   = n_groups * G;
+    if (padded != feats) {
+        x_f = at::constant_pad_nd(x_f, {0, padded - feats});
+    }
+    auto x_g   = x_f.reshape({rows, n_groups, G});
+    auto scale = std::get<0>(x_g.abs().max(-1, true)) / qmax;
+    if (po2_scale) {
+        scale = torch::exp2(torch::ceil(torch::log2(scale.clamp_min(1e-38f))));
+    }
+    scale.clamp_min_(1e-6f);
+    auto x_q = grid_fn(x_g / scale).mul_(scale).reshape({rows, padded});
+    if (padded != feats) {
+        x_q = x_q.slice(1, 0, feats);
+    }
+    return x_q.reshape(orig_shape).to(x.dtype());
+}
+
 static at::Tensor fake_quant_fp4(const at::Tensor &W, bool per_channel, bool transposed) {
     // FP4 E2M1: max representable = 6.0, 8 distinct absolute values.
     static constexpr float fp4_max = 6.f;
@@ -154,6 +247,11 @@ at::Tensor maybe_fake_quant(const at::Tensor &W, const std::string &method, bool
         auto W_f = W.to(torch::kFloat32);
         return (W_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(W.dtype());
     }
+    // MX group-32 — check before substring matches ("mxfp4" contains "fp4", etc.)
+    if (method == "mxint8") return group32_weight(W, transposed, 127.f, apply_int8_grid,    /*po2=*/true);
+    if (method == "mxfp4")  return group32_weight(W, transposed, 6.f,   apply_fp4_grid);
+    if (method == "mxfp6")  return group32_weight(W, transposed, 7.5f,  apply_fp6e2m3_grid);
+    if (method == "mxfp8")  return group32_weight(W, transposed, 448.f, apply_fp8e4m3_grid);
     bool per_channel = method.find("per_channel") != std::string::npos;
     if (method.find("fp8")  != std::string::npos) return fake_quant_fp8e4m3(W, per_channel, transposed);
     if (method.find("fp4")  != std::string::npos) return fake_quant_fp4(W, per_channel, transposed);
@@ -262,6 +360,11 @@ at::Tensor maybe_fake_quant_act(const at::Tensor &x, const std::string &method) 
         auto x_f = x.to(torch::kFloat32);
         return (x_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(x.dtype());
     }
+    // MX group-32 — check before substring matches.
+    if (method == "mxint8") return group32_act(x, 127.f, apply_int8_grid,    /*po2=*/true);
+    if (method == "mxfp4")  return group32_act(x, 6.f,   apply_fp4_grid);
+    if (method == "mxfp6")  return group32_act(x, 7.5f,  apply_fp6e2m3_grid);
+    if (method == "mxfp8")  return group32_act(x, 448.f, apply_fp8e4m3_grid);
     bool per_token = method.find("per_channel") != std::string::npos;
     if (method.find("fp8")  != std::string::npos) return fake_quant_fp8e4m3_act(x, per_token);
     if (method.find("fp4")  != std::string::npos) return fake_quant_fp4_act(x, per_token);

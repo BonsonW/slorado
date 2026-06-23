@@ -127,5 +127,45 @@ run_batch \
     1 tx_a_fp8ptensor $MODEL_TX $READS_TX /tmp/qc_tx_a_fp8ptensor.json
 
 echo ""
+echo "=== Phase 1 MX: weights only (OCP group-32 microscaling) ==="
+run_batch \
+    0 lstm_hh_w_mxint8 $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_mxint8.json \
+    1 lstm_hh_w_mxfp4  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_mxfp4.json \
+    2 lstm_hh_w_mxfp6  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_mxfp6.json \
+    3 lstm_hh_w_mxfp8  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_w_mxfp8.json
+
+run_batch \
+    0 lstm_ih_w_mxint8 $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_mxint8.json \
+    1 lstm_ih_w_mxfp4  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_mxfp4.json \
+    2 lstm_ih_w_mxfp6  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_mxfp6.json \
+    3 lstm_ih_w_mxfp8  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_w_mxfp8.json
+
+run_batch \
+    0 tx_w_mxint8 $MODEL_TX $READS_TX /tmp/qc_tx_w_mxint8.json \
+    1 tx_w_mxfp4  $MODEL_TX $READS_TX /tmp/qc_tx_w_mxfp4.json \
+    2 tx_w_mxfp6  $MODEL_TX $READS_TX /tmp/qc_tx_w_mxfp6.json \
+    3 tx_w_mxfp8  $MODEL_TX $READS_TX /tmp/qc_tx_w_mxfp8.json
+
+echo ""
+echo "=== Phase 2 MX: activations only (OCP group-32 microscaling) ==="
+run_batch \
+    0 lstm_hh_a_mxint8 $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_mxint8.json \
+    1 lstm_hh_a_mxfp4  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_mxfp4.json \
+    2 lstm_hh_a_mxfp6  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_mxfp6.json \
+    3 lstm_hh_a_mxfp8  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_hh_a_mxfp8.json
+
+run_batch \
+    0 lstm_ih_a_mxint8 $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_mxint8.json \
+    1 lstm_ih_a_mxfp4  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_mxfp4.json \
+    2 lstm_ih_a_mxfp6  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_mxfp6.json \
+    3 lstm_ih_a_mxfp8  $MODEL_LSTM $READS_LSTM /tmp/qc_lstm_ih_a_mxfp8.json
+
+run_batch \
+    0 tx_a_mxint8 $MODEL_TX $READS_TX /tmp/qc_tx_a_mxint8.json \
+    1 tx_a_mxfp4  $MODEL_TX $READS_TX /tmp/qc_tx_a_mxfp4.json \
+    2 tx_a_mxfp6  $MODEL_TX $READS_TX /tmp/qc_tx_a_mxfp6.json \
+    3 tx_a_mxfp8  $MODEL_TX $READS_TX /tmp/qc_tx_a_mxfp8.json
+
+echo ""
 echo "Done. Results in $RESULTS/"
 ls "$RESULTS"/*.tsv
