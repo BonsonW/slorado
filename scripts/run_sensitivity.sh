@@ -38,6 +38,7 @@ run_one() {
     if [[ "$qc" != "none" ]]; then
         local sens_tmp; sens_tmp=$(mktemp /tmp/sens_XXXXXX.tsv)
         CUDA_VISIBLE_DEVICES=$gpu ./slorado basecaller \
+            --flash=yes \
             --quant-config "$qc" \
             --sensitivity "$sens_tmp" \
             -C 64 -o /dev/null "$model" "$reads" 2>/dev/null
