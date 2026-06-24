@@ -99,10 +99,28 @@ run_batch \
     3 lstm_ih_w_fp8pt $MODEL_LSTM $BLOW5 /tmp/qc_lstm_ih_w_fp8pt.json
 
 run_batch \
-    0 tx_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_w_pc.json \
-    1 tx_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_w_pt.json \
-    2 tx_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_w_fp8pc.json \
-    3 tx_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_w_fp8pt.json
+    0 tx_wqkv_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_pc.json \
+    1 tx_wqkv_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_pt.json \
+    2 tx_wqkv_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_fp8pc.json \
+    3 tx_wqkv_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_fp8pt.json
+
+run_batch \
+    0 tx_op_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_pc.json \
+    1 tx_op_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_pt.json \
+    2 tx_op_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_fp8pc.json \
+    3 tx_op_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_fp8pt.json
+
+run_batch \
+    0 tx_fc1_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_pc.json \
+    1 tx_fc1_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_pt.json \
+    2 tx_fc1_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_fp8pc.json \
+    3 tx_fc1_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_fp8pt.json
+
+run_batch \
+    0 tx_fc2_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_pc.json \
+    1 tx_fc2_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_pt.json \
+    2 tx_fc2_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_fp8pc.json \
+    3 tx_fc2_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_fp8pt.json
 
 echo ""
 echo "=== Phase 2: activations only ==="
@@ -115,23 +133,21 @@ run_batch \
 run_batch \
     0 lstm_ih_a_ptoken    $MODEL_LSTM $BLOW5 /tmp/qc_lstm_ih_a_ptoken.json \
     1 lstm_ih_a_fp8ptoken $MODEL_LSTM $BLOW5 /tmp/qc_lstm_ih_a_fp8ptoken.json \
-    2 tx_a_ptoken         $MODEL_TX   $BLOW5   /tmp/qc_tx_a_ptoken.json \
-    3 tx_a_fp8ptoken      $MODEL_TX   $BLOW5   /tmp/qc_tx_a_fp8ptoken.json
+    2 tx_wqkv_a_ptoken    $MODEL_TX   $BLOW5 /tmp/qc_tx_wqkv_a_ptoken.json \
+    3 tx_wqkv_a_fp8ptoken $MODEL_TX   $BLOW5 /tmp/qc_tx_wqkv_a_fp8ptoken.json
 
 run_batch \
-    0 tx_a_fixed          $MODEL_TX   $BLOW5   /tmp/qc_tx_a_fixed.json
+    0 tx_wqkv_a_fixed  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_fixed.json \
+    1 tx_op_a_ptoken   $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_ptoken.json \
+    2 tx_op_a_fp8ptoken$MODEL_TX $BLOW5 /tmp/qc_tx_op_a_fp8ptoken.json \
+    3 tx_fc1_a_ptoken  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_ptoken.json
 
-echo ""
-echo "=== Phase 2 calibrated: per-tensor activation with fixed scales from calibration ==="
-# Requires run_calibration.sh to have been run first (generates /tmp/qc_*_ptensor configs).
-if [[ -f /tmp/qc_lstm_hh_a_ptensor.json ]]; then
-    run_batch \
-        0 lstm_hh_a_ptensor $MODEL_LSTM $BLOW5 /tmp/qc_lstm_hh_a_ptensor.json \
-        1 lstm_ih_a_ptensor $MODEL_LSTM $BLOW5 /tmp/qc_lstm_ih_a_ptensor.json \
-        2 tx_a_ptensor      $MODEL_TX   $BLOW5   /tmp/qc_tx_a_ptensor.json
-else
-    echo "  Skipping calibrated ptensor — run scripts/run_calibration.sh first"
-fi
+run_batch \
+    0 tx_fc1_a_fp8ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_fp8ptoken.json \
+    1 tx_fc1_a_fixed     $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_fixed.json \
+    2 tx_fc2_a_ptoken    $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_ptoken.json \
+    3 tx_fc2_a_fp8ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_fp8ptoken.json
+
 
 echo ""
 echo "=== Phase 1 MX: weights only (OCP group-32 microscaling) ==="
@@ -148,10 +164,28 @@ run_batch \
     3 lstm_ih_w_mxfp8  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_ih_w_mxfp8.json
 
 run_batch \
-    0 tx_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_w_mxint8.json \
-    1 tx_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_w_mxfp4.json \
-    2 tx_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_w_mxfp6.json \
-    3 tx_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_w_mxfp8.json
+    0 tx_wqkv_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxint8.json \
+    1 tx_wqkv_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxfp4.json \
+    2 tx_wqkv_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxfp6.json \
+    3 tx_wqkv_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxfp8.json
+
+run_batch \
+    0 tx_op_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxint8.json \
+    1 tx_op_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxfp4.json \
+    2 tx_op_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxfp6.json \
+    3 tx_op_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxfp8.json
+
+run_batch \
+    0 tx_fc1_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxint8.json \
+    1 tx_fc1_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxfp4.json \
+    2 tx_fc1_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxfp6.json \
+    3 tx_fc1_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxfp8.json
+
+run_batch \
+    0 tx_fc2_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxint8.json \
+    1 tx_fc2_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxfp4.json \
+    2 tx_fc2_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxfp6.json \
+    3 tx_fc2_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxfp8.json
 
 echo ""
 echo "=== Phase 2 MX: activations only (OCP group-32 microscaling) ==="
@@ -168,10 +202,28 @@ run_batch \
     3 lstm_ih_a_mxfp8  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_ih_a_mxfp8.json
 
 run_batch \
-    0 tx_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_a_mxint8.json \
-    1 tx_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_a_mxfp4.json \
-    2 tx_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_a_mxfp6.json \
-    3 tx_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_a_mxfp8.json
+    0 tx_wqkv_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxint8.json \
+    1 tx_wqkv_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxfp4.json \
+    2 tx_wqkv_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxfp6.json \
+    3 tx_wqkv_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxfp8.json
+
+run_batch \
+    0 tx_op_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxint8.json \
+    1 tx_op_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxfp4.json \
+    2 tx_op_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxfp6.json \
+    3 tx_op_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxfp8.json
+
+run_batch \
+    0 tx_fc1_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxint8.json \
+    1 tx_fc1_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxfp4.json \
+    2 tx_fc1_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxfp6.json \
+    3 tx_fc1_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxfp8.json
+
+run_batch \
+    0 tx_fc2_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxint8.json \
+    1 tx_fc2_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxfp4.json \
+    2 tx_fc2_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxfp6.json \
+    3 tx_fc2_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxfp8.json
 
 echo ""
 echo "Done. Results in $RESULTS/"

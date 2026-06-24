@@ -70,19 +70,25 @@ def lstm_ih(w_method, a_fn):
 
 # ── Transformer helpers ────────────────────────────────────────────────────────
 
-def tx_all(w_method, a_fn, fc2_a=None):
+def tx_layer(suffix, w_method, a_fn):
+    """Quantize one layer type across all 18 encoder blocks."""
     cfg = {}
     for i in range(18):
-        for key in [f"transformer_encoder.{i}.self_attn.wqkv",
-                    f"transformer_encoder.{i}.self_attn.out_proj",
-                    f"transformer_encoder.{i}.ff.fc1",
-                    f"transformer_encoder.{i}.ff.fc2"]:
-            if w_method:
-                cfg[key] = w_method
-            a = fc2_a if (fc2_a and key.endswith(".fc2")) else a_fn(key)
-            if a:
-                cfg[key + ".act"] = a
+        key = f"transformer_encoder.{i}.{suffix}"
+        if w_method:
+            cfg[key] = w_method
+        a = a_fn(key)
+        if a:
+            cfg[key + ".act"] = a
     return cfg
+
+
+TX_LAYERS = [
+    ("wqkv", "self_attn.wqkv"),
+    ("op",   "self_attn.out_proj"),
+    ("fc1",  "ff.fc1"),
+    ("fc2",  "ff.fc2"),
+]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -167,26 +173,28 @@ def main():
     write("lstm_ih_a_mxfp6",    lstm_ih(None, mxfp6))
     write("lstm_ih_a_mxfp8",    lstm_ih(None, mxfp8))
 
-    print("Transformer — Phase 1: weights only (act = fp16)")
-    write("tx_w_pc",    tx_all("int8_per_channel", fp16))
-    write("tx_w_pt",    tx_all("int8_per_tensor",  fp16))
-    write("tx_w_fp8pc", tx_all("fp8_per_channel",  fp16))
-    write("tx_w_fp8pt", tx_all("fp8_per_tensor",   fp16))
-    write("tx_w_mxint8",tx_all("mxint8",           fp16))
-    write("tx_w_mxfp4", tx_all("mxfp4",            fp16))
-    write("tx_w_mxfp6", tx_all("mxfp6",            fp16))
-    write("tx_w_mxfp8", tx_all("mxfp8",            fp16))
+    print("Transformer — Phase 1: weights only (one layer type at a time)")
+    for lname, lsuffix in TX_LAYERS:
+        write(f"tx_{lname}_w_pc",    tx_layer(lsuffix, "int8_per_channel", fp16))
+        write(f"tx_{lname}_w_pt",    tx_layer(lsuffix, "int8_per_tensor",  fp16))
+        write(f"tx_{lname}_w_fp8pc", tx_layer(lsuffix, "fp8_per_channel",  fp16))
+        write(f"tx_{lname}_w_fp8pt", tx_layer(lsuffix, "fp8_per_tensor",   fp16))
+        write(f"tx_{lname}_w_mxint8",tx_layer(lsuffix, "mxint8",           fp16))
+        write(f"tx_{lname}_w_mxfp4", tx_layer(lsuffix, "mxfp4",            fp16))
+        write(f"tx_{lname}_w_mxfp6", tx_layer(lsuffix, "mxfp6",            fp16))
+        write(f"tx_{lname}_w_mxfp8", tx_layer(lsuffix, "mxfp8",            fp16))
 
-    print("Transformer — Phase 2: activations only (weight absent = fp16)")
-    write("tx_a_ptoken",   tx_all(None, dyn_pc))
-    write("tx_a_ptensor",  tx_all(None, tx_calib_pt))
-    # fc2 input is post-SiLU (not post-RMSNorm), keep dynamic
-    write("tx_a_fixed",    tx_all(None, fixed4, fc2_a="int8_per_channel"))
-    write("tx_a_fp8ptoken",tx_all(None, fp8_pc))
-    write("tx_a_mxint8",   tx_all(None, mxint8))
-    write("tx_a_mxfp4",    tx_all(None, mxfp4))
-    write("tx_a_mxfp6",    tx_all(None, mxfp6))
-    write("tx_a_mxfp8",    tx_all(None, mxfp8))
+    print("Transformer — Phase 2: activations only (one layer type at a time)")
+    for lname, lsuffix in TX_LAYERS:
+        write(f"tx_{lname}_a_ptoken",    tx_layer(lsuffix, None, dyn_pc))
+        write(f"tx_{lname}_a_fp8ptoken", tx_layer(lsuffix, None, fp8_pc))
+        write(f"tx_{lname}_a_mxint8",    tx_layer(lsuffix, None, mxint8))
+        write(f"tx_{lname}_a_mxfp4",     tx_layer(lsuffix, None, mxfp4))
+        write(f"tx_{lname}_a_mxfp6",     tx_layer(lsuffix, None, mxfp6))
+        write(f"tx_{lname}_a_mxfp8",     tx_layer(lsuffix, None, mxfp8))
+        if lname in ("wqkv", "fc1"):
+            # post-RMSNorm activations can use a fixed scale
+            write(f"tx_{lname}_a_fixed", tx_layer(lsuffix, None, fixed4))
 
     print("Done.")
 

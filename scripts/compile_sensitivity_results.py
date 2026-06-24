@@ -44,25 +44,27 @@ RUNS = [
     ("lstm_ih_a_mxfp6",     "HAC v6", 2, "ih", "fp16", "mxfp6 g32"),
     ("lstm_ih_a_mxfp8",     "HAC v6", 2, "ih", "fp16", "mxfp8 g32"),
     # ── Transformer baselines ─────────────────────────────────────────────────
-    ("tx_fp16",             "SUP v5", 0, "all", "fp16", "fp16"),
-    # ── Transformer Phase 1: weights only ────────────────────────────────────
-    ("tx_w_pc",             "SUP v5", 1, "wqkv+op+fc1+fc2", "int8 chnl", "fp16"),
-    ("tx_w_pt",             "SUP v5", 1, "wqkv+op+fc1+fc2", "int8 tens",  "fp16"),
-    ("tx_w_fp8pc",          "SUP v5", 1, "wqkv+op+fc1+fc2", "fp8 chnl",  "fp16"),
-    ("tx_w_fp8pt",          "SUP v5", 1, "wqkv+op+fc1+fc2", "fp8 tens",   "fp16"),
-    ("tx_w_mxint8",         "SUP v5", 1, "wqkv+op+fc1+fc2", "mxint8 g32",       "fp16"),
-    ("tx_w_mxfp4",          "SUP v5", 1, "wqkv+op+fc1+fc2", "mxfp4 g32",        "fp16"),
-    ("tx_w_mxfp6",          "SUP v5", 1, "wqkv+op+fc1+fc2", "mxfp6 g32",        "fp16"),
-    ("tx_w_mxfp8",          "SUP v5", 1, "wqkv+op+fc1+fc2", "mxfp8 g32",        "fp16"),
-    # ── Transformer Phase 2: activations only ────────────────────────────────
-    ("tx_a_ptoken",         "SUP v5", 2, "wqkv+op+fc1+fc2",       "fp16", "int8 tok"),
-    ("tx_a_fixed",          "SUP v5", 2, "wqkv+op+fc1 (fc2 dyn)", "fp16", "int8 fixed_4 (4/127)"),
-    ("tx_a_fp8ptoken",      "SUP v5", 2, "wqkv+op+fc1+fc2",       "fp16", "fp8 tok"),
-    ("tx_a_mxint8",         "SUP v5", 2, "wqkv+op+fc1+fc2",       "fp16", "mxint8 g32"),
-    ("tx_a_mxfp4",          "SUP v5", 2, "wqkv+op+fc1+fc2",       "fp16", "mxfp4 g32"),
-    ("tx_a_mxfp6",          "SUP v5", 2, "wqkv+op+fc1+fc2",       "fp16", "mxfp6 g32"),
-    ("tx_a_mxfp8",          "SUP v5", 2, "wqkv+op+fc1+fc2",       "fp16", "mxfp8 g32"),
+    ("tx_fp16", "SUP v5", 0, "all", "fp16", "fp16"),
 ]
+
+_TX_W = [
+    ("pc",    "int8 chnl"),  ("pt",    "int8 tens"),
+    ("fp8pc", "fp8 chnl"),   ("fp8pt", "fp8 tens"),
+    ("mxint8","mxint8 g32"), ("mxfp4", "mxfp4 g32"),
+    ("mxfp6", "mxfp6 g32"),  ("mxfp8", "mxfp8 g32"),
+]
+_TX_A = [
+    ("ptoken",    "int8 tok"),   ("fp8ptoken", "fp8 tok"),
+    ("mxint8",    "mxint8 g32"), ("mxfp4",     "mxfp4 g32"),
+    ("mxfp6",     "mxfp6 g32"),  ("mxfp8",     "mxfp8 g32"),
+]
+for _lname in ["wqkv", "op", "fc1", "fc2"]:
+    for _mtag, _mdesc in _TX_W:
+        RUNS.append((f"tx_{_lname}_w_{_mtag}", "SUP v5", 1, _lname, _mdesc, "fp16"))
+    for _mtag, _mdesc in _TX_A:
+        RUNS.append((f"tx_{_lname}_a_{_mtag}", "SUP v5", 2, _lname, "fp16", _mdesc))
+    if _lname in ("wqkv", "fc1"):
+        RUNS.append((f"tx_{_lname}_a_fixed", "SUP v5", 2, _lname, "fp16", "int8 fixed_4 (4/127)"))
 
 
 def load_kl(tag):
