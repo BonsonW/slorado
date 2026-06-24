@@ -61,80 +61,25 @@ std::unordered_map<std::string, std::string> load_quant_config(const std::string
 }
 
 // ---------------------------------------------------------------------------
-// Fake quantization — weights
+// Grid rounding helpers — operate on float32 tensors already divided by their scale.
 // ---------------------------------------------------------------------------
 
-static at::Tensor fake_quant_int8(const at::Tensor &W, bool per_channel, bool transposed) {
-    auto W_f = W.to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_channel) {
-        int reduce_dim = transposed ? 0 : 1;
-        scale = std::get<0>(W_f.abs().max(reduce_dim, /*keepdim=*/true)) / 127.f;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = W_f.abs().max().item<float>();
-        if (amax == 0.f) return W;
-        scale = torch::full({1}, amax / 127.f, W_f.options());
-    }
-    return (W_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(W.dtype());
-}
-
-static at::Tensor fake_quant_int4(const at::Tensor &W, bool per_channel, bool transposed) {
-    auto W_f = W.to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_channel) {
-        int reduce_dim = transposed ? 0 : 1;
-        scale = std::get<0>(W_f.abs().max(reduce_dim, /*keepdim=*/true)) / 7.f;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = W_f.abs().max().item<float>();
-        if (amax == 0.f) return W;
-        scale = torch::full({1}, amax / 7.f, W_f.options());
-    }
-    return (W_f / scale).round().clamp_(-8.f, 7.f).mul_(scale).to(W.dtype());
-}
-
-static at::Tensor fake_quant_fp8e4m3(const at::Tensor &W, bool per_channel, bool transposed) {
-    // FP8 E4M3FN: 4 exponent bits, 3 mantissa bits, max = 448.
-    // Scales W into the E4M3FN range, casts through the native fp8 dtype to round to the
-    // correct non-uniform grid, then scales back.
-    static constexpr float fp8_max = 448.f;
-    auto W_f = W.to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_channel) {
-        int reduce_dim = transposed ? 0 : 1;
-        scale = std::get<0>(W_f.abs().max(reduce_dim, /*keepdim=*/true)) / fp8_max;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = W_f.abs().max().item<float>();
-        if (amax == 0.f) return W;
-        scale = torch::full({1}, amax / fp8_max, W_f.options());
-    }
-    auto W_scaled = (W_f / scale).clamp_(-fp8_max, fp8_max);
-    return W_scaled.to(torch::kFloat8_e4m3fn).to(torch::kFloat32).mul_(scale).to(W.dtype());
-}
-
-// Apply FP4 E2M1 rounding to a float32 tensor that has already been divided by its scale.
-// Positive representable values: {0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0}
-// Breakpoints are midpoints between adjacent values.
+// Apply FP4 E2M1 rounding. Positive representable values: {0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0}
 static at::Tensor apply_fp4_grid(const at::Tensor &x_scaled) {
-    auto bp  = torch::tensor({0.25f, 0.75f, 1.25f, 1.75f, 2.5f, 3.5f, 5.0f}, x_scaled.options());
-    auto grid = torch::tensor({0.f, 0.5f, 1.f, 1.5f, 2.f, 3.f, 4.f, 6.f},   x_scaled.options());
+    auto bp   = torch::tensor({0.25f, 0.75f, 1.25f, 1.75f, 2.5f, 3.5f, 5.0f}, x_scaled.options());
+    auto grid = torch::tensor({0.f, 0.5f, 1.f, 1.5f, 2.f, 3.f, 4.f, 6.f},    x_scaled.options());
     auto sign = x_scaled.sign();
     auto abs_ = x_scaled.abs();
-    // bucketize: for each element returns index i s.t. bp[i-1] <= val < bp[i], clamped to [0,7]
-    auto idx = torch::bucketize(abs_, bp).clamp_(0, 7);
+    auto idx  = torch::bucketize(abs_, bp).clamp_(0, 7);
     return grid.index({idx.flatten()}).reshape_as(abs_) * sign;
 }
 
-// Apply INT8 rounding to a float32 tensor already divided by its group scale.
+// Apply INT8 rounding.
 static at::Tensor apply_int8_grid(const at::Tensor &x_scaled) {
     return x_scaled.round().clamp_(-128.f, 127.f);
 }
 
-// Apply MXFP6 E2M3 rounding to a float32 tensor already divided by its group scale.
-// 1 sign + 2 exponent (bias=1) + 3 mantissa bits; max representable = 7.5.
-// Step sizes: 1/8 for [0, 2), 1/4 for [2, 4), 1/2 for [4, 7.5].
+// Apply MXFP6 E2M3 rounding. 1 sign + 2 exp (bias=1) + 3 mantissa bits; max = 7.5.
 static at::Tensor apply_fp6e2m3_grid(const at::Tensor &x_scaled) {
     static constexpr float fp6_max = 7.5f;
     auto sign = x_scaled.sign();
@@ -147,10 +92,72 @@ static at::Tensor apply_fp6e2m3_grid(const at::Tensor &x_scaled) {
     return q * sign;
 }
 
-// FP8 E4M3FN grid via native dtype cast: input already divided by scale, in [-448, 448].
+// Apply FP8 E4M3FN rounding via native dtype cast.
 static at::Tensor apply_fp8e4m3_grid(const at::Tensor &x_scaled) {
     static constexpr float fp8_max = 448.f;
     return x_scaled.clamp_(-fp8_max, fp8_max).to(torch::kFloat8_e4m3fn).to(torch::kFloat32);
+}
+
+// ---------------------------------------------------------------------------
+// 2D quantization helpers — operate on [rows, cols] float32 tensors.
+// per_row=true: one scale per row (per-channel for weights, per-token for activations).
+// per_row=false: one global scale.
+// ---------------------------------------------------------------------------
+
+static at::Tensor quant_int8_2d(const at::Tensor &x, bool per_row) {
+    at::Tensor scale;
+    if (per_row) {
+        scale = std::get<0>(x.abs().max(1, /*keepdim=*/true)) / 127.f;
+        scale.clamp_min_(1e-6f);
+    } else {
+        float amax = x.abs().max().item<float>();
+        if (amax == 0.f) return x;
+        scale = torch::full({1}, amax / 127.f, x.options());
+    }
+    return (x / scale).round().clamp_(-128.f, 127.f).mul_(scale);
+}
+
+static at::Tensor quant_int4_2d(const at::Tensor &x, bool per_row) {
+    at::Tensor scale;
+    if (per_row) {
+        scale = std::get<0>(x.abs().max(1, /*keepdim=*/true)) / 7.f;
+        scale.clamp_min_(1e-6f);
+    } else {
+        float amax = x.abs().max().item<float>();
+        if (amax == 0.f) return x;
+        scale = torch::full({1}, amax / 7.f, x.options());
+    }
+    return (x / scale).round().clamp_(-8.f, 7.f).mul_(scale);
+}
+
+static at::Tensor quant_fp8e4m3_2d(const at::Tensor &x, bool per_row) {
+    // FP8 E4M3FN: 4 exponent bits, 3 mantissa bits, max = 448.
+    static constexpr float fp8_max = 448.f;
+    at::Tensor scale;
+    if (per_row) {
+        scale = std::get<0>(x.abs().max(1, /*keepdim=*/true)) / fp8_max;
+        scale.clamp_min_(1e-6f);
+    } else {
+        float amax = x.abs().max().item<float>();
+        if (amax == 0.f) return x;
+        scale = torch::full({1}, amax / fp8_max, x.options());
+    }
+    return (x / scale).clamp_(-fp8_max, fp8_max).to(torch::kFloat8_e4m3fn).to(torch::kFloat32).mul_(scale);
+}
+
+static at::Tensor quant_fp4_2d(const at::Tensor &x, bool per_row) {
+    // FP4 E2M1: max representable = 6.0.
+    static constexpr float fp4_max = 6.f;
+    at::Tensor scale;
+    if (per_row) {
+        scale = std::get<0>(x.abs().max(1, /*keepdim=*/true)) / fp4_max;
+        scale.clamp_min_(1e-6f);
+    } else {
+        float amax = x.abs().max().item<float>();
+        if (amax == 0.f) return x;
+        scale = torch::full({1}, amax / fp4_max, x.options());
+    }
+    return apply_fp4_grid(x / scale).mul_(scale);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,160 +227,80 @@ static at::Tensor group32_act(const at::Tensor &x, float qmax, GridFn grid_fn,
     return x_q.reshape(orig_shape).to(x.dtype());
 }
 
-static at::Tensor fake_quant_fp4(const at::Tensor &W, bool per_channel, bool transposed) {
-    // FP4 E2M1: max representable = 6.0, 8 distinct absolute values.
-    static constexpr float fp4_max = 6.f;
-    auto W_f = W.to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_channel) {
-        int reduce_dim = transposed ? 0 : 1;
-        scale = std::get<0>(W_f.abs().max(reduce_dim, /*keepdim=*/true)) / fp4_max;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = W_f.abs().max().item<float>();
-        if (amax == 0.f) return W;
-        scale = torch::full({1}, amax / fp4_max, W_f.options());
-    }
-    return apply_fp4_grid(W_f / scale).mul_(scale).to(W.dtype());
-}
-
-at::Tensor maybe_fake_quant(const at::Tensor &W, const std::string &method, bool transposed) {
-    if (!g_quant_active || method.empty() || method == "dummy" || method == "fp16") {
-        return W;
-    }
-    // Calibrated fixed scale: "int8_s<scale>" where <scale> is a pre-computed float value.
-    if (method.rfind("int8_s", 0) == 0) {
-        float scale = std::stof(method.c_str() + 6);
-        auto W_f = W.to(torch::kFloat32);
-        return (W_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(W.dtype());
-    }
-    // MX group-32 — check before substring matches ("mxfp4" contains "fp4", etc.)
-    if (method == "mxint8") return group32_weight(W, transposed, 127.f, apply_int8_grid,    /*po2=*/true);
-    if (method == "mxfp4")  return group32_weight(W, transposed, 6.f,   apply_fp4_grid);
-    if (method == "mxfp6")  return group32_weight(W, transposed, 7.5f,  apply_fp6e2m3_grid);
-    if (method == "mxfp8")  return group32_weight(W, transposed, 448.f, apply_fp8e4m3_grid);
-    bool per_channel = method.find("per_channel") != std::string::npos;
-    if (method.find("fp8")  != std::string::npos) return fake_quant_fp8e4m3(W, per_channel, transposed);
-    if (method.find("fp4")  != std::string::npos) return fake_quant_fp4(W, per_channel, transposed);
-    if (method.find("int4") != std::string::npos) return fake_quant_int4(W, per_channel, transposed);
-    return fake_quant_int8(W, per_channel, transposed);
-}
-
-// ---------------------------------------------------------------------------
-// Fake quantization — activations
-// ---------------------------------------------------------------------------
-
-static at::Tensor fake_quant_int8_act(const at::Tensor &x, bool per_token) {
-    auto orig_shape = x.sizes().vec();
-    auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_token) {
-        scale = std::get<0>(x_f.abs().max(1, /*keepdim=*/true)) / 127.f;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = x_f.abs().max().item<float>();
-        if (amax == 0.f) return x;
-        scale = torch::full({1}, amax / 127.f, x_f.options());
-    }
-    return (x_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).reshape(orig_shape).to(x.dtype());
-}
-
-static at::Tensor fake_quant_int4_act(const at::Tensor &x, bool per_token) {
-    auto orig_shape = x.sizes().vec();
-    auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_token) {
-        scale = std::get<0>(x_f.abs().max(1, /*keepdim=*/true)) / 7.f;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = x_f.abs().max().item<float>();
-        if (amax == 0.f) return x;
-        scale = torch::full({1}, amax / 7.f, x_f.options());
-    }
-    return (x_f / scale).round().clamp_(-8.f, 7.f).mul_(scale).reshape(orig_shape).to(x.dtype());
-}
-
-static at::Tensor fake_quant_fp8e4m3_act(const at::Tensor &x, bool per_token) {
-    static constexpr float fp8_max = 448.f;
-    auto orig_shape = x.sizes().vec();
-    auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_token) {
-        scale = std::get<0>(x_f.abs().max(1, /*keepdim=*/true)) / fp8_max;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = x_f.abs().max().item<float>();
-        if (amax == 0.f) return x;
-        scale = torch::full({1}, amax / fp8_max, x_f.options());
-    }
-    auto x_scaled = (x_f / scale).clamp_(-fp8_max, fp8_max);
-    return x_scaled.to(torch::kFloat8_e4m3fn).to(torch::kFloat32).mul_(scale).reshape(orig_shape).to(x.dtype());
-}
-
-static at::Tensor fake_quant_fp4_act(const at::Tensor &x, bool per_token) {
-    static constexpr float fp4_max = 6.f;
-    auto orig_shape = x.sizes().vec();
-    auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
-    at::Tensor scale;
-    if (per_token) {
-        scale = std::get<0>(x_f.abs().max(1, /*keepdim=*/true)) / fp4_max;
-        scale.clamp_min_(1e-6f);
-    } else {
-        float amax = x_f.abs().max().item<float>();
-        if (amax == 0.f) return x;
-        scale = torch::full({1}, amax / fp4_max, x_f.options());
-    }
-    return apply_fp4_grid(x_f / scale).mul_(scale).reshape(orig_shape).to(x.dtype());
-}
-
-at::Tensor maybe_fake_quant_act(const at::Tensor &x, const std::string &method) {
-    if (!g_quant_active || method.empty() || method == "dummy" || method == "fp16") {
+at::Tensor fake_quant(const at::Tensor &x, const std::string &method, bool transposed) {
+    if (!g_quant_active || method.empty() || method == "dummy" || method == "fp16")
         return x;
-    }
-    // Calibrated fixed scale: "int8_s<scale>" where <scale> is a pre-computed float value.
+
+    const bool is_weight = (x.dim() == 2);
+
+    // Fixed-scale methods: element-wise, no per-row scaling needed.
     if (method.rfind("int8_s", 0) == 0) {
+        // Calibrated fixed scale embedded in method string.
         float scale = std::stof(method.c_str() + 6);
-        auto orig_shape = x.sizes().vec();
-        auto x_f = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
-        return (x_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).reshape(orig_shape).to(x.dtype());
+        auto orig = x.sizes().vec();
+        auto xf = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
+        return (xf / scale).round().clamp_(-128.f, 127.f).mul_(scale).reshape(orig).to(x.dtype());
     }
-    // Fixed-scale variants for activations with known bounded range (e.g. FLSTM hh in [-1,1]).
     if (method == "int8_fixed") {
         constexpr float scale = 1.f / 127.f;
-        auto x_f = x.to(torch::kFloat32);
-        return (x_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(x.dtype());
+        auto xf = x.to(torch::kFloat32);
+        return (xf / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(x.dtype());
     }
     if (method == "int4_fixed") {
         constexpr float scale = 1.f / 7.f;
-        auto x_f = x.to(torch::kFloat32);
-        return (x_f / scale).round().clamp_(-8.f, 7.f).mul_(scale).to(x.dtype());
+        auto xf = x.to(torch::kFloat32);
+        return (xf / scale).round().clamp_(-8.f, 7.f).mul_(scale).to(x.dtype());
     }
     if (method == "fp8_fixed") {
-        // FP8 E4M3 fixed scale: assumes input in [-1, 1], maps to the full e4m3 grid.
+        // Assumes input in [-1, 1]; maps to the full e4m3 grid.
         constexpr float scale = 1.f / 448.f;
-        auto x_f = x.to(torch::kFloat32);
-        return apply_fp8e4m3_grid(x_f / scale).mul_(scale).to(x.dtype());
+        auto xf = x.to(torch::kFloat32);
+        return apply_fp8e4m3_grid(xf / scale).mul_(scale).to(x.dtype());
     }
     if (method == "fp4_fixed") {
-        // FP4 E2M1 fixed scale: assumes input in [-1, 1], maps to [-6, 6] grid.
+        // Assumes input in [-1, 1]; maps to the FP4 E2M1 grid.
         constexpr float scale = 1.f / 6.f;
-        auto x_f = x.to(torch::kFloat32);
-        return apply_fp4_grid(x_f / scale).mul_(scale).to(x.dtype());
+        auto xf = x.to(torch::kFloat32);
+        return apply_fp4_grid(xf / scale).mul_(scale).to(x.dtype());
     }
     if (method == "int8_fixed_4") {
-        // Fixed scale covering ±4σ for approximately unit-variance (post-RMSNorm) activations.
+        // ±4σ fixed scale for unit-variance (post-RMSNorm) activations.
         constexpr float scale = 4.f / 127.f;
-        auto x_f = x.to(torch::kFloat32);
-        return (x_f / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(x.dtype());
+        auto xf = x.to(torch::kFloat32);
+        return (xf / scale).round().clamp_(-128.f, 127.f).mul_(scale).to(x.dtype());
     }
-    // MX group-32 — check before substring matches.
-    if (method == "mxint8") return group32_act(x, 127.f, apply_int8_grid,    /*po2=*/true);
-    if (method == "mxfp4")  return group32_act(x, 6.f,   apply_fp4_grid);
-    if (method == "mxfp6")  return group32_act(x, 7.5f,  apply_fp6e2m3_grid);
-    if (method == "mxfp8")  return group32_act(x, 448.f, apply_fp8e4m3_grid);
-    bool per_token = method.find("per_channel") != std::string::npos;
-    if (method.find("fp8")  != std::string::npos) return fake_quant_fp8e4m3_act(x, per_token);
-    if (method.find("fp4")  != std::string::npos) return fake_quant_fp4_act(x, per_token);
-    if (method.find("int4") != std::string::npos) return fake_quant_int4_act(x, per_token);
-    return fake_quant_int8_act(x, per_token);
+
+    // MX group-32 — check before substring matches ("mxfp4" contains "fp4", etc.)
+    if (method == "mxint8") return is_weight ? group32_weight(x, transposed, 127.f, apply_int8_grid, /*po2=*/true)
+                                             : group32_act(x, 127.f, apply_int8_grid, /*po2=*/true);
+    if (method == "mxfp4")  return is_weight ? group32_weight(x, transposed, 6.f,   apply_fp4_grid)
+                                             : group32_act(x, 6.f,   apply_fp4_grid);
+    if (method == "mxfp6")  return is_weight ? group32_weight(x, transposed, 7.5f,  apply_fp6e2m3_grid)
+                                             : group32_act(x, 7.5f,  apply_fp6e2m3_grid);
+    if (method == "mxfp8")  return is_weight ? group32_weight(x, transposed, 448.f, apply_fp8e4m3_grid)
+                                             : group32_act(x, 448.f, apply_fp8e4m3_grid);
+
+    // Dynamic-scale quantization: normalise to [rows, cols], quantize, restore shape.
+    // Weights: [out, in] or [in, out] when transposed — transpose so output channels are rows.
+    // Activations: [..., T, C] — flatten leading dims so tokens are rows.
+    auto orig_shape = x.sizes().vec();
+    at::Tensor x2d;
+    if (is_weight && transposed) {
+        x2d = x.t().contiguous().to(torch::kFloat32);
+    } else if (is_weight) {
+        x2d = x.to(torch::kFloat32);
+    } else {
+        x2d = x.reshape({-1, x.size(-1)}).to(torch::kFloat32);
+    }
+
+    // "per_channel" in method → per-row scaling (per output-channel for weights, per-token for acts).
+    bool per_row = method.find("per_channel") != std::string::npos;
+    at::Tensor result;
+    if      (method.find("fp8")  != std::string::npos) result = quant_fp8e4m3_2d(x2d, per_row);
+    else if (method.find("fp4")  != std::string::npos) result = quant_fp4_2d(x2d, per_row);
+    else if (method.find("int4") != std::string::npos) result = quant_int4_2d(x2d, per_row);
+    else                                               result = quant_int8_2d(x2d, per_row);
+
+    if (is_weight && transposed) result = result.t().contiguous();
+    return result.reshape(orig_shape).to(x.dtype());
 }
