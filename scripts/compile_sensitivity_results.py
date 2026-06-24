@@ -8,44 +8,35 @@ RESULTS = os.path.join(os.path.dirname(__file__), "results")
 OUT     = os.path.join(os.path.dirname(__file__), "sensitivity_results.tsv")
 
 # (tag, model, phase, scope, weight_scale, act_scale)
+_LSTM_W = [
+    ("pc",    "int8 chnl"), ("pt",    "int8 tens"),
+    ("fp8pc", "fp8 chnl"),  ("fp8pt", "fp8 tens"),
+    ("mxint8","mxint8 g32"),("mxfp4", "mxfp4 g32"),
+    ("mxfp6", "mxfp6 g32"), ("mxfp8", "mxfp8 g32"),
+]
+_LSTM_A = [
+    ("ptoken",    "int8 tok"),   ("fp8ptoken", "fp8 tok"),
+    ("mxint8",    "mxint8 g32"), ("mxfp4",     "mxfp4 g32"),
+    ("mxfp6",     "mxfp6 g32"),  ("mxfp8",     "mxfp8 g32"),
+]
+
 RUNS = [
     # ── FLSTM baselines ───────────────────────────────────────────────────────
-    ("lstm_fp16",           "HAC v6", 0, "all", "fp16", "fp16"),
-    # ── FLSTM Phase 1: weights only ───────────────────────────────────────────
-    ("lstm_hh_w_pc",        "HAC v6", 1, "hh", "int8 chnl", "fp16"),
-    ("lstm_hh_w_pt",        "HAC v6", 1, "hh", "int8 tens",  "fp16"),
-    ("lstm_hh_w_fp8pc",     "HAC v6", 1, "hh", "fp8 chnl",  "fp16"),
-    ("lstm_hh_w_fp8pt",     "HAC v6", 1, "hh", "fp8 tens",   "fp16"),
-    ("lstm_hh_w_mxint8",    "HAC v6", 1, "hh", "mxint8 g32",       "fp16"),
-    ("lstm_hh_w_mxfp4",     "HAC v6", 1, "hh", "mxfp4 g32",        "fp16"),
-    ("lstm_hh_w_mxfp6",     "HAC v6", 1, "hh", "mxfp6 g32",        "fp16"),
-    ("lstm_hh_w_mxfp8",     "HAC v6", 1, "hh", "mxfp8 g32",        "fp16"),
-    ("lstm_ih_w_pc",        "HAC v6", 1, "ih", "int8 chnl", "fp16"),
-    ("lstm_ih_w_pt",        "HAC v6", 1, "ih", "int8 tens",  "fp16"),
-    ("lstm_ih_w_fp8pc",     "HAC v6", 1, "ih", "fp8 chnl",  "fp16"),
-    ("lstm_ih_w_fp8pt",     "HAC v6", 1, "ih", "fp8 tens",   "fp16"),
-    ("lstm_ih_w_mxint8",    "HAC v6", 1, "ih", "mxint8 g32",       "fp16"),
-    ("lstm_ih_w_mxfp4",     "HAC v6", 1, "ih", "mxfp4 g32",        "fp16"),
-    ("lstm_ih_w_mxfp6",     "HAC v6", 1, "ih", "mxfp6 g32",        "fp16"),
-    ("lstm_ih_w_mxfp8",     "HAC v6", 1, "ih", "mxfp8 g32",        "fp16"),
-    # ── FLSTM Phase 2: activations only ───────────────────────────────────────
-    ("lstm_hh_a_ptoken",    "HAC v6", 2, "hh", "fp16", "int8 tok"),
-    ("lstm_hh_a_fixed",     "HAC v6", 2, "hh", "fp16", "int8 fixed (1/127)"),
-    ("lstm_hh_a_fp8fixed",  "HAC v6", 2, "hh", "fp16", "fp8 fixed (1/448)"),
-    ("lstm_hh_a_fp8ptoken", "HAC v6", 2, "hh", "fp16", "fp8 tok"),
-    ("lstm_hh_a_mxint8",    "HAC v6", 2, "hh", "fp16", "mxint8 g32"),
-    ("lstm_hh_a_mxfp4",     "HAC v6", 2, "hh", "fp16", "mxfp4 g32"),
-    ("lstm_hh_a_mxfp6",     "HAC v6", 2, "hh", "fp16", "mxfp6 g32"),
-    ("lstm_hh_a_mxfp8",     "HAC v6", 2, "hh", "fp16", "mxfp8 g32"),
-    ("lstm_ih_a_ptoken",    "HAC v6", 2, "ih", "fp16", "int8 tok"),
-    ("lstm_ih_a_fp8ptoken", "HAC v6", 2, "ih", "fp16", "fp8 tok"),
-    ("lstm_ih_a_mxint8",    "HAC v6", 2, "ih", "fp16", "mxint8 g32"),
-    ("lstm_ih_a_mxfp4",     "HAC v6", 2, "ih", "fp16", "mxfp4 g32"),
-    ("lstm_ih_a_mxfp6",     "HAC v6", 2, "ih", "fp16", "mxfp6 g32"),
-    ("lstm_ih_a_mxfp8",     "HAC v6", 2, "ih", "fp16", "mxfp8 g32"),
+    ("lstm_fp16", "HAC v6", 0, "all", "fp16", "fp16"),
+]
+for _lname in ["dn_ih", "up_ih", "dn_hh", "up_hh"]:
+    for _mtag, _mdesc in _LSTM_W:
+        RUNS.append((f"lstm_{_lname}_w_{_mtag}", "HAC v6", 1, _lname, _mdesc, "fp16"))
+    for _mtag, _mdesc in _LSTM_A:
+        RUNS.append((f"lstm_{_lname}_a_{_mtag}", "HAC v6", 2, _lname, "fp16", _mdesc))
+    if _lname == "dn_hh":
+        RUNS.append((f"lstm_{_lname}_a_fixed",    "HAC v6", 2, _lname, "fp16", "int8 fixed (1/127)"))
+        RUNS.append((f"lstm_{_lname}_a_fp8fixed", "HAC v6", 2, _lname, "fp16", "fp8 fixed (1/448)"))
+
+RUNS.append(
     # ── Transformer baselines ─────────────────────────────────────────────────
     ("tx_fp16", "SUP v5", 0, "all", "fp16", "fp16"),
-]
+)
 
 _TX_W = [
     ("pc",    "int8 chnl"),  ("pt",    "int8 tens"),

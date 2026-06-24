@@ -44,10 +44,10 @@ def calib_act_pt(layers, layer_name, fallback="int8_per_tensor"):
 
 # ── FLSTM helpers ──────────────────────────────────────────────────────────────
 
-def lstm_hh(w_method, a_fn):
+def lstm_layer(suffix, w_method, a_fn):
     cfg = {}
     for i in range(1, 6):
-        k = f"rnns.rnn{i}.hh_fused"
+        k = f"rnns.rnn{i}.{suffix}"
         if w_method:
             cfg[k] = w_method
         a = a_fn(k)
@@ -55,17 +55,10 @@ def lstm_hh(w_method, a_fn):
             cfg[k + ".act"] = a
     return cfg
 
-
-def lstm_ih(w_method, a_fn):
-    cfg = {}
-    for i in range(1, 6):
-        k = f"rnns.rnn{i}.ih_fused"
-        if w_method:
-            cfg[k] = w_method
-        a = a_fn(k)
-        if a:
-            cfg[k + ".act"] = a
-    return cfg
+def lstm_dn_ih(w_method, a_fn): return lstm_layer("dn_ih", w_method, a_fn)
+def lstm_up_ih(w_method, a_fn): return lstm_layer("up_ih", w_method, a_fn)
+def lstm_dn_hh(w_method, a_fn): return lstm_layer("dn_hh", w_method, a_fn)
+def lstm_up_hh(w_method, a_fn): return lstm_layer("up_hh", w_method, a_fn)
 
 
 # ── Transformer helpers ────────────────────────────────────────────────────────
@@ -135,43 +128,36 @@ def main():
     def tx_calib_pt(k):
         return calib_act_pt(tx_layers, k)
 
-    print("\nFLSTM — Phase 1: weights only (act = fp16)")
-    write("lstm_hh_w_pc",    lstm_hh("int8_per_channel", fp16))
-    write("lstm_hh_w_pt",    lstm_hh("int8_per_tensor",  fp16))
-    write("lstm_hh_w_fp8pc", lstm_hh("fp8_per_channel",  fp16))
-    write("lstm_hh_w_fp8pt", lstm_hh("fp8_per_tensor",   fp16))
-    write("lstm_hh_w_mxint8",lstm_hh("mxint8",           fp16))
-    write("lstm_hh_w_mxfp4", lstm_hh("mxfp4",            fp16))
-    write("lstm_hh_w_mxfp6", lstm_hh("mxfp6",            fp16))
-    write("lstm_hh_w_mxfp8", lstm_hh("mxfp8",            fp16))
+    LSTM_LAYERS = [
+        ("dn_ih", lstm_dn_ih),
+        ("up_ih", lstm_up_ih),
+        ("dn_hh", lstm_dn_hh),
+        ("up_hh", lstm_up_hh),
+    ]
 
-    write("lstm_ih_w_pc",    lstm_ih("int8_per_channel", fp16))
-    write("lstm_ih_w_pt",    lstm_ih("int8_per_tensor",  fp16))
-    write("lstm_ih_w_fp8pc", lstm_ih("fp8_per_channel",  fp16))
-    write("lstm_ih_w_fp8pt", lstm_ih("fp8_per_tensor",   fp16))
-    write("lstm_ih_w_mxint8",lstm_ih("mxint8",           fp16))
-    write("lstm_ih_w_mxfp4", lstm_ih("mxfp4",            fp16))
-    write("lstm_ih_w_mxfp6", lstm_ih("mxfp6",            fp16))
-    write("lstm_ih_w_mxfp8", lstm_ih("mxfp8",            fp16))
+    print("\nFLSTM — Phase 1: weights only (act = fp16)")
+    for lname, lfn in LSTM_LAYERS:
+        write(f"lstm_{lname}_w_pc",    lfn("int8_per_channel", fp16))
+        write(f"lstm_{lname}_w_pt",    lfn("int8_per_tensor",  fp16))
+        write(f"lstm_{lname}_w_fp8pc", lfn("fp8_per_channel",  fp16))
+        write(f"lstm_{lname}_w_fp8pt", lfn("fp8_per_tensor",   fp16))
+        write(f"lstm_{lname}_w_mxint8",lfn("mxint8",           fp16))
+        write(f"lstm_{lname}_w_mxfp4", lfn("mxfp4",            fp16))
+        write(f"lstm_{lname}_w_mxfp6", lfn("mxfp6",            fp16))
+        write(f"lstm_{lname}_w_mxfp8", lfn("mxfp8",            fp16))
 
     print("FLSTM — Phase 2: activations only (weight absent = fp16)")
-    write("lstm_hh_a_ptoken",   lstm_hh(None, dyn_pc))
-    write("lstm_hh_a_ptensor",  lstm_hh(None, lstm_calib_pt))
-    write("lstm_hh_a_fixed",    lstm_hh(None, fixed))
-    write("lstm_hh_a_fp8fixed", lstm_hh(None, fp8_fixed))
-    write("lstm_hh_a_fp8ptoken",lstm_hh(None, fp8_pc))
-    write("lstm_hh_a_mxint8",   lstm_hh(None, mxint8))
-    write("lstm_hh_a_mxfp4",    lstm_hh(None, mxfp4))
-    write("lstm_hh_a_mxfp6",    lstm_hh(None, mxfp6))
-    write("lstm_hh_a_mxfp8",    lstm_hh(None, mxfp8))
-
-    write("lstm_ih_a_ptoken",   lstm_ih(None, dyn_pc))
-    write("lstm_ih_a_ptensor",  lstm_ih(None, lstm_calib_pt))
-    write("lstm_ih_a_fp8ptoken",lstm_ih(None, fp8_pc))
-    write("lstm_ih_a_mxint8",   lstm_ih(None, mxint8))
-    write("lstm_ih_a_mxfp4",    lstm_ih(None, mxfp4))
-    write("lstm_ih_a_mxfp6",    lstm_ih(None, mxfp6))
-    write("lstm_ih_a_mxfp8",    lstm_ih(None, mxfp8))
+    for lname, lfn in LSTM_LAYERS:
+        write(f"lstm_{lname}_a_ptoken",    lfn(None, dyn_pc))
+        write(f"lstm_{lname}_a_ptensor",   lfn(None, lstm_calib_pt))
+        write(f"lstm_{lname}_a_fp8ptoken", lfn(None, fp8_pc))
+        write(f"lstm_{lname}_a_mxint8",    lfn(None, mxint8))
+        write(f"lstm_{lname}_a_mxfp4",     lfn(None, mxfp4))
+        write(f"lstm_{lname}_a_mxfp6",     lfn(None, mxfp6))
+        write(f"lstm_{lname}_a_mxfp8",     lfn(None, mxfp8))
+        if lname == "dn_hh":
+            write(f"lstm_{lname}_a_fixed",    lfn(None, fixed))
+            write(f"lstm_{lname}_a_fp8fixed", lfn(None, fp8_fixed))
 
     print("Transformer — Phase 1: weights only (one layer type at a time)")
     for lname, lsuffix in TX_LAYERS:
