@@ -16,7 +16,7 @@ def write(tag, cfg):
 # Each FLSTM layer has 4 quantizable weight matrices:
 #   dn_ih: down-projection for input x  [K, C]
 #   up_ih: up-projection for input x    [4*C, K]
-#   dn_hh: down-projection for hidden h [K, C]
+#   dn_hh: down-projection for hidden h [K, C]   — activation is hh[t] ∈ [-1,1]
 #   up_hh: up-projection for hidden h   [4*C, K]
 
 def lstm_layer(suffix, w_method, a_method=None):
@@ -35,24 +35,37 @@ def lstm_dn_hh(w_method, a_method=None): return lstm_layer("dn_hh", w_method, a_
 def lstm_up_hh(w_method, a_method=None): return lstm_layer("up_hh", w_method, a_method)
 
 # ── Transformer helpers ────────────────────────────────────────────────────────
+# Each TX encoder layer has 4 quantizable weight matrices:
+#   wqkv:  self_attn.wqkv       — activation is post-RMSNorm, use int8_fixed_4
+#   op:    self_attn.out_proj
+#   fc1:   ff.fc1               — activation is post-RMSNorm, use int8_fixed_4
+#   fc2:   ff.fc2               — activation is post-SiLU, not bounded
 
-def tx_all(w_method, a_method=None, fc2_a_method=None):
-    """wqkv + fc1 + fc2. fc2_a_method overrides fc2 activation independently."""
+TX_SCOPE_KEYS = {
+    "wqkv": "self_attn.wqkv",
+    "op":   "self_attn.out_proj",
+    "fc1":  "ff.fc1",
+    "fc2":  "ff.fc2",
+}
+
+def tx_layer(scope, w_method, a_method=None):
+    full = TX_SCOPE_KEYS[scope]
     cfg = {}
     for i in range(18):
-        for key in [f"transformer_encoder.{i}.self_attn.wqkv",
-                    f"transformer_encoder.{i}.ff.fc1",
-                    f"transformer_encoder.{i}.ff.fc2"]:
-            if w_method:
-                cfg[key] = w_method
-            act = a_method
-            if fc2_a_method is not None and key.endswith(".fc2"):
-                act = fc2_a_method
-            if act:
-                cfg[key + ".act"] = act
+        k = f"transformer_encoder.{i}.{full}"
+        if w_method:
+            cfg[k] = w_method
+        if a_method:
+            cfg[k + ".act"] = a_method
     return cfg
 
+def tx_wqkv(w_method, a_method=None): return tx_layer("wqkv", w_method, a_method)
+def tx_op  (w_method, a_method=None): return tx_layer("op",   w_method, a_method)
+def tx_fc1 (w_method, a_method=None): return tx_layer("fc1",  w_method, a_method)
+def tx_fc2 (w_method, a_method=None): return tx_layer("fc2",  w_method, a_method)
+
 # ──────────────────────────────────────────────────────────────────────────────
+
 print("FLSTM — Phase 1: weights only (act = fp16)")
 for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
                     ("dn_hh", lstm_dn_hh), ("up_hh", lstm_up_hh)]:
@@ -67,19 +80,22 @@ for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
     write(f"lstm_{lname}_a_ptoken",    lfn(None, "int8_per_channel"))
     write(f"lstm_{lname}_a_fp8ptoken", lfn(None, "fp8_per_channel"))
     if lname == "dn_hh":
-        write(f"lstm_{lname}_a_fixed", lfn(None, "int8_fixed"))  # hh[t] ∈ [-1,1]
+        write("lstm_dn_hh_a_fixed",    lfn(None, "int8_fixed"))   # hh[t] ∈ [-1,1], scale=1/127
+        write("lstm_dn_hh_a_fp8fixed", lfn(None, "fp8_fixed"))    # hh[t] ∈ [-1,1], scale=1/448
 
 print("Transformer — Phase 1: weights only (act = fp16)")
-write("tx_w_pc",    tx_all("int8_per_channel", "fp16"))
-write("tx_w_pt",    tx_all("int8_per_tensor",  "fp16"))
-write("tx_w_fp8pc", tx_all("fp8_per_channel",  "fp16"))
-write("tx_w_fp8pt", tx_all("fp8_per_tensor",   "fp16"))
+for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
+    write(f"tx_{lname}_w_pc",    lfn("int8_per_channel", "fp16"))
+    write(f"tx_{lname}_w_pt",    lfn("int8_per_tensor",  "fp16"))
+    write(f"tx_{lname}_w_fp8pc", lfn("fp8_per_channel",  "fp16"))
+    write(f"tx_{lname}_w_fp8pt", lfn("fp8_per_tensor",   "fp16"))
 
-print("Transformer — Phase 2: activations only (weight key absent = fp16)")
-write("tx_a_ptoken",    tx_all(None, "int8_per_channel"))
-write("tx_a_fp8ptoken", tx_all(None, "fp8_per_channel"))
-# fc2 input is post-SiLU (not post-RMSNorm) so keep it dynamic
-write("tx_a_fixed",     tx_all(None, "int8_fixed_4", fc2_a_method="int8_per_channel"))
+print("Transformer — Phase 2: activations only")
+for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
+    write(f"tx_{lname}_a_ptoken",    lfn(None, "int8_per_channel"))
+    write(f"tx_{lname}_a_fp8ptoken", lfn(None, "fp8_per_channel"))
+    if lname in ("wqkv", "fc1"):
+        write(f"tx_{lname}_a_fixed", lfn(None, "int8_fixed_4"))   # post-RMSNorm, scale=4/127
 
 print("FLSTM — Phase 1 MX: weights only (OCP group-32 microscaling)")
 for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
@@ -98,15 +114,17 @@ for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
     write(f"lstm_{lname}_a_mxfp8",  lfn(None, "mxfp8"))
 
 print("Transformer — Phase 1 MX: weights only")
-write("tx_w_mxint8", tx_all("mxint8", "fp16"))
-write("tx_w_mxfp4",  tx_all("mxfp4",  "fp16"))
-write("tx_w_mxfp6", tx_all("mxfp6", "fp16"))
-write("tx_w_mxfp8", tx_all("mxfp8", "fp16"))
+for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
+    write(f"tx_{lname}_w_mxint8", lfn("mxint8", "fp16"))
+    write(f"tx_{lname}_w_mxfp4",  lfn("mxfp4",  "fp16"))
+    write(f"tx_{lname}_w_mxfp6",  lfn("mxfp6",  "fp16"))
+    write(f"tx_{lname}_w_mxfp8",  lfn("mxfp8",  "fp16"))
 
 print("Transformer — Phase 2 MX: activations only")
-write("tx_a_mxint8", tx_all(None, "mxint8"))
-write("tx_a_mxfp4",  tx_all(None, "mxfp4"))
-write("tx_a_mxfp6", tx_all(None, "mxfp6"))
-write("tx_a_mxfp8", tx_all(None, "mxfp8"))
+for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
+    write(f"tx_{lname}_a_mxint8", lfn(None, "mxint8"))
+    write(f"tx_{lname}_a_mxfp4",  lfn(None, "mxfp4"))
+    write(f"tx_{lname}_a_mxfp6",  lfn(None, "mxfp6"))
+    write(f"tx_{lname}_a_mxfp8",  lfn(None, "mxfp8"))
 
 print("Done.")

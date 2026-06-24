@@ -12,17 +12,26 @@ RESULTS=scripts/results
 REF=/data/bonwon/slorado/test/slorado_test_ext_dat/genome/hg38noAlt.fa
 NTHREADS=${NTHREADS:-8}
 MINIMAP2=${MINIMAP2:-minimap2}
+NOTIFY_EMAIL=$1
+
+notify() {
+    local subject=$1
+    { echo "Host: $(hostname)"; echo "Log: $(pwd)/$RESULTS/sensitivity.log"; echo; cat "$RESULTS/sensitivity.log" 2>/dev/null; } \
+        | mail -s "$subject" "$NOTIFY_EMAIL" 2>/dev/null || true
+}
 
 mkdir -p "$RESULTS"
 exec > >(tee "$RESULTS/sensitivity.log") 2>&1
 
+trap 'notify "slorado sensitivity FAILED on $(hostname)"' ERR
+
 BLOW5=${BLOW5:-test/PGXXXX230339/reads_1k.blow5}
-GPU_BATCH=${GPU_BATCH:-256}
+GPU_BATCH=${GPU_BATCH:-128}
 MODEL_LSTM=models/dna_r10.4.1_e8.2_400bps_hac@v6.0.0
 MODEL_TX=models/dna_r10.4.1_e8.2_400bps_sup@v5.0.0
 
 # Generate quant configs if not already present.
-if [[ ! -f /tmp/qc_lstm_hh_w_pc.json ]]; then
+if [[ ! -f /tmp/qc_lstm_dn_ih_w_pc.json ]]; then
     echo "=== Generating configs ==="
     python3 scripts/gen_configs.py
     echo ""
@@ -44,13 +53,13 @@ run_one() {
             --flash=yes \
             --quant-config "$qc" \
             --sensitivity "$sens_tmp" \
-            -C $GPU_BATCH -o "$tmp" "$model" "$reads" 2>/dev/null
+            -C $GPU_BATCH -o "$tmp" "$model" "$reads"
         read -r n_batches kl_mean kl_max < <(awk 'NR==2 {print $2, $3, $4}' "$sens_tmp")
         rm -f "$sens_tmp"
         echo "  [gpu$gpu] $tag: kl_mean=$kl_mean  kl_max=$kl_max"
     else
         CUDA_VISIBLE_DEVICES=$gpu ./slorado basecaller \
-            --flash=yes -C $GPU_BATCH -o "$tmp" "$model" "$reads" 2>/dev/null
+            --flash=yes -C $GPU_BATCH -o "$tmp" "$model" "$reads"
     fi
 
     # KL summary: one row per config
@@ -218,3 +227,5 @@ run_batch \
 echo ""
 echo "Done. Results in $RESULTS/"
 ls "$RESULTS"/*.tsv "$RESULTS"/*_id.tsv 2>/dev/null | sort -u
+
+notify "slorado sensitivity complete on $(hostname)"

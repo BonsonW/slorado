@@ -64,7 +64,7 @@ std::unordered_map<std::string, std::string> load_quant_config(const std::string
     std::ifstream f(path);
     if (!f.is_open()) {
         fprintf(stderr, "[quant] error: cannot open quant config %s\n", path.c_str());
-        return {};
+        exit(EXIT_FAILURE);
     }
     std::ostringstream ss;
     ss << f.rdbuf();
