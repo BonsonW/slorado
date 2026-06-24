@@ -3,6 +3,7 @@
 #include "CRFModel.h"
 #include "calib.h"
 #include "error.h"
+#include "quant.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
 
@@ -49,10 +50,9 @@ struct GatedMLPImpl : torch::nn::Module {
     int hidden_features;
     torch::nn::Linear fc1{nullptr}, fc2{nullptr};
 
-    calib_stats_t *calib_stats_ = nullptr;
+    tx_stats_t *stats_ = nullptr;
+    std::string prefix_;
     calib_layer_t *cl_fc1_ = nullptr, *cl_fc2_ = nullptr;
-    std::string qm_fc1_, qm_fc2_;
-    std::string qm_fc1_act_, qm_fc2_act_;
 };
 
 TORCH_MODULE(GatedMLP);
@@ -63,7 +63,7 @@ struct RotaryEmbeddingImpl : torch::nn::Module {
         float theta_,
         int max_seq_len_,
         const torch::TensorOptions &options_,
-        int nthreads_
+        tx_stats_t *stats
     );
 
     torch::Tensor forward(torch::Tensor &qkv);
@@ -75,7 +75,7 @@ struct RotaryEmbeddingImpl : torch::nn::Module {
     const int64_t dim, max_seq_len;
     const float theta;
     const torch::TensorOptions options;
-    const int nthreads;
+    tx_stats_t *stats_ = nullptr;
 };
 
 TORCH_MODULE(RotaryEmbedding);
@@ -100,19 +100,13 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
         const std::pair<int, int> &attn_window_,
         const torch::TensorOptions &options_,
         tx_stats_t *_model_stats,
-        bool use_flash_,
-        int nthreads
+        int layer_idx = -1
     );
 
     torch::Tensor forward(torch::Tensor x);
-    void set_calib(const std::string &name_prefix, calib_stats_t *calib);
-    void set_quant_methods(const std::string &name_prefix,
-                           const std::unordered_map<std::string, std::string> &cfg);
 
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;
-
-    bool use_flash;
 
     const int d_model, nhead, head_dim, num_splits;
     const std::pair<int, int> attn_window;
@@ -126,16 +120,14 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 
     tx_stats_t *model_stats;
 
-    calib_stats_t *calib_stats_ = nullptr;
+    std::string attn_prefix_;
     calib_layer_t *cl_wqkv_ = nullptr, *cl_out_proj_ = nullptr;
-    std::string qm_wqkv_, qm_out_proj_;
-    std::string qm_wqkv_act_;
 };
 
 TORCH_MODULE(MultiHeadAttention);
 
 struct TxEncoderImpl : torch::nn::Module {
-    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads, int layer_idx = -1);
+    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, int layer_idx = -1);
 
     torch::Tensor forward(torch::Tensor x);
 
@@ -148,17 +140,15 @@ struct TxEncoderImpl : torch::nn::Module {
     RMSNorm norm1{nullptr}, norm2{nullptr};
 
     tx_stats_t *model_stats;
-    int device_idx;
 };
 
 TORCH_MODULE(TxEncoder);
 
 struct TxEncoderStackImpl : torch::nn::Module {
-    TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads);
+    TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
     torch::Tensor forward(const torch::Tensor &x);
     
-    bool use_i8{false};
     torch::nn::Sequential stack{nullptr};
     std::vector<TxEncoder> layer_vec;
 };
@@ -189,7 +179,7 @@ struct LinearScaledCRFImpl : torch::nn::Module {
 TORCH_MODULE(LinearScaledCRF);
 
 struct TxModelImpl : torch::nn::Module {
-    explicit TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash, int nthreads);
+    explicit TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats);
 
     void load_state_dict(const std::vector<torch::Tensor> &weights) {
         module_load_state_dict(*this, weights);
@@ -205,10 +195,6 @@ struct TxModelImpl : torch::nn::Module {
     tx_stats_t *model_stats;
 
     const torch::TensorOptions m_options;
-
-    calib_stats_t *calib_stats_ = nullptr;
-    calib_layer_t *cl_upsample_ = nullptr, *cl_crf_ = nullptr;
-    std::string qm_upsample_, qm_crf_;
 };
 
 TORCH_MODULE(TxModel);

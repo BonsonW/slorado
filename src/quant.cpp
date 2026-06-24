@@ -7,6 +7,22 @@
 
 thread_local bool g_quant_active = true;
 
+void build_quant_methods(std::unordered_map<std::string, layer_quant_t> &out,
+                         const std::unordered_map<std::string, std::string> &cfg) {
+    out.reserve(cfg.size());
+    for (const auto &kv : cfg) {
+        const auto &key = kv.first;
+        if (key.size() > 4 && key.compare(key.size() - 4, 4, ".act") == 0) {
+            out[key.substr(0, key.size() - 4)].act = kv.second;
+        } else {
+            out[key].weight = kv.second;
+        }
+    }
+    for (auto &kv : out) {
+        if (kv.second.act.empty()) kv.second.act = kv.second.weight;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Minimal JSON parser — extract top-level string-to-string key/value pairs.
 // Handles the simple format produced by Python's json.dump():

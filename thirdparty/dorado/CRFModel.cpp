@@ -51,16 +51,9 @@ LinearCRFImpl::LinearCRFImpl(int insize, int outsize, bool bias_, bool tanh_and_
     }
 };
 
-void LinearCRFImpl::set_calib(const std::string &name, calib_stats_t *calib) {
-    calib_stats_ = calib;
-    calib_layer_ = calib->register_layer(name, linear->weight);
-}
-
 torch::Tensor LinearCRFImpl::forward(const torch::Tensor &x) {
     // Input x is [N, T, C], contiguity optional
-    if (calib_layer_) calib_stats_->accumulate(calib_layer_, x);
-    auto W = fake_quant(linear->weight, qm_);
-    auto scores = at::linear(fake_quant(x, qm_), W, linear->bias);
+    auto scores = at::linear(x, linear->weight, linear->bias);
     if (activation) {
         scores = activation(scores) * scale;
     }
@@ -117,19 +110,6 @@ void FLSTMLayerImpl::fuse_weights() {
         cl_hh_fused_ = calib_stats_->register_layer(calib_prefix_ + ".hh_fused", W_hh_fused_.t().contiguous());
     }
 
-    // Look up quant methods for the fused matrices.
-    if (model_stats_->quant_config) {
-        const auto &cfg = *model_stats_->quant_config;
-        auto it = cfg.find(calib_prefix_ + ".ih_fused");
-        if (it != cfg.end()) qm_ih_fused_ = it->second;
-        it = cfg.find(calib_prefix_ + ".hh_fused");
-        if (it != cfg.end()) qm_hh_fused_ = it->second;
-        // Optional .act suffix overrides activation granularity independently from weight.
-        it = cfg.find(calib_prefix_ + ".ih_fused.act");
-        qm_ih_fused_act_ = (it != cfg.end()) ? it->second : qm_ih_fused_;
-        it = cfg.find(calib_prefix_ + ".hh_fused.act");
-        qm_hh_fused_act_ = (it != cfg.end()) ? it->second : qm_hh_fused_;
-    }
 }
 
 torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
@@ -145,8 +125,19 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     auto x_flat = x.view({T * N, x.size(2)});
     // x is (T, N, C); transpose to (N, T, C) for standard (..., T, C) layout.
     if (cl_ih_fused_) calib_stats_->accumulate(cl_ih_fused_, x.transpose(0, 1));
-    auto W_ih = fake_quant(W_ih_fused_, qm_ih_fused_, /*transposed=*/true);
-    auto ih = torch::addmm(up_bias_ih_, fake_quant(x_flat, qm_ih_fused_act_), W_ih).view({T, N, 4 * C_});
+    static const layer_quant_t k_empty_lq;
+    auto lq = [&](const char *suffix) -> const layer_quant_t& {
+        if (!calib_prefix_.empty() && !model_stats_->quant_methods.empty()) {
+            auto it = model_stats_->quant_methods.find(calib_prefix_ + suffix);
+            if (it != model_stats_->quant_methods.end()) return it->second;
+        }
+        return k_empty_lq;
+    };
+    const auto &lq_ih = lq(".ih_fused");
+    const auto &lq_hh = lq(".hh_fused");
+
+    auto W_ih = fake_quant(W_ih_fused_, lq_ih.weight, /*transposed=*/true);
+    auto ih = torch::addmm(up_bias_ih_, fake_quant(x_flat, lq_ih.act), W_ih).view({T, N, 4 * C_});
     if (on_gpu) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats_->time_flstm_precompute += b - a;
@@ -157,11 +148,11 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     auto scratch = torch::empty({N, 4 * C_}, x.options());
 
     a = realtime();
-    auto W_hh = fake_quant(W_hh_fused_, qm_hh_fused_, /*transposed=*/true);
+    auto W_hh = fake_quant(W_hh_fused_, lq_hh.weight, /*transposed=*/true);
     for (int t = 0; t < T; ++t) {
         // One addmm per step: scratch = up_bias_hh_ + hh[t] @ W_hh_fused_
         // a = realtime();
-        torch::addmm_out(scratch, up_bias_hh_, fake_quant(hh[t], qm_hh_fused_act_), W_hh);
+        torch::addmm_out(scratch, up_bias_hh_, fake_quant(hh[t], lq_hh.act), W_hh);
         // if (on_gpu) torch::cuda::synchronize(x.device().index());
         // b = realtime();
         // model_stats_->time_flstm_linear2 += b - a;
@@ -261,17 +252,8 @@ CRFModelImpl::CRFModelImpl(const CRFModelConfig &config, lstm_stats_t *model_sta
     }
 
     if (model_stats && model_stats->calib_stats) {
-        linear1->set_calib("linear1", model_stats->calib_stats);
-        if (linear2) linear2->set_calib("linear2", model_stats->calib_stats);
-    }
-    if (model_stats && model_stats->quant_config) {
-        const auto &cfg = *model_stats->quant_config;
-        auto it = cfg.find("linear1");
-        if (it != cfg.end()) linear1->set_quant_method(it->second);
-        if (linear2) {
-            it = cfg.find("linear2");
-            if (it != cfg.end()) linear2->set_quant_method(it->second);
-        }
+        cl_linear1_ = model_stats->calib_stats->register_layer("linear1", linear1->linear->weight);
+        if (linear2) cl_linear2_ = model_stats->calib_stats->register_layer("linear2", linear2->linear->weight);
     }
 }
 
@@ -307,6 +289,7 @@ torch::Tensor CRFModelImpl::forward(const torch::Tensor &x) {
     model_stats_->time_rnns += b - a;
 
     a = realtime();
+    if (cl_linear1_) model_stats_->calib_stats->accumulate(cl_linear1_, h);
     h = linear1->forward(h);
     if (on_gpu) torch::cuda::synchronize(x.device().index());
     b = realtime();
@@ -314,6 +297,7 @@ torch::Tensor CRFModelImpl::forward(const torch::Tensor &x) {
 
     if (linear2) {
         a = realtime();
+        if (cl_linear2_) model_stats_->calib_stats->accumulate(cl_linear2_, h);
         h = linear2->forward(h);
         if (on_gpu) torch::cuda::synchronize(x.device().index());
         b = realtime();
@@ -381,6 +365,9 @@ std::vector<torch::Tensor> load_lstm_model_weights(const CRFModelConfig &config)
 }
 
 ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, lstm_stats_t *model_stats) {
+    if (model_stats && model_stats->quant_config) {
+        build_quant_methods(model_stats->quant_methods, *model_stats->quant_config);
+    }
     auto model = CRFModel(model_config, model_stats);
     auto state_dict = load_lstm_model_weights(model_config);
     model->load_state_dict(state_dict);

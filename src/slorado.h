@@ -42,9 +42,11 @@ SOFTWARE.
 #include <string>
 
 #include "dorado/model_config.h"
+#include "quant.h"
 
-// Forward declaration — full definition in calib.h (requires torch headers).
+// Forward declarations — full definitions in calib.h (requires torch headers).
 struct calib_stats_t;
+struct calib_layer_t;
 struct sensitivity_stats_t;
 
 #define SLORADO_VERSION "0.5.0-beta"
@@ -168,6 +170,7 @@ typedef struct {
 
     calib_stats_t *calib_stats = nullptr;
     const std::unordered_map<std::string, std::string> *quant_config = nullptr;
+    std::unordered_map<std::string, layer_quant_t> quant_methods;
 } lstm_stats_t;
 
 typedef struct {
@@ -188,6 +191,9 @@ typedef struct {
 
     calib_stats_t *calib_stats = nullptr;
     const std::unordered_map<std::string, std::string> *quant_config = nullptr;
+    std::unordered_map<std::string, layer_quant_t> quant_methods;
+    bool use_flash = false;
+    int nthreads = 1;
 } tx_stats_t;
 
 /* time stamps */

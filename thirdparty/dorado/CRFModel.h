@@ -8,6 +8,7 @@
 #include "model_config.h"
 #include "tensor_chunk_utils.h"
 #include "calib.h"
+#include "quant.h"
 
 using namespace torch::nn;
 
@@ -30,17 +31,11 @@ struct ConvStackImpl : torch::nn::Module {
 struct LinearCRFImpl : torch::nn::Module {
     LinearCRFImpl(int insize, int outsize, bool bias_, bool tanh_and_scale);
     torch::Tensor forward(const torch::Tensor &x);
-    void set_calib(const std::string &name, calib_stats_t *calib);
-    void set_quant_method(const std::string &method) { qm_ = method; }
 
     bool bias;
     static constexpr int scale = 5;
     torch::nn::Linear linear{nullptr};
     torch::nn::Tanh activation{nullptr};
-
-    calib_stats_t *calib_stats_ = nullptr;
-    calib_layer_t *calib_layer_ = nullptr;
-    std::string qm_;
 };
 
 struct LSTMStackImpl : torch::nn::Module {
@@ -69,9 +64,6 @@ private:
     calib_stats_t *calib_stats_ = nullptr;
     std::string calib_prefix_;
     calib_layer_t *cl_ih_fused_ = nullptr, *cl_hh_fused_ = nullptr;
-    // quantization methods (empty = fp16 pass-through)
-    std::string qm_ih_fused_, qm_hh_fused_;         // weight quant
-    std::string qm_ih_fused_act_, qm_hh_fused_act_; // activation quant (falls back to weight method if not set)
 };
 
 struct FLSTMStackImpl : torch::nn::Module {
@@ -107,6 +99,7 @@ struct CRFModelImpl : torch::nn::Module {
     LinearCRF linear1{nullptr}, linear2{nullptr};
     Clamp clamp1{nullptr};
     lstm_stats_t *model_stats_;
+    calib_layer_t *cl_linear1_ = nullptr, *cl_linear2_ = nullptr;
 };
 
 TORCH_MODULE(CRFModel);
