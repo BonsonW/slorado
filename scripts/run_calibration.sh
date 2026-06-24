@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 MODEL_LSTM=models/dna_r10.4.1_e8.2_400bps_hac@v6.0.0
 READS_LSTM=test/PGXXXX230339/reads_1k.blow5
 MODEL_TX=models/dna_r10.4.1_e8.2_400bps_sup@v5.0.0
-READS_TX=/data/slow5-testdata/hg2_prom_lsk114_subsubsample/reads.blow5
+READS_TX=test/PGXXXX230339/reads_1k.blow5
 
 RESULTS=scripts/results
 mkdir -p "$RESULTS"

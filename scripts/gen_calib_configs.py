@@ -74,6 +74,7 @@ def tx_all(w_method, a_fn, fc2_a=None):
     cfg = {}
     for i in range(18):
         for key in [f"transformer_encoder.{i}.self_attn.wqkv",
+                    f"transformer_encoder.{i}.self_attn.out_proj",
                     f"transformer_encoder.{i}.ff.fc1",
                     f"transformer_encoder.{i}.ff.fc2"]:
             if w_method:
@@ -109,11 +110,18 @@ def main():
     else:
         print("No TX calibration  — per-tensor activation configs will use dynamic scale")
 
-    fp16  = lambda _: "fp16"
-    dyn_pc = lambda _: "int8_per_channel"
-    dyn_pt = lambda _: "int8_per_tensor"
-    fixed  = lambda _: "int8_fixed"
-    fixed4 = lambda _: "int8_fixed_4"
+    fp16      = lambda _: "fp16"
+    dyn_pc    = lambda _: "int8_per_channel"
+    dyn_pt    = lambda _: "int8_per_tensor"
+    fixed     = lambda _: "int8_fixed"
+    fp8_fixed = lambda _: "fp8_fixed"
+    fixed4    = lambda _: "int8_fixed_4"
+    fp8_pc    = lambda _: "fp8_per_channel"
+    fp8_pt    = lambda _: "fp8_per_tensor"
+    mxint8    = lambda _: "mxint8"
+    mxfp4     = lambda _: "mxfp4"
+    mxfp6     = lambda _: "mxfp6"
+    mxfp8     = lambda _: "mxfp8"
 
     def lstm_calib_pt(k):
         return calib_act_pt(lstm_layers, k)
@@ -122,27 +130,63 @@ def main():
         return calib_act_pt(tx_layers, k)
 
     print("\nFLSTM — Phase 1: weights only (act = fp16)")
-    write("lstm_hh_w_pc", lstm_hh("int8_per_channel", fp16))
-    write("lstm_hh_w_pt", lstm_hh("int8_per_tensor",  fp16))
-    write("lstm_ih_w_pc", lstm_ih("int8_per_channel", fp16))
-    write("lstm_ih_w_pt", lstm_ih("int8_per_tensor",  fp16))
+    write("lstm_hh_w_pc",    lstm_hh("int8_per_channel", fp16))
+    write("lstm_hh_w_pt",    lstm_hh("int8_per_tensor",  fp16))
+    write("lstm_hh_w_fp8pc", lstm_hh("fp8_per_channel",  fp16))
+    write("lstm_hh_w_fp8pt", lstm_hh("fp8_per_tensor",   fp16))
+    write("lstm_hh_w_mxint8",lstm_hh("mxint8",           fp16))
+    write("lstm_hh_w_mxfp4", lstm_hh("mxfp4",            fp16))
+    write("lstm_hh_w_mxfp6", lstm_hh("mxfp6",            fp16))
+    write("lstm_hh_w_mxfp8", lstm_hh("mxfp8",            fp16))
+
+    write("lstm_ih_w_pc",    lstm_ih("int8_per_channel", fp16))
+    write("lstm_ih_w_pt",    lstm_ih("int8_per_tensor",  fp16))
+    write("lstm_ih_w_fp8pc", lstm_ih("fp8_per_channel",  fp16))
+    write("lstm_ih_w_fp8pt", lstm_ih("fp8_per_tensor",   fp16))
+    write("lstm_ih_w_mxint8",lstm_ih("mxint8",           fp16))
+    write("lstm_ih_w_mxfp4", lstm_ih("mxfp4",            fp16))
+    write("lstm_ih_w_mxfp6", lstm_ih("mxfp6",            fp16))
+    write("lstm_ih_w_mxfp8", lstm_ih("mxfp8",            fp16))
 
     print("FLSTM — Phase 2: activations only (weight absent = fp16)")
-    write("lstm_hh_a_ptoken",  lstm_hh(None, dyn_pc))
-    write("lstm_hh_a_ptensor", lstm_hh(None, lstm_calib_pt))
-    write("lstm_hh_a_fixed",   lstm_hh(None, fixed))
-    write("lstm_ih_a_ptoken",  lstm_ih(None, dyn_pc))
-    write("lstm_ih_a_ptensor", lstm_ih(None, lstm_calib_pt))
+    write("lstm_hh_a_ptoken",   lstm_hh(None, dyn_pc))
+    write("lstm_hh_a_ptensor",  lstm_hh(None, lstm_calib_pt))
+    write("lstm_hh_a_fixed",    lstm_hh(None, fixed))
+    write("lstm_hh_a_fp8fixed", lstm_hh(None, fp8_fixed))
+    write("lstm_hh_a_fp8ptoken",lstm_hh(None, fp8_pc))
+    write("lstm_hh_a_mxint8",   lstm_hh(None, mxint8))
+    write("lstm_hh_a_mxfp4",    lstm_hh(None, mxfp4))
+    write("lstm_hh_a_mxfp6",    lstm_hh(None, mxfp6))
+    write("lstm_hh_a_mxfp8",    lstm_hh(None, mxfp8))
+
+    write("lstm_ih_a_ptoken",   lstm_ih(None, dyn_pc))
+    write("lstm_ih_a_ptensor",  lstm_ih(None, lstm_calib_pt))
+    write("lstm_ih_a_fp8ptoken",lstm_ih(None, fp8_pc))
+    write("lstm_ih_a_mxint8",   lstm_ih(None, mxint8))
+    write("lstm_ih_a_mxfp4",    lstm_ih(None, mxfp4))
+    write("lstm_ih_a_mxfp6",    lstm_ih(None, mxfp6))
+    write("lstm_ih_a_mxfp8",    lstm_ih(None, mxfp8))
 
     print("Transformer — Phase 1: weights only (act = fp16)")
-    write("tx_w_pc", tx_all("int8_per_channel", fp16))
-    write("tx_w_pt", tx_all("int8_per_tensor",  fp16))
+    write("tx_w_pc",    tx_all("int8_per_channel", fp16))
+    write("tx_w_pt",    tx_all("int8_per_tensor",  fp16))
+    write("tx_w_fp8pc", tx_all("fp8_per_channel",  fp16))
+    write("tx_w_fp8pt", tx_all("fp8_per_tensor",   fp16))
+    write("tx_w_mxint8",tx_all("mxint8",           fp16))
+    write("tx_w_mxfp4", tx_all("mxfp4",            fp16))
+    write("tx_w_mxfp6", tx_all("mxfp6",            fp16))
+    write("tx_w_mxfp8", tx_all("mxfp8",            fp16))
 
     print("Transformer — Phase 2: activations only (weight absent = fp16)")
-    write("tx_a_ptoken",  tx_all(None, dyn_pc))
-    write("tx_a_ptensor", tx_all(None, tx_calib_pt))
+    write("tx_a_ptoken",   tx_all(None, dyn_pc))
+    write("tx_a_ptensor",  tx_all(None, tx_calib_pt))
     # fc2 input is post-SiLU (not post-RMSNorm), keep dynamic
-    write("tx_a_fixed",   tx_all(None, fixed4, fc2_a="int8_per_channel"))
+    write("tx_a_fixed",    tx_all(None, fixed4, fc2_a="int8_per_channel"))
+    write("tx_a_fp8ptoken",tx_all(None, fp8_pc))
+    write("tx_a_mxint8",   tx_all(None, mxint8))
+    write("tx_a_mxfp4",    tx_all(None, mxfp4))
+    write("tx_a_mxfp6",    tx_all(None, mxfp6))
+    write("tx_a_mxfp8",    tx_all(None, mxfp8))
 
     print("Done.")
 

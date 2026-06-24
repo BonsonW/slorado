@@ -348,6 +348,12 @@ at::Tensor maybe_fake_quant_act(const at::Tensor &x, const std::string &method) 
         auto x_f = x.to(torch::kFloat32);
         return (x_f / scale).round().clamp_(-8.f, 7.f).mul_(scale).to(x.dtype());
     }
+    if (method == "fp8_fixed") {
+        // FP8 E4M3 fixed scale: assumes input in [-1, 1], maps to the full e4m3 grid.
+        constexpr float scale = 1.f / 448.f;
+        auto x_f = x.to(torch::kFloat32);
+        return apply_fp8e4m3_grid(x_f / scale).mul_(scale).to(x.dtype());
+    }
     if (method == "fp4_fixed") {
         // FP4 E2M1 fixed scale: assumes input in [-1, 1], maps to [-6, 6] grid.
         constexpr float scale = 1.f / 6.f;
