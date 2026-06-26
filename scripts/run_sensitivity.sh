@@ -146,7 +146,7 @@ run_batch \
 run_batch \
     0 tx_wqkv_a_fixed  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_fixed.json \
     1 tx_op_a_ptoken   $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_ptoken.json \
-    2 tx_op_a_fp8ptoken$MODEL_TX $BLOW5 /tmp/qc_tx_op_a_fp8ptoken.json \
+    2 tx_op_a_fp8ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_fp8ptoken.json \
     3 tx_fc1_a_ptoken  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_ptoken.json
 
 run_batch \
