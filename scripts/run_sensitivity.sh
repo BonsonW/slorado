@@ -31,7 +31,7 @@ MODEL_LSTM=models/dna_r10.4.1_e8.2_400bps_hac@v6.0.0
 MODEL_TX=models/dna_r10.4.1_e8.2_400bps_sup@v5.0.0
 
 # Generate quant configs if not already present.
-if [[ ! -f /tmp/qc_lstm_dn_ih_w_pc.json ]]; then
+if [[ ! -f /tmp/qc_lstm_dn_ih_mxfp8.json ]]; then
     echo "=== Generating configs ==="
     python3 scripts/gen_configs.py
     echo ""
@@ -40,9 +40,13 @@ fi
 # ── run_one: sensitivity + identity → combined <tag>.tsv ──────────────────────
 run_one() {
     local gpu=$1 tag=$2 model=$3 reads=$4 qc=$5
-    local kl_out="$RESULTS/${tag}.tsv"
-    local id_out="$RESULTS/${tag}_id.tsv"
+    local subdir="$RESULTS/$(basename "$model")"
+    mkdir -p "$subdir"
+    local kl_out="$subdir/${tag}.tsv"
+    local id_out="$subdir/${tag}_id.tsv"
     local n_batches="NA" kl_mean="NA" kl_max="NA"
+
+    [[ -f "$kl_out" ]] && echo "  [gpu$gpu] $tag: already done, skipping" && return 0
 
     local tmp; tmp=$(mktemp /tmp/identity_XXXXXX.fastq)
 
@@ -97,132 +101,92 @@ echo ""
 echo "=== Phase 1: weights only ==="
 for lname in dn_ih up_ih dn_hh up_hh; do
 run_batch \
-    0 lstm_${lname}_w_pc    $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_pc.json \
-    1 lstm_${lname}_w_pt    $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_pt.json \
-    2 lstm_${lname}_w_fp8pc $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_fp8pc.json \
-    3 lstm_${lname}_w_fp8pt $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_fp8pt.json
+    0 lstm_${lname}_w_pc     $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_pc.json \
+    1 lstm_${lname}_w_pt     $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_pt.json \
+    2 lstm_${lname}_w_fp8pc  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_fp8pc.json \
+    3 lstm_${lname}_w_fp8pt  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_fp8pt.json
+run_batch \
+    0 lstm_${lname}_w_int4pc $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_int4pc.json \
+    1 lstm_${lname}_w_int4pt $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_int4pt.json
 done
 
+for lname in wqkv op fc1 fc2; do
 run_batch \
-    0 tx_wqkv_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_pc.json \
-    1 tx_wqkv_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_pt.json \
-    2 tx_wqkv_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_fp8pc.json \
-    3 tx_wqkv_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_fp8pt.json
-
+    0 tx_${lname}_w_pc     $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_w_pc.json \
+    1 tx_${lname}_w_pt     $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_w_pt.json \
+    2 tx_${lname}_w_fp8pc  $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_w_fp8pc.json \
+    3 tx_${lname}_w_fp8pt  $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_w_fp8pt.json
 run_batch \
-    0 tx_op_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_pc.json \
-    1 tx_op_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_pt.json \
-    2 tx_op_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_fp8pc.json \
-    3 tx_op_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_fp8pt.json
-
-run_batch \
-    0 tx_fc1_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_pc.json \
-    1 tx_fc1_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_pt.json \
-    2 tx_fc1_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_fp8pc.json \
-    3 tx_fc1_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_fp8pt.json
-
-run_batch \
-    0 tx_fc2_w_pc    $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_pc.json \
-    1 tx_fc2_w_pt    $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_pt.json \
-    2 tx_fc2_w_fp8pc $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_fp8pc.json \
-    3 tx_fc2_w_fp8pt $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_fp8pt.json
+    0 tx_${lname}_w_int4pc $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_w_int4pc.json \
+    1 tx_${lname}_w_int4pt $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_w_int4pt.json
+done
 
 echo ""
 echo "=== Phase 2: activations only ==="
 for lname in dn_ih up_ih up_hh; do
 run_batch \
-    0 lstm_${lname}_a_ptoken    $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_ptoken.json \
-    1 lstm_${lname}_a_fp8ptoken $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_fp8ptoken.json \
-    2 tx_wqkv_a_ptoken    $MODEL_TX   $BLOW5 /tmp/qc_tx_wqkv_a_ptoken.json \
-    3 tx_wqkv_a_fp8ptoken $MODEL_TX   $BLOW5 /tmp/qc_tx_wqkv_a_fp8ptoken.json
+    0 lstm_${lname}_a_ptoken     $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_ptoken.json \
+    1 lstm_${lname}_a_fp8ptoken  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_fp8ptoken.json \
+    2 lstm_${lname}_a_int4ptoken $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_int4ptoken.json \
+    3 tx_wqkv_a_ptoken           $MODEL_TX   $BLOW5 /tmp/qc_tx_wqkv_a_ptoken.json
 done
+run_batch \
+    0 tx_wqkv_a_fp8ptoken  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_fp8ptoken.json \
+    1 tx_wqkv_a_int4ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_int4ptoken.json \
+    2 tx_wqkv_a_fixed      $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_fixed.json
+
 # dn_hh activations are hidden states hh[t] ∈ [-1,1] — also test fixed scale
 run_batch \
-    0 lstm_dn_hh_a_ptoken    $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_ptoken.json \
-    1 lstm_dn_hh_a_fp8ptoken $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fp8ptoken.json \
-    2 lstm_dn_hh_a_fixed     $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fixed.json \
-    3 lstm_dn_hh_a_fp8fixed  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fp8fixed.json
-
+    0 lstm_dn_hh_a_ptoken     $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_ptoken.json \
+    1 lstm_dn_hh_a_fp8ptoken  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fp8ptoken.json \
+    2 lstm_dn_hh_a_int4ptoken $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_int4ptoken.json \
+    3 lstm_dn_hh_a_fixed      $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fixed.json
 run_batch \
-    0 tx_wqkv_a_fixed  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_fixed.json \
-    1 tx_op_a_ptoken   $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_ptoken.json \
-    2 tx_op_a_fp8ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_fp8ptoken.json \
-    3 tx_fc1_a_ptoken  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_ptoken.json
+    0 lstm_dn_hh_a_fp8fixed   $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fp8fixed.json
 
+for lname in op fc1 fc2; do
 run_batch \
-    0 tx_fc1_a_fp8ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_fp8ptoken.json \
-    1 tx_fc1_a_fixed     $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_fixed.json \
-    2 tx_fc2_a_ptoken    $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_ptoken.json \
-    3 tx_fc2_a_fp8ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_fp8ptoken.json
+    0 tx_${lname}_a_ptoken     $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_a_ptoken.json \
+    1 tx_${lname}_a_fp8ptoken  $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_a_fp8ptoken.json \
+    2 tx_${lname}_a_int4ptoken $MODEL_TX $BLOW5 /tmp/qc_tx_${lname}_a_int4ptoken.json
+done
+run_batch \
+    0 tx_fc1_a_fixed $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_fixed.json
 
 
 echo ""
-echo "=== Phase 1 MX: weights only (OCP group-32 microscaling) ==="
+echo "=== MX: weights + activations (matched pairs, OCP group-32 microscaling) ==="
 for lname in dn_ih up_ih dn_hh up_hh; do
 run_batch \
-    0 lstm_${lname}_w_mxint8 $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_mxint8.json \
-    1 lstm_${lname}_w_mxfp4  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_mxfp4.json \
-    2 lstm_${lname}_w_mxfp6  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_mxfp6.json \
-    3 lstm_${lname}_w_mxfp8  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_w_mxfp8.json
+    0 lstm_${lname}_mxint8 $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_mxint8.json \
+    1 lstm_${lname}_mxfp4  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_mxfp4.json \
+    2 lstm_${lname}_mxfp6  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_mxfp6.json \
+    3 lstm_${lname}_mxfp8  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_mxfp8.json
 done
 
 run_batch \
-    0 tx_wqkv_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxint8.json \
-    1 tx_wqkv_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxfp4.json \
-    2 tx_wqkv_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxfp6.json \
-    3 tx_wqkv_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_w_mxfp8.json
+    0 tx_wqkv_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_mxint8.json \
+    1 tx_wqkv_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_mxfp4.json \
+    2 tx_wqkv_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_mxfp6.json \
+    3 tx_wqkv_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_mxfp8.json
 
 run_batch \
-    0 tx_op_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxint8.json \
-    1 tx_op_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxfp4.json \
-    2 tx_op_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxfp6.json \
-    3 tx_op_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_op_w_mxfp8.json
+    0 tx_op_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_op_mxint8.json \
+    1 tx_op_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_op_mxfp4.json \
+    2 tx_op_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_op_mxfp6.json \
+    3 tx_op_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_op_mxfp8.json
 
 run_batch \
-    0 tx_fc1_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxint8.json \
-    1 tx_fc1_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxfp4.json \
-    2 tx_fc1_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxfp6.json \
-    3 tx_fc1_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_w_mxfp8.json
+    0 tx_fc1_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_mxint8.json \
+    1 tx_fc1_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_mxfp4.json \
+    2 tx_fc1_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_mxfp6.json \
+    3 tx_fc1_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_mxfp8.json
 
 run_batch \
-    0 tx_fc2_w_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxint8.json \
-    1 tx_fc2_w_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxfp4.json \
-    2 tx_fc2_w_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxfp6.json \
-    3 tx_fc2_w_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_w_mxfp8.json
-
-echo ""
-echo "=== Phase 2 MX: activations only (OCP group-32 microscaling) ==="
-for lname in dn_ih up_ih dn_hh up_hh; do
-run_batch \
-    0 lstm_${lname}_a_mxint8 $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_mxint8.json \
-    1 lstm_${lname}_a_mxfp4  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_mxfp4.json \
-    2 lstm_${lname}_a_mxfp6  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_mxfp6.json \
-    3 lstm_${lname}_a_mxfp8  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_${lname}_a_mxfp8.json
-done
-
-run_batch \
-    0 tx_wqkv_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxint8.json \
-    1 tx_wqkv_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxfp4.json \
-    2 tx_wqkv_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxfp6.json \
-    3 tx_wqkv_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_wqkv_a_mxfp8.json
-
-run_batch \
-    0 tx_op_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxint8.json \
-    1 tx_op_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxfp4.json \
-    2 tx_op_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxfp6.json \
-    3 tx_op_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_op_a_mxfp8.json
-
-run_batch \
-    0 tx_fc1_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxint8.json \
-    1 tx_fc1_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxfp4.json \
-    2 tx_fc1_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxfp6.json \
-    3 tx_fc1_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc1_a_mxfp8.json
-
-run_batch \
-    0 tx_fc2_a_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxint8.json \
-    1 tx_fc2_a_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxfp4.json \
-    2 tx_fc2_a_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxfp6.json \
-    3 tx_fc2_a_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_a_mxfp8.json
+    0 tx_fc2_mxint8 $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_mxint8.json \
+    1 tx_fc2_mxfp4  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_mxfp4.json \
+    2 tx_fc2_mxfp6  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_mxfp6.json \
+    3 tx_fc2_mxfp8  $MODEL_TX $BLOW5 /tmp/qc_tx_fc2_mxfp8.json
 
 echo ""
 echo "Done. Results in $RESULTS/"

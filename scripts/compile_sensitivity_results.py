@@ -9,15 +9,17 @@ OUT     = os.path.join(os.path.dirname(__file__), "sensitivity_results.tsv")
 
 # (tag, model, phase, scope, weight_scale, act_scale)
 _LSTM_W = [
-    ("pc",    "int8 chnl"), ("pt",    "int8 tens"),
-    ("fp8pc", "fp8 chnl"),  ("fp8pt", "fp8 tens"),
-    ("mxint8","mxint8 g32"),("mxfp4", "mxfp4 g32"),
-    ("mxfp6", "mxfp6 g32"), ("mxfp8", "mxfp8 g32"),
+    ("pc",     "int8 chnl"), ("pt",     "int8 tens"),
+    ("fp8pc",  "fp8 chnl"),  ("fp8pt",  "fp8 tens"),
+    ("int4pc", "int4 chnl"), ("int4pt", "int4 tens"),
 ]
 _LSTM_A = [
-    ("ptoken",    "int8 tok"),   ("fp8ptoken", "fp8 tok"),
-    ("mxint8",    "mxint8 g32"), ("mxfp4",     "mxfp4 g32"),
-    ("mxfp6",     "mxfp6 g32"),  ("mxfp8",     "mxfp8 g32"),
+    ("ptoken",     "int8 tok"), ("fp8ptoken",  "fp8 tok"),
+    ("int4ptoken", "int4 tok"),
+]
+_MX = [
+    ("mxint8", "mxint8 g32"), ("mxfp4", "mxfp4 g32"),
+    ("mxfp6",  "mxfp6 g32"),  ("mxfp8", "mxfp8 g32"),
 ]
 
 RUNS = [
@@ -32,6 +34,8 @@ for _lname in ["dn_ih", "up_ih", "dn_hh", "up_hh"]:
     if _lname == "dn_hh":
         RUNS.append((f"lstm_{_lname}_a_fixed",    "HAC v6", 2, _lname, "fp16", "int8 fixed (1/127)"))
         RUNS.append((f"lstm_{_lname}_a_fp8fixed", "HAC v6", 2, _lname, "fp16", "fp8 fixed (1/448)"))
+    for _mtag, _mdesc in _MX:
+        RUNS.append((f"lstm_{_lname}_{_mtag}", "HAC v6", 3, _lname, _mdesc, _mdesc))
 
 RUNS.append(
     # ── Transformer baselines ─────────────────────────────────────────────────
@@ -39,15 +43,13 @@ RUNS.append(
 )
 
 _TX_W = [
-    ("pc",    "int8 chnl"),  ("pt",    "int8 tens"),
-    ("fp8pc", "fp8 chnl"),   ("fp8pt", "fp8 tens"),
-    ("mxint8","mxint8 g32"), ("mxfp4", "mxfp4 g32"),
-    ("mxfp6", "mxfp6 g32"),  ("mxfp8", "mxfp8 g32"),
+    ("pc",     "int8 chnl"), ("pt",     "int8 tens"),
+    ("fp8pc",  "fp8 chnl"),  ("fp8pt",  "fp8 tens"),
+    ("int4pc", "int4 chnl"), ("int4pt", "int4 tens"),
 ]
 _TX_A = [
-    ("ptoken",    "int8 tok"),   ("fp8ptoken", "fp8 tok"),
-    ("mxint8",    "mxint8 g32"), ("mxfp4",     "mxfp4 g32"),
-    ("mxfp6",     "mxfp6 g32"),  ("mxfp8",     "mxfp8 g32"),
+    ("ptoken",     "int8 tok"), ("fp8ptoken",  "fp8 tok"),
+    ("int4ptoken", "int4 tok"),
 ]
 for _lname in ["wqkv", "op", "fc1", "fc2"]:
     for _mtag, _mdesc in _TX_W:
@@ -56,10 +58,20 @@ for _lname in ["wqkv", "op", "fc1", "fc2"]:
         RUNS.append((f"tx_{_lname}_a_{_mtag}", "SUP v5", 2, _lname, "fp16", _mdesc))
     if _lname in ("wqkv", "fc1"):
         RUNS.append((f"tx_{_lname}_a_fixed", "SUP v5", 2, _lname, "fp16", "int8 fixed_4 (4/127)"))
+    for _mtag, _mdesc in _MX:
+        RUNS.append((f"tx_{_lname}_{_mtag}", "SUP v5", 3, _lname, _mdesc, _mdesc))
+
+
+MODEL_LSTM = "dna_r10.4.1_e8.2_400bps_hac@v6.0.0"
+MODEL_TX   = "dna_r10.4.1_e8.2_400bps_sup@v5.0.0"
+
+def result_dir(tag):
+    model = MODEL_LSTM if tag.startswith("lstm_") else MODEL_TX
+    return os.path.join(RESULTS, model)
 
 
 def load_kl(tag):
-    path = os.path.join(RESULTS, f"{tag}.tsv")
+    path = os.path.join(result_dir(tag), f"{tag}.tsv")
     try:
         with open(path) as f:
             f.readline()  # header
@@ -74,7 +86,7 @@ def load_kl(tag):
 
 
 def load_id(tag):
-    path = os.path.join(RESULTS, f"{tag}_id.tsv")
+    path = os.path.join(result_dir(tag), f"{tag}_id.tsv")
     try:
         with open(path) as f:
             scores = [float(l) for l in f if l.strip()]

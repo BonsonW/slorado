@@ -73,58 +73,49 @@ for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
     write(f"lstm_{lname}_w_pt",    lfn("int8_per_tensor",  "fp16"))
     write(f"lstm_{lname}_w_fp8pc", lfn("fp8_per_channel",  "fp16"))
     write(f"lstm_{lname}_w_fp8pt", lfn("fp8_per_tensor",   "fp16"))
+    write(f"lstm_{lname}_w_int4pc", lfn("int4_per_channel", "fp16"))
+    write(f"lstm_{lname}_w_int4pt", lfn("int4_per_tensor",  "fp16"))
 
 print("FLSTM — Phase 2: activations only (weight key absent = fp16)")
 for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
                     ("dn_hh", lstm_dn_hh), ("up_hh", lstm_up_hh)]:
-    write(f"lstm_{lname}_a_ptoken",    lfn(None, "int8_per_channel"))
-    write(f"lstm_{lname}_a_fp8ptoken", lfn(None, "fp8_per_channel"))
+    write(f"lstm_{lname}_a_ptoken",     lfn(None, "int8_per_channel"))
+    write(f"lstm_{lname}_a_fp8ptoken",  lfn(None, "fp8_per_channel"))
+    write(f"lstm_{lname}_a_int4ptoken", lfn(None, "int4_per_channel"))
     if lname == "dn_hh":
         write("lstm_dn_hh_a_fixed",    lfn(None, "int8_fixed"))   # hh[t] ∈ [-1,1], scale=1/127
         write("lstm_dn_hh_a_fp8fixed", lfn(None, "fp8_fixed"))    # hh[t] ∈ [-1,1], scale=1/448
 
 print("Transformer — Phase 1: weights only (act = fp16)")
 for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
-    write(f"tx_{lname}_w_pc",    lfn("int8_per_channel", "fp16"))
-    write(f"tx_{lname}_w_pt",    lfn("int8_per_tensor",  "fp16"))
-    write(f"tx_{lname}_w_fp8pc", lfn("fp8_per_channel",  "fp16"))
-    write(f"tx_{lname}_w_fp8pt", lfn("fp8_per_tensor",   "fp16"))
+    write(f"tx_{lname}_w_pc",     lfn("int8_per_channel", "fp16"))
+    write(f"tx_{lname}_w_pt",     lfn("int8_per_tensor",  "fp16"))
+    write(f"tx_{lname}_w_fp8pc",  lfn("fp8_per_channel",  "fp16"))
+    write(f"tx_{lname}_w_fp8pt",  lfn("fp8_per_tensor",   "fp16"))
+    write(f"tx_{lname}_w_int4pc", lfn("int4_per_channel", "fp16"))
+    write(f"tx_{lname}_w_int4pt", lfn("int4_per_tensor",  "fp16"))
 
 print("Transformer — Phase 2: activations only")
 for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
-    write(f"tx_{lname}_a_ptoken",    lfn(None, "int8_per_channel"))
-    write(f"tx_{lname}_a_fp8ptoken", lfn(None, "fp8_per_channel"))
+    write(f"tx_{lname}_a_ptoken",     lfn(None, "int8_per_channel"))
+    write(f"tx_{lname}_a_fp8ptoken",  lfn(None, "fp8_per_channel"))
+    write(f"tx_{lname}_a_int4ptoken", lfn(None, "int4_per_channel"))
     if lname in ("wqkv", "fc1"):
         write(f"tx_{lname}_a_fixed", lfn(None, "int8_fixed_4"))   # post-RMSNorm, scale=4/127
 
-print("FLSTM — Phase 1 MX: weights only (OCP group-32 microscaling)")
+print("FLSTM — MX: weights + activations (matched pairs, OCP group-32 microscaling)")
 for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
                     ("dn_hh", lstm_dn_hh), ("up_hh", lstm_up_hh)]:
-    write(f"lstm_{lname}_w_mxint8", lfn("mxint8", "fp16"))
-    write(f"lstm_{lname}_w_mxfp4",  lfn("mxfp4",  "fp16"))
-    write(f"lstm_{lname}_w_mxfp6",  lfn("mxfp6",  "fp16"))
-    write(f"lstm_{lname}_w_mxfp8",  lfn("mxfp8",  "fp16"))
+    write(f"lstm_{lname}_mxint8", lfn("mxint8", "mxint8"))
+    write(f"lstm_{lname}_mxfp4",  lfn("mxfp4",  "mxfp4"))
+    write(f"lstm_{lname}_mxfp6",  lfn("mxfp6",  "mxfp6"))
+    write(f"lstm_{lname}_mxfp8",  lfn("mxfp8",  "mxfp8"))
 
-print("FLSTM — Phase 2 MX: activations only")
-for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
-                    ("dn_hh", lstm_dn_hh), ("up_hh", lstm_up_hh)]:
-    write(f"lstm_{lname}_a_mxint8", lfn(None, "mxint8"))
-    write(f"lstm_{lname}_a_mxfp4",  lfn(None, "mxfp4"))
-    write(f"lstm_{lname}_a_mxfp6",  lfn(None, "mxfp6"))
-    write(f"lstm_{lname}_a_mxfp8",  lfn(None, "mxfp8"))
-
-print("Transformer — Phase 1 MX: weights only")
+print("Transformer — MX: weights + activations (matched pairs)")
 for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
-    write(f"tx_{lname}_w_mxint8", lfn("mxint8", "fp16"))
-    write(f"tx_{lname}_w_mxfp4",  lfn("mxfp4",  "fp16"))
-    write(f"tx_{lname}_w_mxfp6",  lfn("mxfp6",  "fp16"))
-    write(f"tx_{lname}_w_mxfp8",  lfn("mxfp8",  "fp16"))
-
-print("Transformer — Phase 2 MX: activations only")
-for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
-    write(f"tx_{lname}_a_mxint8", lfn(None, "mxint8"))
-    write(f"tx_{lname}_a_mxfp4",  lfn(None, "mxfp4"))
-    write(f"tx_{lname}_a_mxfp6",  lfn(None, "mxfp6"))
-    write(f"tx_{lname}_a_mxfp8",  lfn(None, "mxfp8"))
+    write(f"tx_{lname}_mxint8", lfn("mxint8", "mxint8"))
+    write(f"tx_{lname}_mxfp4",  lfn("mxfp4",  "mxfp4"))
+    write(f"tx_{lname}_mxfp6",  lfn("mxfp6",  "mxfp6"))
+    write(f"tx_{lname}_mxfp8",  lfn("mxfp8",  "mxfp8"))
 
 print("Done.")
