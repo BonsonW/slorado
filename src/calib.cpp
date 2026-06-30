@@ -42,21 +42,20 @@ void calib_stats_t::accumulate(calib_layer_t *layer, const at::Tensor &input) {
     layer->x_min = std::min(layer->x_min, x.min().item<float>());
     layer->x_max = std::max(layer->x_max, x.max().item<float>());
 
-    // Per-token max and min: reduce over the feature dim (last) → (..., T).
-    // Then max/min over all batch/leading dims → (T,), one value per sequence position.
-    // Only copy the compact (T,) result to CPU, not the full activation tensor.
+    // Per-token amax: reduce over feature dim → (..., T), then collapse batch/leading dims.
+    // We track the mean amax per position (sum / n_batches) rather than the running max,
+    // which would inflate quiet positions toward the global worst-case over many batches.
     auto tok_max = std::get<0>(x.max(-1));                                       // (..., T) on device
     auto tok_min = std::get<0>(x.min(-1));                                       // (..., T) on device
     int64_t T = tok_max.size(-1);
-    auto pos_max = std::get<0>(tok_max.reshape({-1, T}).max(0)).cpu();           // (T,) on CPU
-    auto pos_min = std::get<0>(tok_min.reshape({-1, T}).min(0)).cpu();           // (T,) on CPU
+    auto pos_max  = std::get<0>(tok_max.reshape({-1, T}).max(0));                // (T,) on device
+    auto pos_min  = std::get<0>(tok_min.reshape({-1, T}).min(0));                // (T,) on device
+    auto pos_amax = torch::maximum(pos_max.abs(), pos_min.abs()).cpu();          // (T,) on CPU
 
-    if (!layer->x_per_token_max.defined()) {
-        layer->x_per_token_max = pos_max;
-        layer->x_per_token_min = pos_min;
-    } else if (pos_max.size(0) == layer->x_per_token_max.size(0)) {
-        layer->x_per_token_max = torch::maximum(layer->x_per_token_max, pos_max);
-        layer->x_per_token_min = torch::minimum(layer->x_per_token_min, pos_min);
+    if (!layer->x_per_token_amax_sum.defined()) {
+        layer->x_per_token_amax_sum = pos_amax;
+    } else if (pos_amax.size(0) == layer->x_per_token_amax_sum.size(0)) {
+        layer->x_per_token_amax_sum += pos_amax;
     }
 
     layer->n_batches++;
@@ -88,7 +87,7 @@ void calib_stats_t::save_json(const std::string &path) const {
 
         int64_t out_f = L->out_features;
         int64_t in_f  = L->in_features;
-        int64_t seq_len = L->x_per_token_max.defined() ? L->x_per_token_max.size(0) : 0;
+        int64_t seq_len = L->x_per_token_amax_sum.defined() ? L->x_per_token_amax_sum.size(0) : 0;
         fprintf(fp, "      \"out_features\": %ld,\n", (long)out_f);
         fprintf(fp, "      \"in_features\": %ld,\n", (long)in_f);
         fprintf(fp, "      \"seq_len\": %ld,\n", (long)seq_len);
@@ -119,15 +118,16 @@ void calib_stats_t::save_json(const std::string &path) const {
             float x_amax = std::max(std::abs(L->x_max), std::abs(L->x_min));
             fprintf(fp, "\n        \"per_tensor_range\": %.6g,\n", L->x_max - L->x_min);
             fprintf(fp, "        \"per_tensor_amax\": %.6g", x_amax);
-            if (L->x_per_token_max.defined()) {
-                auto tok_amax  = torch::maximum(L->x_per_token_max.abs(), L->x_per_token_min.abs());
-                auto tok_pcts  = torch::quantile(tok_amax.to(torch::kFloat32),
-                                                 torch::tensor({0.25f, 0.50f, 0.75f, 0.99f}));
+            if (L->x_per_token_amax_sum.defined()) {
+                // Divide cumulative sum by batch count to get mean amax per token position.
+                auto tok_mean_amax = L->x_per_token_amax_sum / (float)L->n_batches;
+                auto tok_pcts = torch::quantile(tok_mean_amax.to(torch::kFloat32),
+                                                torch::tensor({0.25f, 0.50f, 0.75f, 0.99f}));
                 fprintf(fp, ",\n        \"per_token_amax\": {"
                             "\"p25\": %.6g, \"p50\": %.6g, \"p75\": %.6g, \"p99\": %.6g, \"max\": %.6g}",
                         tok_pcts[0].item<float>(), tok_pcts[1].item<float>(),
                         tok_pcts[2].item<float>(), tok_pcts[3].item<float>(),
-                        tok_amax.max().item<float>());
+                        tok_mean_amax.max().item<float>());
             }
             fprintf(fp, "\n      ");
         }

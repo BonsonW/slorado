@@ -19,8 +19,7 @@ struct calib_layer_t {
     // Input activation stats — accumulated across forward calls.
     // Input is expected in (..., T, C) layout so that the sequence dim is second-to-last.
     float x_min =  1e38f, x_max = -1e38f;
-    at::Tensor x_per_token_max;     // CPU float32, shape (T,) — running max per seq position
-    at::Tensor x_per_token_min;     // CPU float32, shape (T,) — running min per seq position
+    at::Tensor x_per_token_amax_sum; // CPU float32, shape (T,) — sum of per-batch per-token amax
     int64_t n_batches = 0;
 };
 
