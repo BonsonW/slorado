@@ -9,6 +9,7 @@ One figure per model, one subplot per scope. Bars grouped by phase
 """
 
 import argparse
+import json
 import os
 import numpy as np
 import pandas as pd
@@ -21,6 +22,8 @@ args = parser.parse_args()
 
 TSV = os.path.join(os.path.dirname(__file__), "sensitivity_results.tsv")
 OUT = os.path.dirname(__file__)
+
+LAYER_NAMES = json.load(open(os.path.join(os.path.dirname(__file__), "layer_names.json")))
 
 # ── Data loading ───────────────────────────────────────────────────────────────
 df_raw = pd.read_csv(TSV, sep="\t")
@@ -176,7 +179,7 @@ for model_name, scopes in [("HAC v6", ["dn_ih", "up_ih", "dn_hh", "up_hh"]),
 
     for i, (ax, scope) in enumerate(zip(axes, scopes)):
         draw_scope(ax, mdf[mdf["scope"] == scope], show_ylabel=(i == 0))
-        ax.set_title(scope, fontsize=11, fontweight="bold", pad=20)
+        ax.set_title(LAYER_NAMES.get(scope, scope), fontsize=11, fontweight="bold", pad=20)
 
     # Color legend (format)
     color_patches = [mpatches.Patch(color=FORMAT_COLORS[k], label=k)

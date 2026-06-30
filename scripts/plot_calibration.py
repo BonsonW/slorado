@@ -22,6 +22,8 @@ import matplotlib.lines as mlines
 RESULTS = os.path.join(os.path.dirname(__file__), "results")
 OUT     = os.path.dirname(__file__)
 
+LAYER_NAMES = json.load(open(os.path.join(os.path.dirname(__file__), "layer_names.json")))
+
 ACT_COLOR  = "#2980b9"   # blue   — activations
 WT_COLOR   = "#e67e22"   # orange — weights
 TOK_COLOR  = "#27ae60"   # green  — token uniformity
@@ -108,7 +110,7 @@ def draw_acts(ax, scope_data, scope_name):
     ax.set_ylim(bottom=0)
     ax.set_ylabel("act amax", fontsize=8, color=ACT_COLOR)
     ax.tick_params(axis="y", labelcolor=ACT_COLOR, labelsize=7)
-    ax.set_title(scope_name, fontsize=10, fontweight="bold")
+    ax.set_title(LAYER_NAMES.get(scope_name, scope_name), fontsize=10, fontweight="bold")
     ax.set_xlabel("layer", fontsize=8)
     ax.set_xticks(xs)
     ax.set_xticklabels(idxs, rotation=90, fontsize=7)
@@ -138,7 +140,7 @@ def draw_weights(ax, scope_data, scope_name):
     ax.set_ylim(bottom=0)
     ax.set_ylabel("wt amax", fontsize=8, color=WT_COLOR)
     ax.tick_params(axis="y", labelcolor=WT_COLOR, labelsize=7)
-    ax.set_title(scope_name, fontsize=10, fontweight="bold")
+    ax.set_title(LAYER_NAMES.get(scope_name, scope_name), fontsize=10, fontweight="bold")
     ax.set_xlabel("layer", fontsize=8)
     ax.set_xticks(xs)
     ax.set_xticklabels(idxs, rotation=90, fontsize=7)

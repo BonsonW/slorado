@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import pandas as pd
 import numpy as np
@@ -21,6 +22,8 @@ args = parser.parse_args()
 
 TSV = os.path.join(os.path.dirname(__file__), "sensitivity_results.tsv")
 OUT = os.path.dirname(__file__)
+
+LAYER_NAMES = json.load(open(os.path.join(os.path.dirname(__file__), "layer_names.json")))
 
 # ── Load ───────────────────────────────────────────────────────────────────────
 
@@ -117,6 +120,9 @@ def draw_panel(ax, sub, phase, scopes, col_order, col_labels, title, vmin, vmax)
         cbar_label = "Identity drop vs fp16 (pp)" if use_drop else "Mean identity"
         fmt_fn     = (lambda v: f"{v:+.2f}pp") if use_drop else (lambda v: f"{v:.4f}")
         annot      = color_data.map(lambda v: fmt_fn(v) if pd.notna(v) else "")
+
+    color_data.index = [LAYER_NAMES.get(s, s) for s in color_data.index]
+    annot.index      = color_data.index
 
     annot_size = 8 if args.metric == "identity" else 7
     sns.heatmap(color_data, ax=ax, cmap=cmap, annot=annot, fmt="",
