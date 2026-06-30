@@ -163,11 +163,11 @@ def draw_weights(ax, scope_data, scope_name):
 def make_figures(data, scopes, model_label, out_prefix, figsize_acts, figsize_wts):
     act_legend = [
         mlines.Line2D([], [], color=ACT_COLOR, lw=0, marker="D", ms=6, label="act amax (left)"),
-        mlines.Line2D([], [], color=TOK_COLOR, lw=0, marker="o", ms=6, label="token uniformity p50/amax (right, band=IQR)"),
+        mlines.Line2D([], [], color=TOK_COLOR, lw=0, marker="o", ms=6, label="token uniformity p50/amax (right, band=p25-p75)"),
     ]
     wt_legend = [
         mlines.Line2D([], [], color=WT_COLOR,  lw=0, marker="s", ms=6, label="wt amax (left)"),
-        mlines.Line2D([], [], color=CH_COLOR,  lw=0, marker="^", ms=6, label="channel uniformity p50/amax (right, band=IQR)"),
+        mlines.Line2D([], [], color=CH_COLOR,  lw=0, marker="^", ms=6, label="channel uniformity p50/amax (right, band=p25-p75)"),
     ]
 
     # activation figure

@@ -64,7 +64,7 @@ def scale_color(s):
 # Method draw order per phase (most → least aggressive bit-width)
 W_SEQ  = ["int4 tens", "int4 chnl", "int8 tens", "int8 chnl", "fp8 tens", "fp8 chnl"]
 A_SEQ  = ["int4 tok", "int8 tok", "fp8 tok",
-           "int8 fixed (1/127)", "fp8 fixed (1/448)", "int8 fixed_4 (4/127)"]
+           "int4 fixed (1/7)", "int8 fixed (1/127)", "fp8 fixed (1/448)", "int8 fixed_4 (4/127)"]
 MX_SEQ = ["mxfp4 g32", "mxfp6 g32", "mxint8 g32", "mxfp8 g32"]
 
 SHORT = {
@@ -72,6 +72,7 @@ SHORT = {
     "int8 tens": "int8\ntens", "int8 chnl": "int8\nchnl",
     "fp8 tens":  "fp8\ntens",  "fp8 chnl":  "fp8\nchnl",
     "int4 tok":  "int4\ntok",  "int8 tok":  "int8\ntok",  "fp8 tok":  "fp8\ntok",
+    "int4 fixed (1/7)":     "int4\nfixed",
     "int8 fixed (1/127)":   "int8\nfixed",
     "fp8 fixed (1/448)":    "fp8\nfixed",
     "int8 fixed_4 (4/127)": "int8\nfix4",

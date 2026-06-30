@@ -155,7 +155,7 @@ def main():
         write(f"lstm_{lname}_a_mxfp4",     lfn(None, mxfp4))
         write(f"lstm_{lname}_a_mxfp6",     lfn(None, mxfp6))
         write(f"lstm_{lname}_a_mxfp8",     lfn(None, mxfp8))
-        if lname == "dn_hh":
+        if lname in ("dn_hh", "dn_ih"):
             write(f"lstm_{lname}_a_fixed",    lfn(None, fixed))
             write(f"lstm_{lname}_a_fp8fixed", lfn(None, fp8_fixed))
 

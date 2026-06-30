@@ -142,7 +142,14 @@ run_batch \
     2 lstm_dn_hh_a_int4ptoken $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_int4ptoken.json \
     3 lstm_dn_hh_a_fixed      $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fixed.json
 run_batch \
-    0 lstm_dn_hh_a_fp8fixed   $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fp8fixed.json
+    0 lstm_dn_hh_a_fp8fixed   $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_fp8fixed.json \
+    1 lstm_dn_hh_a_int4fixed  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_hh_a_int4fixed.json
+
+# dn_ih activations are also bounded ≈ [-1,1] — test fixed scale
+run_batch \
+    0 lstm_dn_ih_a_fixed      $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_ih_a_fixed.json \
+    1 lstm_dn_ih_a_fp8fixed   $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_ih_a_fp8fixed.json \
+    2 lstm_dn_ih_a_int4fixed  $MODEL_LSTM $BLOW5 /tmp/qc_lstm_dn_ih_a_int4fixed.json
 
 for lname in op fc1 fc2; do
 run_batch \
@@ -190,6 +197,6 @@ run_batch \
 
 echo ""
 echo "Done. Results in $RESULTS/"
-ls "$RESULTS"/*.tsv "$RESULTS"/*_id.tsv 2>/dev/null | sort -u
+find "$RESULTS" -name "*.tsv" | sort
 
 notify "slorado sensitivity complete on $(hostname)"

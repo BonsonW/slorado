@@ -31,9 +31,10 @@ for _lname in ["dn_ih", "up_ih", "dn_hh", "up_hh"]:
         RUNS.append((f"lstm_{_lname}_w_{_mtag}", "HAC v6", 1, _lname, _mdesc, "fp16"))
     for _mtag, _mdesc in _LSTM_A:
         RUNS.append((f"lstm_{_lname}_a_{_mtag}", "HAC v6", 2, _lname, "fp16", _mdesc))
-    if _lname == "dn_hh":
-        RUNS.append((f"lstm_{_lname}_a_fixed",    "HAC v6", 2, _lname, "fp16", "int8 fixed (1/127)"))
-        RUNS.append((f"lstm_{_lname}_a_fp8fixed", "HAC v6", 2, _lname, "fp16", "fp8 fixed (1/448)"))
+    if _lname in ("dn_hh", "dn_ih"):
+        RUNS.append((f"lstm_{_lname}_a_fixed",     "HAC v6", 2, _lname, "fp16", "int8 fixed (1/127)"))
+        RUNS.append((f"lstm_{_lname}_a_fp8fixed",  "HAC v6", 2, _lname, "fp16", "fp8 fixed (1/448)"))
+        RUNS.append((f"lstm_{_lname}_a_int4fixed", "HAC v6", 2, _lname, "fp16", "int4 fixed (1/7)"))
     for _mtag, _mdesc in _MX:
         RUNS.append((f"lstm_{_lname}_{_mtag}", "HAC v6", 3, _lname, _mdesc, _mdesc))
 

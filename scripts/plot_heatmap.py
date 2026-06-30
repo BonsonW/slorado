@@ -53,13 +53,14 @@ df["id_drop_pp"] = df.apply(
 
 W_ORDER  = ["int4 tens", "int4 chnl", "int8 tens", "int8 chnl", "fp8 tens", "fp8 chnl"]
 A_ORDER  = ["int4 tok", "int8 tok", "fp8 tok",
-            "int8 fixed (1/127)", "fp8 fixed (1/448)", "int8 fixed_4 (4/127)"]
+            "int4 fixed (1/7)", "int8 fixed (1/127)", "fp8 fixed (1/448)", "int8 fixed_4 (4/127)"]
 MX_ORDER = ["mxint8 g32", "mxfp4 g32", "mxfp6 g32", "mxfp8 g32"]
 
 W_LABELS  = {"int4 tens": "int4\ntens", "int4 chnl": "int4\nchnl",
              "int8 tens": "int8\ntens", "int8 chnl": "int8\nchnl",
              "fp8 tens":  "fp8\ntens",  "fp8 chnl":  "fp8\nchnl"}
 A_LABELS  = {"int4 tok": "int4\ntok", "int8 tok": "int8\ntok", "fp8 tok": "fp8\ntok",
+             "int4 fixed (1/7)": "int4\nfixed",
              "int8 fixed (1/127)": "int8\nfixed", "fp8 fixed (1/448)": "fp8\nfixed",
              "int8 fixed_4 (4/127)": "int8\nfixed4"}
 MX_LABELS = {"mxint8 g32": "mxint8", "mxfp4 g32": "mxfp4",

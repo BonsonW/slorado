@@ -82,9 +82,10 @@ for lname, lfn in [("dn_ih", lstm_dn_ih), ("up_ih", lstm_up_ih),
     write(f"lstm_{lname}_a_ptoken",     lfn(None, "int8_per_channel"))
     write(f"lstm_{lname}_a_fp8ptoken",  lfn(None, "fp8_per_channel"))
     write(f"lstm_{lname}_a_int4ptoken", lfn(None, "int4_per_channel"))
-    if lname == "dn_hh":
-        write("lstm_dn_hh_a_fixed",    lfn(None, "int8_fixed"))   # hh[t] ∈ [-1,1], scale=1/127
-        write("lstm_dn_hh_a_fp8fixed", lfn(None, "fp8_fixed"))    # hh[t] ∈ [-1,1], scale=1/448
+    if lname in ("dn_hh", "dn_ih"):
+        write(f"lstm_{lname}_a_fixed",     lfn(None, "int8_fixed"))   # activation ∈ [-1,1], scale=1/127
+        write(f"lstm_{lname}_a_fp8fixed",  lfn(None, "fp8_fixed"))    # activation ∈ [-1,1], scale=1/448
+        write(f"lstm_{lname}_a_int4fixed", lfn(None, "int4_fixed"))   # activation ∈ [-1,1], scale=1/7
 
 print("Transformer — Phase 1: weights only (act = fp16)")
 for lname, lfn in [("wqkv", tx_wqkv), ("op", tx_op), ("fc1", tx_fc1), ("fc2", tx_fc2)]:
