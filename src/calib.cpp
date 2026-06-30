@@ -99,27 +99,39 @@ void calib_stats_t::save_json(const std::string &path) const {
         fprintf(fp, "        \"per_tensor_range\": %.6g,\n", L->w_max - L->w_min);
         fprintf(fp, "        \"per_tensor_amax\": %.6g", w_amax);
         if (L->w_per_out_ch_max.defined()) {
-            auto ch_range = L->w_per_out_ch_max - L->w_per_out_ch_min;
-            fprintf(fp, ",\n        \"per_out_channel_range\": {\"mean\": %.6g, \"median\": %.6g, \"max\": %.6g}",
-                    ch_range.mean().item<float>(),
-                    ch_range.median().item<float>(),
-                    ch_range.max().item<float>());
+            // per-channel amax = max(|ch_max|, |ch_min|) — directly comparable to per_tensor_amax.
+            // Percentiles show the distribution shape: p50/max ratio tells you how uniform channels
+            // are (close to 1 = per-tensor is efficient, low = per-channel quantization helps).
+            auto ch_amax = torch::maximum(L->w_per_out_ch_max.abs(), L->w_per_out_ch_min.abs());
+            auto pcts = torch::quantile(ch_amax.to(torch::kFloat32),
+                                        torch::tensor({0.25f, 0.50f, 0.75f, 0.99f}));
+            fprintf(fp, ",\n        \"per_out_channel_amax\": {"
+                        "\"p25\": %.6g, \"p50\": %.6g, \"p75\": %.6g, \"p99\": %.6g, \"max\": %.6g}",
+                    pcts[0].item<float>(), pcts[1].item<float>(),
+                    pcts[2].item<float>(), pcts[3].item<float>(),
+                    ch_amax.max().item<float>());
         }
         fprintf(fp, "\n      },\n");
 
-        // Input activation stats — per-token and per-tensor ranges (max - min) plus amax for scale computation.
-        float x_amax = std::max(std::abs(L->x_max), std::abs(L->x_min));
-        fprintf(fp, "      \"input\": {\n");
-        fprintf(fp, "        \"per_tensor_range\": %.6g,\n", L->x_max - L->x_min);
-        fprintf(fp, "        \"per_tensor_amax\": %.6g", x_amax);
-        if (L->x_per_token_max.defined()) {
-            auto tok_range = L->x_per_token_max - L->x_per_token_min;
-            fprintf(fp, ",\n        \"per_token_range\": {\"mean\": %.6g, \"median\": %.6g, \"max\": %.6g}",
-                    tok_range.mean().item<float>(),
-                    tok_range.median().item<float>(),
-                    tok_range.max().item<float>());
+        // Input activation stats — omitted entirely for weights-only calibration runs.
+        fprintf(fp, "      \"input\": {");
+        if (L->n_batches > 0) {
+            float x_amax = std::max(std::abs(L->x_max), std::abs(L->x_min));
+            fprintf(fp, "\n        \"per_tensor_range\": %.6g,\n", L->x_max - L->x_min);
+            fprintf(fp, "        \"per_tensor_amax\": %.6g", x_amax);
+            if (L->x_per_token_max.defined()) {
+                auto tok_amax  = torch::maximum(L->x_per_token_max.abs(), L->x_per_token_min.abs());
+                auto tok_pcts  = torch::quantile(tok_amax.to(torch::kFloat32),
+                                                 torch::tensor({0.25f, 0.50f, 0.75f, 0.99f}));
+                fprintf(fp, ",\n        \"per_token_amax\": {"
+                            "\"p25\": %.6g, \"p50\": %.6g, \"p75\": %.6g, \"p99\": %.6g, \"max\": %.6g}",
+                        tok_pcts[0].item<float>(), tok_pcts[1].item<float>(),
+                        tok_pcts[2].item<float>(), tok_pcts[3].item<float>(),
+                        tok_amax.max().item<float>());
+            }
+            fprintf(fp, "\n      ");
         }
-        fprintf(fp, "\n      }\n");
+        fprintf(fp, "}\n");
 
         fprintf(fp, "    }");
     }

@@ -44,6 +44,7 @@ struct GatedMLPImpl : torch::nn::Module {
                  tx_stats_t *stats = nullptr, const std::string &name_prefix = "");
 
     torch::Tensor forward(const torch::Tensor &x);
+    void update_calib_weights();
 
     bool features_interleaved = false;
     int in_features;
@@ -104,6 +105,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     );
 
     torch::Tensor forward(torch::Tensor x);
+    void update_calib_weights();
 
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;

@@ -48,6 +48,7 @@ struct LSTMStackImpl : torch::nn::Module {
 struct FLSTMLayerImpl : torch::nn::Module {
     FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats, const std::string &name_prefix = "");
     torch::Tensor forward(torch::Tensor x);
+    void update_calib_weights();
 private:
     int C_, K_;
     lstm_stats_t *model_stats_;

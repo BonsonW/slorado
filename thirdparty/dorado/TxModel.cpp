@@ -101,6 +101,12 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     return at::linear(fake_quant(t, lq_fc2.act), fake_quant(fc2->weight, lq_fc2.weight), fc2->bias);
 }
 
+void GatedMLPImpl::update_calib_weights() {
+    if (!stats_ || !stats_->calib_stats) return;
+    stats_->calib_stats->update_weight(cl_fc1_, fc1->weight);
+    stats_->calib_stats->update_weight(cl_fc2_, fc2->weight);
+}
+
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
     int dim_,
     float theta_,
@@ -381,6 +387,12 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     
     return x;
 };
+
+void MultiHeadAttentionImpl::update_calib_weights() {
+    if (!model_stats || !model_stats->calib_stats) return;
+    model_stats->calib_stats->update_weight(cl_wqkv_, wqkv->weight);
+    model_stats->calib_stats->update_weight(cl_out_proj_, out_proj->weight);
+}
 
 TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, int layer_idx) : params(params_) {
     self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats, layer_idx));
@@ -732,6 +744,15 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
     model->to(options.dtype().toScalarType());
     model->to(options.device());
     model->eval();
+
+    // Update calib weight stats now that real weights are loaded.
+    // (register_layer is called during construction with initial/empty weight tensors.)
+    if (model_stats && model_stats->calib_stats && model->tx_encoder) {
+        for (auto &enc : model->tx_encoder->layer_vec) {
+            enc->self_attn->update_calib_weights();
+            enc->ff->update_calib_weights();
+        }
+    }
 
     if (use_flash) {
         INFO("%s", "flash attention enabled");

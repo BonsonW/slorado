@@ -193,6 +193,14 @@ torch::Tensor FLSTMLayerImpl::forward(torch::Tensor x) {
     return hh.index({Slice(1, None)}).transpose(0, 1).contiguous();
 }
 
+void FLSTMLayerImpl::update_calib_weights() {
+    if (!calib_stats_) return;
+    calib_stats_->update_weight(cl_dn_ih_, dn_weight_ih_);
+    calib_stats_->update_weight(cl_up_ih_, up_weight_ih_);
+    calib_stats_->update_weight(cl_dn_hh_, dn_weight_hh_);
+    calib_stats_->update_weight(cl_up_hh_, up_weight_hh_);
+}
+
 FLSTMStackImpl::FLSTMStackImpl(int num_layers, int C, int K, lstm_stats_t *model_stats) {
     for (int i = 0; i < num_layers; ++i) {
         auto label = std::string("rnn") + std::to_string(i + 1);
@@ -362,14 +370,11 @@ ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, cons
     model->to(options.device());
     model->eval();
 
-    // Register weight-only stats for standard LSTM layers (no activation hooks possible).
-    if (model_stats && model_stats->calib_stats) {
-        for (const auto &named : model->named_parameters()) {
-            const auto &n = named.key();
-            if (n.find("weight_ih_l0") != std::string::npos ||
-                n.find("weight_hh_l0") != std::string::npos) {
-                model_stats->calib_stats->register_layer(n, named.value());
-            }
+    // Update FLSTM calib weight stats now that real weights are loaded.
+    // (register_layer is called during construction with torch::empty() placeholders.)
+    if (model_stats && model_stats->calib_stats && model->flstm_rnns) {
+        for (auto &layer : model->flstm_rnns->layers_) {
+            layer->update_calib_weights();
         }
     }
 
