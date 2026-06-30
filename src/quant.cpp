@@ -1,5 +1,6 @@
 #include "quant.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -108,10 +109,34 @@ static at::Tensor apply_fp6e2m3_grid(const at::Tensor &x_scaled) {
     return q * sign;
 }
 
-// Apply FP8 E4M3FN rounding via native dtype cast.
+// Apply FP8 E4M3FN rounding.
+// GPU path: use native dtype cast (requires CUDA torch).
+// CPU path: simulate the grid in ATen — same values, slightly slower.
+#ifndef HAVE_CUDA
+static at::Tensor fp8e4m3fn_sim(const at::Tensor &x) {
+    // Round each value to the nearest FP8 E4M3FN representable value.
+    // Normal step at unbiased exponent k: 2^(k-3).  Subnormal step: 2^-9.
+    static constexpr float fp8_max = 448.f;
+    static constexpr float norm_min = 1.f / 64.f;   // 2^-6, smallest normal
+    static constexpr float sub_step = 1.f / 512.f;  // 2^-9, subnormal step
+
+    auto a    = x.abs().clamp(0.f, fp8_max);
+    auto step = torch::where(
+        a.ge(norm_min),
+        (a.clamp_min(1e-38f).log2().floor() - 3.f).exp2(),
+        torch::full_like(a, sub_step));
+    return x.sign() * ((a / step).round() * step).clamp_max_(fp8_max);
+}
+#endif
+
 static at::Tensor apply_fp8e4m3_grid(const at::Tensor &x_scaled) {
     static constexpr float fp8_max = 448.f;
-    return x_scaled.clamp_(-fp8_max, fp8_max).to(torch::kFloat8_e4m3fn).to(torch::kFloat32);
+    auto x = x_scaled.clamp(-fp8_max, fp8_max);
+#ifdef HAVE_CUDA
+    return x.to(torch::kFloat8_e4m3fn).to(torch::kFloat32);
+#else
+    return fp8e4m3fn_sim(x);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +183,11 @@ static at::Tensor quant_fp8e4m3_2d(const at::Tensor &x, bool per_row) {
         if (amax == 0.f) return x;
         scale = torch::full({1}, amax / fp8_max, x.options());
     }
+#ifdef HAVE_CUDA
     return (x / scale).clamp_(-fp8_max, fp8_max).to(torch::kFloat8_e4m3fn).to(torch::kFloat32).mul_(scale);
+#else
+    return fp8e4m3fn_sim(x / scale).mul_(scale);
+#endif
 }
 
 static at::Tensor quant_fp4_2d(const at::Tensor &x, bool per_row) {
