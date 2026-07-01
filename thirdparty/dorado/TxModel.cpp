@@ -342,14 +342,18 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     return attn_tail(qkv, lq_op);
 }
 
-// int8 path: fused int8 wqkv GEMM produces fp16 qkv, then rotary (openfish), then the shared tail.
+// int8 path: fused int8 wqkv GEMM + rotary produces fp16 qkv, then the shared attention tail.
 torch::Tensor MultiHeadAttentionImpl::forward_quant(const tensor_quant &x) {
     const layer_quant_t *lq_op = &k_empty_lq;
     if (model_stats && !attn_prefix_.empty() && !model_stats->quant_methods.empty()) {
         auto it = model_stats->quant_methods.find(attn_prefix_ + ".out_proj");
         if (it != model_stats->quant_methods.end()) lq_op = &it->second;
     }
+    const bool on_gpu = !x.tensor.device().is_cpu();
+    double a = realtime();
     auto qkv = fluke_qkv_rotary_i8(backend_, x, qw_wqkv_, rotary_emb->sin_buf, rotary_emb->cos_buf);
+    if (on_gpu) torch::cuda::synchronize(x.tensor.device().index());
+    model_stats->time_mm += realtime() - a; // fused wqkv GEMM + rotary
     return attn_tail(qkv, *lq_op);
 }
 
@@ -524,18 +528,35 @@ void TxEncoderImpl::forward_quant(tensor_quant &a) {
 #ifdef USE_GPU
     const float alpha = named_buffers()["deepnorm_alpha"].flatten()[0].item<float>();
     const float eps = 1e-5f;
+    const int dev = a.tensor.device().index();
+    double t0, t1;
 
+    // self_attn wraps the fused qkv (time_mm) + SDPA (time_sdp_attn) + out_proj (time_out_proj).
+    t0 = realtime();
     auto attn = self_attn->forward_quant(a).contiguous();
+    torch::cuda::synchronize(dev);
+    t1 = realtime(); model_stats->time_self_attn += t1 - t0;
+
     const int n_tokens = attn.size(0) * attn.size(1);
     const int K = attn.size(2);
+    t0 = realtime();
     openfish_rmsnorm_quant_int8_gpu(
         attn.data_ptr(), norm1->weight.contiguous().data_ptr(),
         a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
+    torch::cuda::synchronize(dev);
+    t1 = realtime(); model_stats->time_norm1 += t1 - t0;
 
+    t0 = realtime();
     auto f = ff->forward_quant(a).contiguous();
+    torch::cuda::synchronize(dev);
+    t1 = realtime(); model_stats->time_ff += t1 - t0;
+
+    t0 = realtime();
     openfish_rmsnorm_quant_int8_gpu(
         f.data_ptr(), norm2->weight.contiguous().data_ptr(),
         a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
+    torch::cuda::synchronize(dev);
+    t1 = realtime(); model_stats->time_norm2 += t1 - t0;
 #else
     (void)a; // fused int8 path is GPU-only; never reached on CPU (quant_stream_ stays false)
 #endif
