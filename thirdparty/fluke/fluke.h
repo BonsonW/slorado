@@ -1,6 +1,6 @@
 #pragma once
 
-// fluke — thin facade over the precompiled cutedsl/CUTLASS fused int8 kernels.
+// fluke — thin facade over the precompiled cutedsl/flydsl kernels.
 //
 // The verbose, arch-specific kernel headers (thirdparty/fluke/<arch>/*.h) are included only by
 // fluke.cpp. Callers (e.g. TxModel.cpp) see just this facade. Plain-C style: an opaque backend
