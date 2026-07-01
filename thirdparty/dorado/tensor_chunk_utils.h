@@ -18,6 +18,30 @@ T pad_to(const T a, const T b) {
     return div_round_up(a, b) * b;
 }
 
+// Symmetric int8 quantization container. `tensor` is the int8 data; `scale` is the
+// per-slice dequant multiplier (reciprocal pre-applied) — i.e. fp ≈ tensor * scale.
+struct tensor_quant {
+    at::Tensor tensor; // int8 tensor
+    at::Tensor scale;  // float scale per slice, reciprocal pre-applied
+};
+
+// Quantize `x` to symmetric int8 with one scale per slice along `dim`.
+//   dim = -1 on activations [..., C]      -> one scale per token
+//   dim =  1 on a weight    [out, in]     -> one scale per output channel
+// The returned `scale` is the dequant multiplier (amax/128), matching the kernels'
+// mScaleA/mScaleB and the fused RMSNorm's residual_scale conventions.
+inline tensor_quant quantize_tensor(const at::Tensor &x, int dim) {
+    auto fp_range = x.abs().amax(dim);
+    constexpr int i_range = 256 / 2;
+    auto quant_scale = (i_range / fp_range);
+    auto quant_max = i_range - 1;
+    auto x_quant = (x * quant_scale.unsqueeze(dim)).round().clip(-quant_max, quant_max);
+    return tensor_quant {
+        x_quant.to(torch::kInt8).contiguous(),
+        quant_scale.to(torch::kFloat32).reciprocal_().contiguous()
+    };
+}
+
 void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params);
 
 // Given a read with unstitched chunks, stitch the chunks (accounting for overlap) and assign basecalled read and qstring to Read

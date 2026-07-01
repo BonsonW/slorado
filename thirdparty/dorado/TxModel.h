@@ -6,6 +6,7 @@
 #include "quant.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
+#include "flute/flute.h"
 
 #include <ATen/core/TensorBody.h>
 #include <c10/core/Device.h>
@@ -19,7 +20,7 @@
 
 using namespace torch::nn;
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads);
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, bool use_quant_kernels, int nthreads);
 
 torch::Tensor scaled_dot_product_attention_naive(
     const torch::Tensor &q,
@@ -44,6 +45,10 @@ struct GatedMLPImpl : torch::nn::Module {
                  tx_stats_t *stats = nullptr, const std::string &name_prefix = "");
 
     torch::Tensor forward(const torch::Tensor &x);
+    // Fused int8 path: dual GEMM (gate,up) + SiLU on an int8 activation, then fc2 (fp16).
+    torch::Tensor forward_quant(const tensor_quant &x);
+    // Detect an int8 kernel backend for this device and eagerly quantize fc1's gate/up weights.
+    void setup_backend(const flute::ModelDims &dims, int device_index);
     void update_calib_weights();
 
     bool features_interleaved = false;
@@ -54,6 +59,9 @@ struct GatedMLPImpl : torch::nn::Module {
     tx_stats_t *stats_ = nullptr;
     std::string prefix_;
     calib_layer_t *cl_fc1_ = nullptr, *cl_fc2_ = nullptr;
+
+    std::shared_ptr<flute::Backend> backend_;
+    tensor_quant qw_gate_, qw_up_; // eagerly-quantized int8 gate/up weights (+per-channel scale)
 };
 
 TORCH_MODULE(GatedMLP);
@@ -105,6 +113,10 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     );
 
     torch::Tensor forward(torch::Tensor x);
+    // Fused int8 path: fused wqkv GEMM + rotary on an int8 activation, then shared attn tail.
+    torch::Tensor forward_quant(const tensor_quant &x);
+    // Detect an int8 kernel backend for this device and eagerly quantize the wqkv weight.
+    void setup_backend(const flute::ModelDims &dims, int device_index);
     void update_calib_weights();
 
     torch::Tensor get_attn_window_mask(const int64_t size);
@@ -124,6 +136,14 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 
     std::string attn_prefix_;
     calib_layer_t *cl_wqkv_ = nullptr, *cl_out_proj_ = nullptr;
+
+    std::shared_ptr<flute::Backend> backend_;
+    tensor_quant qw_wqkv_;              // eagerly-quantized int8 wqkv weight (+per-channel scale)
+
+private:
+    // Shared fp16 attention core: SDPA / flash + out_proj. Both forward paths call this so the
+    // bulky attention logic stays single-copy. qkv: fp16 [N,T,3,nhead,head_dim].
+    torch::Tensor attn_tail(torch::Tensor qkv, const layer_quant_t &lq_op);
 };
 
 TORCH_MODULE(MultiHeadAttention);
@@ -132,6 +152,8 @@ struct TxEncoderImpl : torch::nn::Module {
     TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, int layer_idx = -1);
 
     torch::Tensor forward(torch::Tensor x);
+    // Fused int8 path: drives one layer of the int8 residual stream in-place on `a`.
+    void forward_quant(tensor_quant &a);
 
     TxEncoderParams params;
     
@@ -150,9 +172,12 @@ struct TxEncoderStackImpl : torch::nn::Module {
     TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
     torch::Tensor forward(const torch::Tensor &x);
-    
+
     torch::nn::Sequential stack{nullptr};
     std::vector<TxEncoder> layer_vec;
+
+    // Set at load when the int8 kernel path is enabled AND available (flag on, arch/dims match).
+    bool quant_stream_ = false;
 };
 
 TORCH_MODULE(TxEncoderStack);

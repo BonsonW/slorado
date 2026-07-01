@@ -18,6 +18,9 @@
 using namespace torch::nn;
 using Slice = torch::indexing::Slice;
 
+// Empty quant method => fp16 passthrough; used as the default for unset per-layer lookups.
+static const layer_quant_t k_empty_lq;
+
 void apply_rounding(torch::Tensor &t, int remove_bits) {
     // Round Float16 tensor elements such that the last `remove_bits` of the mantissa are 0s.
     // TODO: this is slightly dangerous as it will turn numbers close to +/-65304 into +/-inf
@@ -74,7 +77,6 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_,
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
     if (cl_fc1_) stats_->calib_stats->accumulate(cl_fc1_, x);
-    static const layer_quant_t k_empty_lq;
     auto lq = [&](const char *suffix) -> const layer_quant_t& {
         if (stats_ && !stats_->quant_methods.empty()) {
             auto it = stats_->quant_methods.find(prefix_ + suffix);
@@ -105,6 +107,29 @@ void GatedMLPImpl::update_calib_weights() {
     if (!stats_ || !stats_->calib_stats) return;
     stats_->calib_stats->update_weight(cl_fc1_, fc1->weight);
     stats_->calib_stats->update_weight(cl_fc2_, fc2->weight);
+}
+
+// Fused int8 path: dual GEMM (gate,up) + SiLU on an int8 activation, then fc2 (fp16).
+torch::Tensor GatedMLPImpl::forward_quant(const tensor_quant &x) {
+    auto g = backend_->gated_mlp_i8(x, qw_gate_, qw_up_);
+    const layer_quant_t *lq_fc2 = &k_empty_lq;
+    if (stats_ && !stats_->quant_methods.empty()) {
+        auto it = stats_->quant_methods.find(prefix_ + ".fc2");
+        if (it != stats_->quant_methods.end()) lq_fc2 = &it->second;
+    }
+    return at::linear(fake_quant(g, lq_fc2->act), fake_quant(fc2->weight, lq_fc2->weight), fc2->bias);
+}
+
+void GatedMLPImpl::setup_backend(const flute::ModelDims &dims, int device_index) {
+    backend_ = flute::select_backend(device_index, flute::Format::Int8, dims);
+    if (!backend_) return;
+    // fc1->weight is [2*hidden, in]. The fp16 path splits the OUTPUT via chunk(2,-1):
+    // chunks[0]=y (up), chunks[1]=gate. So rows [0:H]=up, [H:2H]=gate.
+    const int64_t H = hidden_features;
+    auto up_w   = fc1->weight.slice(0, 0, H).contiguous();
+    auto gate_w = fc1->weight.slice(0, H, 2 * H).contiguous();
+    qw_up_   = quantize_tensor(up_w,   /*dim=*/1);
+    qw_gate_ = quantize_tensor(gate_w, /*dim=*/1);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -287,12 +312,10 @@ torch::Tensor MultiHeadAttentionImpl::build_attn_window_mask(const int64_t size)
 torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     const int64_t N = x.size(0);
     const int64_t T = x.size(1);
-    const int64_t C = x.size(2);
 
     double a, b;
-    
+
     a = realtime();
-    static const layer_quant_t k_empty_lq;
     auto lq = [&](const char *suffix) -> const layer_quant_t& {
         if (model_stats && !attn_prefix_.empty() && !model_stats->quant_methods.empty()) {
             auto it = model_stats->quant_methods.find(attn_prefix_ + suffix);
@@ -315,6 +338,29 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_rotary_emb += b-a;
+
+    return attn_tail(qkv, lq_op);
+}
+
+// int8 path: fused int8 wqkv GEMM produces fp16 qkv, then rotary (openfish), then the shared tail.
+torch::Tensor MultiHeadAttentionImpl::forward_quant(const tensor_quant &x) {
+    const layer_quant_t *lq_op = &k_empty_lq;
+    if (model_stats && !attn_prefix_.empty() && !model_stats->quant_methods.empty()) {
+        auto it = model_stats->quant_methods.find(attn_prefix_ + ".out_proj");
+        if (it != model_stats->quant_methods.end()) lq_op = &it->second;
+    }
+    auto qkv = backend_->qkv_rotary_i8(x, qw_wqkv_, rotary_emb->sin_buf, rotary_emb->cos_buf);
+    return attn_tail(qkv, *lq_op);
+}
+
+// Shared fp16 attention core: SDPA / flash + out_proj. Both forward paths call this.
+torch::Tensor MultiHeadAttentionImpl::attn_tail(torch::Tensor qkv, const layer_quant_t &lq_op) {
+    const int64_t N = qkv.size(0);
+    const int64_t T = qkv.size(1);
+    const int64_t C = d_model;
+
+    double a, b;
+    const bool on_gpu = !qkv.device().is_cpu();
 
     a = realtime();
     const auto win_upper = std::get<0>(attn_window);
@@ -348,7 +394,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 #endif
     {
         qkv = qkv.permute({2, 0, 3, 1, 4}); // N T 3 H D -> 3 N H T D
-        attn_output_ntc = torch::empty({N, T, C}, x.options());
+        attn_output_ntc = torch::empty({N, T, C}, qkv.options());
         auto attn_window_mask = get_attn_window_mask(T);
         auto attn_output = attn_output_ntc.view({N, T, nhead, head_dim}).transpose(1, 2);
         // // The MPS backend refuses to work on a span of the mask that doesn't have an
@@ -374,19 +420,26 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
         }
     }
 
-    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    if (on_gpu) torch::cuda::synchronize(qkv.device().index());
     b = realtime();
     model_stats->time_sdp_attn += b-a;
 
     a = realtime();
     if (cl_out_proj_) model_stats->calib_stats->accumulate(cl_out_proj_, attn_output_ntc);
-    x = at::linear(fake_quant(attn_output_ntc, lq_op.act), fake_quant(out_proj->weight, lq_op.weight), out_proj->bias);
-    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    auto out = at::linear(fake_quant(attn_output_ntc, lq_op.act), fake_quant(out_proj->weight, lq_op.weight), out_proj->bias);
+    if (on_gpu) torch::cuda::synchronize(qkv.device().index());
     b = realtime();
     model_stats->time_out_proj += b-a;
-    
-    return x;
+
+    return out;
 };
+
+void MultiHeadAttentionImpl::setup_backend(const flute::ModelDims &dims, int device_index) {
+    backend_ = flute::select_backend(device_index, flute::Format::Int8, dims);
+    if (!backend_) return;
+    // wqkv->weight is [3*d_model, d_model]; one int8 scale per output channel (dim 0).
+    qw_wqkv_ = quantize_tensor(wqkv->weight, /*dim=*/1);
+}
 
 void MultiHeadAttentionImpl::update_calib_weights() {
     if (!model_stats || !model_stats->calib_stats) return;
@@ -460,8 +513,32 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_norm2 += b-a;
-    
+
     return x;
+}
+
+// Fused int8 path: one encoder layer of the int8 residual stream, updating `a` in place.
+// Each fused sublayer consumes the int8 activation directly; the fused RMSNorm re-quantizes
+// (sublayer_out + dequant(a)*alpha) back into `a` as int8 + per-token scale.
+void TxEncoderImpl::forward_quant(tensor_quant &a) {
+#ifdef USE_GPU
+    const float alpha = named_buffers()["deepnorm_alpha"].flatten()[0].item<float>();
+    const float eps = 1e-5f;
+
+    auto attn = self_attn->forward_quant(a).contiguous();
+    const int n_tokens = attn.size(0) * attn.size(1);
+    const int K = attn.size(2);
+    openfish_rmsnorm_quant_int8_gpu(
+        attn.data_ptr(), norm1->weight.contiguous().data_ptr(),
+        a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
+
+    auto f = ff->forward_quant(a).contiguous();
+    openfish_rmsnorm_quant_int8_gpu(
+        f.data_ptr(), norm2->weight.contiguous().data_ptr(),
+        a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
+#else
+    (void)a; // fused int8 path is GPU-only; never reached on CPU (quant_stream_ stays false)
+#endif
 }
 
 TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats) {
@@ -474,6 +551,15 @@ TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torc
 };
 
 torch::Tensor TxEncoderStackImpl::forward(const torch::Tensor &x) {
+#ifdef USE_GPU
+    // Fused int8 path: quantize once at entry, carry an int8 residual stream through every
+    // layer (re-quantized by each RMSNorm), dequantize once at exit. The kernels are seq<=1024.
+    if (quant_stream_ && !x.device().is_cpu() && x.size(1) <= 1024) {
+        tensor_quant a = quantize_tensor(x, -1); // per-token int8
+        for (auto &enc : layer_vec) enc->forward_quant(a);
+        return (a.tensor.to(at::kFloat) * a.scale.unsqueeze(-1)).to(at::kHalf);
+    }
+#endif
     return stack->forward(x);
 }
 
@@ -730,7 +816,7 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads) {
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, bool use_quant_kernels, int nthreads) {
     if (model_stats) {
         model_stats->use_flash = use_flash;
         model_stats->nthreads = nthreads;
@@ -753,6 +839,28 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
             enc->ff->update_calib_weights();
         }
     }
+
+    // Real fused int8 kernel path: eagerly quantize weights + detect a device backend.
+    // Enabled only when the flag is on, a GPU backend matches the arch/dims, and it succeeds
+    // for every layer; otherwise the model falls back to the fp16 path transparently.
+#ifdef USE_GPU
+    if (use_quant_kernels && model->tx_encoder && !options.device().is_cpu()) {
+        const auto &txp = model_config.tx->tx;
+        flute::ModelDims dims{txp.d_model, txp.dim_feedforward, txp.nhead,
+                              txp.d_model / txp.nhead, /*max_seq=*/1024};
+        const int dev = options.device().index();
+        bool all_ok = true;
+        for (auto &enc : model->tx_encoder->layer_vec) {
+            enc->self_attn->setup_backend(dims, dev);
+            enc->ff->setup_backend(dims, dev);
+            if (!enc->self_attn->backend_ || !enc->ff->backend_) all_ok = false;
+        }
+        model->tx_encoder->quant_stream_ = all_ok;
+        INFO("int8 fused kernel path %s", all_ok ? "enabled" : "unavailable (using fp16)");
+    }
+#else
+    (void)use_quant_kernels;
+#endif
 
     if (use_flash) {
         INFO("%s", "flash attention enabled");

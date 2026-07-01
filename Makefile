@@ -59,6 +59,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/ModBaseModel.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
+	  $(BUILD_DIR)/flute.o \
 
 # add more objects here if needed
 
@@ -79,8 +80,14 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
+	# precompiled fused int8 kernels (cutedsl/CUTLASS) for the real quant inference path.
+	# The shipped objects reference underscore-prefixed CUDA symbols; objcopy rewrites them
+	# to the real ELF names (resolved from cudart_static + the driver stub libcuda).
+	# (flute.o itself is always built — its CPU body is just a nullptr backend stub.)
+	FLUTE_OBJ = $(BUILD_DIR)/gemm_i8_dual_silu_N2048_K512.o \
+	            $(BUILD_DIR)/gemm_i8_rotary_N1536_K512_H8D64R64S1024.o
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
-	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -lrt -ldl
+	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -L$(CUDA_LIB)/stubs -lcuda -lrt -ldl
 else ifdef rocm
 	CPPFLAGS += -DUSE_GPU=1 -DHAVE_ROCM=1 -D__HIP_PLATFORM_AMD__
 	ROCM_ROOT ?= /opt/rocm
@@ -97,8 +104,8 @@ endif
 #include ""
 
 # slorado
-$(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
-	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
+$(BINARY): $(OBJ) $(FLUTE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
+	$(CXX) $(CFLAGS) $(OBJ) $(FLUTE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
@@ -148,6 +155,24 @@ $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
 
 $(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
+
+# flute — facade over the precompiled fused int8 kernels (cuda builds only)
+$(BUILD_DIR)/flute.o: thirdparty/flute/flute.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
+
+# Rewrite the underscore-prefixed CUDA symbol references in the precompiled kernel objects
+# to their real ELF names so they resolve against cudart_static / libcuda.
+$(BUILD_DIR)/%.o: thirdparty/flute/sm80/%.o
+	objcopy \
+	  --redefine-sym _cudaDeviceGetAttribute=cudaDeviceGetAttribute \
+	  --redefine-sym _cudaFuncSetAttribute=cudaFuncSetAttribute \
+	  --redefine-sym _cudaGetDevice=cudaGetDevice \
+	  --redefine-sym _cudaKernelSetAttributeForDevice=cudaKernelSetAttributeForDevice \
+	  --redefine-sym _cudaLaunchKernelEx=cudaLaunchKernelExC \
+	  --redefine-sym _cudaLibraryGetKernel=cudaLibraryGetKernel \
+	  --redefine-sym _cudaLibraryLoadData=cudaLibraryLoadData \
+	  --redefine-sym _cuKernelGetAttribute=cuKernelGetAttribute \
+	  $< $@
 
 $(BUILD_DIR)/ModBaseModel.o: thirdparty/dorado/ModBaseModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
