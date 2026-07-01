@@ -59,7 +59,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/ModBaseModel.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
-	  $(BUILD_DIR)/flute.o \
+	  $(BUILD_DIR)/fluke.o \
 
 # add more objects here if needed
 
@@ -81,11 +81,16 @@ ifdef cuda
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
 	# precompiled fused int8 kernels (cutedsl/CUTLASS) for the real quant inference path.
+	# They use the CUDA 12 library API (cudaLibrary_t / cudaLaunchKernelEx), so only link them on
+	# CUDA >= 12; fluke.cpp guards the same way, so older CUDA just falls back to fp16.
 	# The shipped objects reference underscore-prefixed CUDA symbols; objcopy rewrites them
 	# to the real ELF names (resolved from cudart_static + the driver stub libcuda).
-	# (flute.o itself is always built — its CPU body is just a nullptr backend stub.)
-	FLUTE_OBJ = $(BUILD_DIR)/gemm_i8_dual_silu_N2048_K512.o \
+	# (fluke.o itself is always built — its CPU/old-CUDA body is just a null backend stub.)
+	CUDART_VER := $(shell grep -E 'define +CUDART_VERSION' $(CUDA_INC)/cuda_runtime_api.h 2>/dev/null | grep -oE '[0-9]+' | head -1)
+	ifeq ($(shell [ "$(CUDART_VER)" -ge 12000 ] 2>/dev/null && echo 1),1)
+	FLUKE_OBJ = $(BUILD_DIR)/gemm_i8_dual_silu_N2048_K512.o \
 	            $(BUILD_DIR)/gemm_i8_rotary_N1536_K512_H8D64R64S1024.o
+	endif
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -L$(CUDA_LIB)/stubs -lcuda -lrt -ldl
 else ifdef rocm
@@ -104,8 +109,8 @@ endif
 #include ""
 
 # slorado
-$(BINARY): $(OBJ) $(FLUTE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
-	$(CXX) $(CFLAGS) $(OBJ) $(FLUTE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
+$(BINARY): $(OBJ) $(FLUKE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
+	$(CXX) $(CFLAGS) $(OBJ) $(FLUKE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
@@ -156,13 +161,13 @@ $(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
 $(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-# flute — facade over the precompiled fused int8 kernels (cuda builds only)
-$(BUILD_DIR)/flute.o: thirdparty/flute/flute.cpp
+# fluke — facade over the precompiled fused int8 kernels
+$(BUILD_DIR)/fluke.o: thirdparty/fluke/fluke.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 # Rewrite the underscore-prefixed CUDA symbol references in the precompiled kernel objects
 # to their real ELF names so they resolve against cudart_static / libcuda.
-$(BUILD_DIR)/%.o: thirdparty/flute/sm80/%.o
+$(BUILD_DIR)/%.o: thirdparty/fluke/sm80/%.o
 	objcopy \
 	  --redefine-sym _cudaDeviceGetAttribute=cudaDeviceGetAttribute \
 	  --redefine-sym _cudaFuncSetAttribute=cudaFuncSetAttribute \

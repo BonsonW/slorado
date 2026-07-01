@@ -450,6 +450,7 @@ void init_opt(opt_t* opt) {
     opt->out = stdout;
 
     opt->mod = NULL;
+    opt->quant = NULL;
 
     // opt->flag |= SLORADO_SAM;
 }

@@ -6,7 +6,7 @@
 #include "quant.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
-#include "flute/flute.h"
+#include "fluke/fluke.h"
 
 #include <ATen/core/TensorBody.h>
 #include <c10/core/Device.h>
@@ -20,7 +20,7 @@
 
 using namespace torch::nn;
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, bool use_quant_kernels, int nthreads);
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, const std::string &quant_mode, int nthreads);
 
 torch::Tensor scaled_dot_product_attention_naive(
     const torch::Tensor &q,
@@ -47,8 +47,8 @@ struct GatedMLPImpl : torch::nn::Module {
     torch::Tensor forward(const torch::Tensor &x);
     // Fused int8 path: dual GEMM (gate,up) + SiLU on an int8 activation, then fc2 (fp16).
     torch::Tensor forward_quant(const tensor_quant &x);
-    // Detect an int8 kernel backend for this device and eagerly quantize fc1's gate/up weights.
-    void setup_backend(const flute::ModelDims &dims, int device_index);
+    // Detect a kernel backend for (device, format) and eagerly quantize fc1's gate/up weights.
+    void setup_backend(const fluke_dims &dims, int device_index, enum fluke_format format);
     void update_calib_weights();
 
     bool features_interleaved = false;
@@ -60,7 +60,7 @@ struct GatedMLPImpl : torch::nn::Module {
     std::string prefix_;
     calib_layer_t *cl_fc1_ = nullptr, *cl_fc2_ = nullptr;
 
-    std::shared_ptr<flute::Backend> backend_;
+    fluke_backend *backend_ = nullptr; // shared, process-lifetime handle (not owned)
     tensor_quant qw_gate_, qw_up_; // eagerly-quantized int8 gate/up weights (+per-channel scale)
 };
 
@@ -115,8 +115,8 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     torch::Tensor forward(torch::Tensor x);
     // Fused int8 path: fused wqkv GEMM + rotary on an int8 activation, then shared attn tail.
     torch::Tensor forward_quant(const tensor_quant &x);
-    // Detect an int8 kernel backend for this device and eagerly quantize the wqkv weight.
-    void setup_backend(const flute::ModelDims &dims, int device_index);
+    // Detect a kernel backend for (device, format) and eagerly quantize the wqkv weight.
+    void setup_backend(const fluke_dims &dims, int device_index, enum fluke_format format);
     void update_calib_weights();
 
     torch::Tensor get_attn_window_mask(const int64_t size);
@@ -137,7 +137,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     std::string attn_prefix_;
     calib_layer_t *cl_wqkv_ = nullptr, *cl_out_proj_ = nullptr;
 
-    std::shared_ptr<flute::Backend> backend_;
+    fluke_backend *backend_ = nullptr; // shared, process-lifetime handle (not owned)
     tensor_quant qw_wqkv_;              // eagerly-quantized int8 wqkv weight (+per-channel scale)
 
 private:

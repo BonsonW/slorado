@@ -59,7 +59,6 @@ struct sensitivity_stats_t;
 #define SLORADO_ACC         0x002 // accelerator enable
 #define SLORADO_SAM         0x004 // emit sam enable
 #define SLORADO_FLASH       0x008 // flash attention enable
-#define SLORADO_INT8_KERNEL 0x010 // fused int8 quant kernels (real quant inference path) enable
 
 #define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 // stealing threshold
@@ -90,6 +89,7 @@ typedef struct {
     int32_t overlap;            // overlap: p
 
     const char *mod;         // specified modbase: x
+    const char *quant;       // quantized inference mode (e.g. "int8"); NULL = fp16
     const char *calibrate_out;   // path for calibration JSON output (NULL = disabled)
     const char *quant_config_path; // path for per-layer quant config JSON (NULL = disabled)
     const char *sensitivity_out;   // path for sensitivity KL output JSON (NULL = disabled)

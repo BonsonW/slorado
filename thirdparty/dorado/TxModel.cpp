@@ -111,7 +111,7 @@ void GatedMLPImpl::update_calib_weights() {
 
 // Fused int8 path: dual GEMM (gate,up) + SiLU on an int8 activation, then fc2 (fp16).
 torch::Tensor GatedMLPImpl::forward_quant(const tensor_quant &x) {
-    auto g = backend_->gated_mlp_i8(x, qw_gate_, qw_up_);
+    auto g = fluke_gated_mlp_i8(backend_, x, qw_gate_, qw_up_);
     const layer_quant_t *lq_fc2 = &k_empty_lq;
     if (stats_ && !stats_->quant_methods.empty()) {
         auto it = stats_->quant_methods.find(prefix_ + ".fc2");
@@ -120,8 +120,8 @@ torch::Tensor GatedMLPImpl::forward_quant(const tensor_quant &x) {
     return at::linear(fake_quant(g, lq_fc2->act), fake_quant(fc2->weight, lq_fc2->weight), fc2->bias);
 }
 
-void GatedMLPImpl::setup_backend(const flute::ModelDims &dims, int device_index) {
-    backend_ = flute::select_backend(device_index, flute::Format::Int8, dims);
+void GatedMLPImpl::setup_backend(const fluke_dims &dims, int device_index, enum fluke_format format) {
+    backend_ = fluke_select_backend(device_index, format, dims);
     if (!backend_) return;
     // fc1->weight is [2*hidden, in]. The fp16 path splits the OUTPUT via chunk(2,-1):
     // chunks[0]=y (up), chunks[1]=gate. So rows [0:H]=up, [H:2H]=gate.
@@ -349,7 +349,7 @@ torch::Tensor MultiHeadAttentionImpl::forward_quant(const tensor_quant &x) {
         auto it = model_stats->quant_methods.find(attn_prefix_ + ".out_proj");
         if (it != model_stats->quant_methods.end()) lq_op = &it->second;
     }
-    auto qkv = backend_->qkv_rotary_i8(x, qw_wqkv_, rotary_emb->sin_buf, rotary_emb->cos_buf);
+    auto qkv = fluke_qkv_rotary_i8(backend_, x, qw_wqkv_, rotary_emb->sin_buf, rotary_emb->cos_buf);
     return attn_tail(qkv, *lq_op);
 }
 
@@ -434,8 +434,8 @@ torch::Tensor MultiHeadAttentionImpl::attn_tail(torch::Tensor qkv, const layer_q
     return out;
 };
 
-void MultiHeadAttentionImpl::setup_backend(const flute::ModelDims &dims, int device_index) {
-    backend_ = flute::select_backend(device_index, flute::Format::Int8, dims);
+void MultiHeadAttentionImpl::setup_backend(const fluke_dims &dims, int device_index, enum fluke_format format) {
+    backend_ = fluke_select_backend(device_index, format, dims);
     if (!backend_) return;
     // wqkv->weight is [3*d_model, d_model]; one int8 scale per output channel (dim 0).
     qw_wqkv_ = quantize_tensor(wqkv->weight, /*dim=*/1);
@@ -816,7 +816,7 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
     return load_tensors(dir, tensors);
 }
 
-ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, bool use_quant_kernels, int nthreads) {
+ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, const std::string &quant_mode, int nthreads) {
     if (model_stats) {
         model_stats->use_flash = use_flash;
         model_stats->nthreads = nthreads;
@@ -840,26 +840,30 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
         }
     }
 
-    // Real fused int8 kernel path: eagerly quantize weights + detect a device backend.
-    // Enabled only when the flag is on, a GPU backend matches the arch/dims, and it succeeds
+    // Quantized inference path: parse the requested mode to a kernel format, then eagerly quantize
+    // weights + detect a device backend for (arch, format). Engages only when a backend is available
     // for every layer; otherwise the model falls back to the fp16 path transparently.
+    enum fluke_format quant_format = fluke_parse_format(quant_mode);
 #ifdef USE_GPU
-    if (use_quant_kernels && model->tx_encoder && !options.device().is_cpu()) {
+    if (quant_format != FLUKE_FORMAT_NONE && model->tx_encoder && !options.device().is_cpu()) {
         const auto &txp = model_config.tx->tx;
-        flute::ModelDims dims{txp.d_model, txp.dim_feedforward, txp.nhead,
-                              txp.d_model / txp.nhead, /*max_seq=*/1024};
+        fluke_dims dims{txp.d_model, txp.dim_feedforward, txp.nhead,
+                        txp.d_model / txp.nhead, /*max_seq=*/1024};
         const int dev = options.device().index();
         bool all_ok = true;
         for (auto &enc : model->tx_encoder->layer_vec) {
-            enc->self_attn->setup_backend(dims, dev);
-            enc->ff->setup_backend(dims, dev);
+            enc->self_attn->setup_backend(dims, dev, quant_format);
+            enc->ff->setup_backend(dims, dev, quant_format);
             if (!enc->self_attn->backend_ || !enc->ff->backend_) all_ok = false;
         }
         model->tx_encoder->quant_stream_ = all_ok;
-        INFO("int8 fused kernel path %s", all_ok ? "enabled" : "unavailable (using fp16)");
+        INFO("quant '%s' kernel path %s", quant_mode.c_str(), all_ok ? "enabled" : "unavailable (using fp16)");
+    } else if (!quant_mode.empty() && quant_format == FLUKE_FORMAT_NONE) {
+        WARNING("unknown quant mode '%s' — using fp16", quant_mode.c_str());
     }
 #else
-    (void)use_quant_kernels;
+    if (quant_format != FLUKE_FORMAT_NONE)
+        WARNING("quant mode '%s' requires a GPU build — using fp16", quant_mode.c_str());
 #endif
 
     if (use_flash) {

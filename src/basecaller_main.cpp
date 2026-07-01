@@ -75,7 +75,7 @@ static struct option long_options[] = {
     {"calibrate", required_argument, 0, 0},         //18 output calibration stats JSON
     {"quant-config", required_argument, 0, 0},      //19 per-layer quant config JSON
     {"sensitivity", required_argument, 0, 0},       //20 output sensitivity KL JSON
-    {"int8-kernels", required_argument, 0, 0},      //21 toggles the fused int8 quant inference kernels
+    {"quant", required_argument, 0, 0},             //21 quantized inference mode (e.g. int8) if a backend is available
     {0, 0, 0, 0}};
 
 
@@ -99,7 +99,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  --calibrate FILE            write per-layer quantization calibration stats to FILE\n");
     fprintf(fp_help, "  --quant-config FILE         load per-layer quantization config from JSON FILE\n");
     fprintf(fp_help, "  --sensitivity FILE          compute KL(fp16, quant) per batch and write to FILE\n");
-    fprintf(fp_help, "  --int8-kernels=yes|no       use fused int8 quant kernels on supported GPUs [%s]\n", (opt.flag & SLORADO_INT8_KERNEL) ? "yes" : "no");
+    fprintf(fp_help, "  --quant STR                 quantized inference mode (int8) if a backend is available [%s]\n", opt.quant ? opt.quant : "NULL");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
@@ -197,8 +197,8 @@ int basecaller_main(int argc, char* argv[]) {
             opt.quant_config_path = optarg;
         } else if (c == 0 && longindex == 20) { // sensitivity output
             opt.sensitivity_out = optarg;
-        } else if (c == 0 && longindex == 21) { // fused int8 quant kernels
-            yes_or_no(&opt.flag, SLORADO_INT8_KERNEL, long_options[longindex].name, optarg, 1);
+        } else if (c == 0 && longindex == 21) { // quantized inference mode
+            opt.quant = optarg;
         }
     }
 

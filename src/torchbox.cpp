@@ -137,7 +137,7 @@ void init_runner(
             tx_stats_t *model_stats = init_tx_stats();
             model_stats->calib_stats = core->calib_stats;
             model_stats->quant_config = core->quant_config;
-            runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, (core->opt.flag & SLORADO_INT8_KERNEL) != 0, core->opt.num_thread);
+            runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, core->opt.quant ? core->opt.quant : "", core->opt.num_thread);
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         } else {
             LOG_TRACE("%s", "loading lstm model");
