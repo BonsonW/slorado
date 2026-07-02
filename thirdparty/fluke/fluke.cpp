@@ -1,11 +1,11 @@
 #include "fluke.h"
 
-// tensor_quant lives in the dorado tree; resolved via -I thirdparty.
+// tensor_quant_t lives in the dorado tree; resolved via -I thirdparty.
 #include "dorado/tensor_chunk_utils.h"
 
 #include <cstdio>
 
-enum fluke_format fluke_parse_format(const std::string &method) {
+enum fluke_format_t fluke_parse_format(const std::string &method) {
     if (method.rfind("int8", 0) == 0) return FLUKE_FORMAT_INT8;
     // Future real-kernel formats plug in here (fp8, mxfp4). Everything else — including "fp16",
     // "dummy", empty, and the fake-quant-only methods — stays on the fp16 path.
@@ -28,7 +28,7 @@ enum fluke_format fluke_parse_format(const std::string &method) {
 // loaded once, so a single shared handle serves every layer and device.
 struct fluke_backend {
     int d_model, dim_feedforward, nhead, head_dim, max_seq;
-    enum fluke_format format;
+    enum fluke_format_t format;
 };
 
 // Process-global kernel modules, loaded once by fluke_select_backend.
@@ -44,7 +44,7 @@ static void fill_desc(int32_t shapes[3], int64_t strides[2], const at::Tensor &t
     for (int i = 0; i < 2; ++i) strides[i] = i < nd ? (int64_t)t.stride(i) : 0;
 }
 
-fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired, fluke_dims dims) {
+fluke_backend_t *fluke_select_backend(int device_index, enum fluke_format_t desired, fluke_dims_t dims) {
     if (desired != FLUKE_FORMAT_INT8) return NULL; // only int8 kernels exist today
 
     int major = 0, minor = 0;
@@ -72,7 +72,7 @@ fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired,
         fprintf(stderr, "[fluke] int8 kernel backend active on device %d (sm_%d)\n", device_index, cc);
     }
 
-    static fluke_backend b; // process-lifetime; all layers share it
+    static fluke_backend_t b; // process-lifetime; all layers share it
     b.d_model = dims.d_model;
     b.dim_feedforward = dims.dim_feedforward;
     b.nhead = dims.nhead;
@@ -82,7 +82,7 @@ fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired,
     return &b;
 }
 
-at::Tensor fluke_qkv_rotary_i8(const fluke_backend *b, const tensor_quant &x, const tensor_quant &wqkv,
+at::Tensor fluke_qkv_rotary_i8(const fluke_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &wqkv,
                                const at::Tensor &sin, const at::Tensor &cos) {
     const int64_t N = x.tensor.size(0);
     const int64_t T = x.tensor.size(1);
@@ -115,8 +115,8 @@ at::Tensor fluke_qkv_rotary_i8(const fluke_backend *b, const tensor_quant &x, co
     return out.view({N, T, 3, b->nhead, b->head_dim});
 }
 
-at::Tensor fluke_gated_mlp_i8(const fluke_backend *b, const tensor_quant &x, const tensor_quant &gate,
-                              const tensor_quant &up) {
+at::Tensor fluke_gated_mlp_i8(const fluke_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &gate,
+                              const tensor_quant_t &up) {
     const int64_t N = x.tensor.size(0);
     const int64_t T = x.tensor.size(1);
     const int64_t M = N * T;
@@ -151,12 +151,12 @@ at::Tensor fluke_gated_mlp_i8(const fluke_backend *b, const tensor_quant &x, con
 
 #else // no CUDA-12 kernel support — no backend, ops never called.
 
-fluke_backend *fluke_select_backend(int, enum fluke_format, fluke_dims) { return NULL; }
+fluke_backend_t *fluke_select_backend(int, enum fluke_format_t, fluke_dims_t) { return NULL; }
 
-at::Tensor fluke_qkv_rotary_i8(const fluke_backend *, const tensor_quant &, const tensor_quant &,
+at::Tensor fluke_qkv_rotary_i8(const fluke_backend_t *, const tensor_quant_t &, const tensor_quant_t &,
                                const at::Tensor &, const at::Tensor &) { return at::Tensor(); }
 
-at::Tensor fluke_gated_mlp_i8(const fluke_backend *, const tensor_quant &, const tensor_quant &,
-                              const tensor_quant &) { return at::Tensor(); }
+at::Tensor fluke_gated_mlp_i8(const fluke_backend_t *, const tensor_quant_t &, const tensor_quant_t &,
+                              const tensor_quant_t &) { return at::Tensor(); }
 
 #endif // HAVE_CUDA

@@ -53,7 +53,7 @@ typedef struct {
     BoundedQueue<std::shared_ptr<read_state_t>> *out_q;
     uint64_t total_reads;
     uint64_t total_bytes;
-} pipeline_ctx;
+} pipeline_ctx_t;
 
 // A read is worth basecalling / mod calling only if it has signal and produced a sequence.
 static inline bool read_is_valid(const std::shared_ptr<read_state_t> &rs) {
@@ -61,7 +61,7 @@ static inline bool read_is_valid(const std::shared_ptr<read_state_t> &rs) {
 }
 
 // Stage 1: read raw records from the slow5 file, decode them, emit read_state_t.
-static void loader_stage(pipeline_ctx *ctx) {
+static void loader_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     uint64_t seq_no = 0;
 
@@ -93,7 +93,7 @@ static void loader_stage(pipeline_ctx *ctx) {
 }
 
 // Stage 2: scale signal and split into overlapping chunks; emit one item per chunk.
-static void preprocess_stage(pipeline_ctx *ctx) {
+static void preprocess_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     std::shared_ptr<read_state_t> rs;
 
@@ -121,7 +121,7 @@ static void preprocess_stage(pipeline_ctx *ctx) {
 }
 
 // Stage 3: pack chunks to gpu_batch_size across reads and run inference+decode.
-static void runner_stage(pipeline_ctx *ctx, int runner_idx) {
+static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
 
@@ -155,7 +155,7 @@ static void runner_stage(pipeline_ctx *ctx, int runner_idx) {
 
 // Stage 4: stitch a read's chunks back into a single sequence (+ RNA reversal). Routes valid reads
 // to the modbase stages when --mod, else straight to output.
-static void stitch_stage(pipeline_ctx *ctx) {
+static void stitch_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     const bool rna = is_rna(core->model_config->sample_type);
     std::shared_ptr<read_state_t> rs;
@@ -179,7 +179,7 @@ static void stitch_stage(pipeline_ctx *ctx) {
 }
 
 // Stage 4b (mod): build the seq->signal mapping and modbase chunks; emit one item per mod chunk.
-static void mod_preprocess_stage(pipeline_ctx *ctx) {
+static void mod_preprocess_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     std::shared_ptr<read_state_t> rs;
 
@@ -204,7 +204,7 @@ static void mod_preprocess_stage(pipeline_ctx *ctx) {
 }
 
 // Stage 4c (mod): pack mod chunks to gpu_batch_size across reads and run the modbase model.
-static void mod_runner_stage(pipeline_ctx *ctx, int runner_idx) {
+static void mod_runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
 
@@ -237,7 +237,7 @@ static void mod_runner_stage(pipeline_ctx *ctx, int runner_idx) {
 }
 
 // Stage 4d (mod): turn base_mod_probs into MM/ML tags.
-static void mod_postprocess_stage(pipeline_ctx *ctx) {
+static void mod_postprocess_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     std::shared_ptr<read_state_t> rs;
 
@@ -249,7 +249,7 @@ static void mod_postprocess_stage(pipeline_ctx *ctx) {
 
 // Stage 5: write output (FASTQ, or SAM with MM/ML under --mod) and free per-read resources.
 // Single thread keeps fprintf serialized; output order is not guaranteed to match the input file.
-static void writer_stage(pipeline_ctx *ctx) {
+static void writer_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     const bool sam = (core->opt.flag & SLORADO_SAM) != 0;
     std::shared_ptr<read_state_t> rs;
@@ -308,7 +308,7 @@ void run_pipeline(core_t *core) {
     BoundedQueue<std::shared_ptr<read_state_t>> mod_post_q(out_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> out_q(out_cap);
 
-    pipeline_ctx ctx;
+    pipeline_ctx_t ctx;
     ctx.core = core;
     ctx.mod = mod;
     ctx.read_q = &read_q;

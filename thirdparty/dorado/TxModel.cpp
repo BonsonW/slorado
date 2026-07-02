@@ -110,7 +110,7 @@ void GatedMLPImpl::update_calib_weights() {
 }
 
 // Fused int8 path: dual GEMM (gate,up) + SiLU on an int8 activation, then fc2 (fp16).
-torch::Tensor GatedMLPImpl::forward_quant(const tensor_quant &x) {
+torch::Tensor GatedMLPImpl::forward_quant(const tensor_quant_t &x) {
     auto g = fluke_gated_mlp_i8(backend_, x, qw_gate_, qw_up_);
     const layer_quant_t *lq_fc2 = &k_empty_lq;
     if (stats_ && !stats_->quant_methods.empty()) {
@@ -120,7 +120,7 @@ torch::Tensor GatedMLPImpl::forward_quant(const tensor_quant &x) {
     return at::linear(fake_quant(g, lq_fc2->act), fake_quant(fc2->weight, lq_fc2->weight), fc2->bias);
 }
 
-void GatedMLPImpl::setup_backend(const fluke_dims &dims, int device_index, enum fluke_format format) {
+void GatedMLPImpl::setup_backend(const fluke_dims_t &dims, int device_index, enum fluke_format_t format) {
     backend_ = fluke_select_backend(device_index, format, dims);
     if (!backend_) return;
     // fc1->weight is [2*hidden, in]. The fp16 path splits the OUTPUT via chunk(2,-1):
@@ -343,7 +343,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 }
 
 // int8 path: fused int8 wqkv GEMM + rotary produces fp16 qkv, then the shared attention tail.
-torch::Tensor MultiHeadAttentionImpl::forward_quant(const tensor_quant &x) {
+torch::Tensor MultiHeadAttentionImpl::forward_quant(const tensor_quant_t &x) {
     const layer_quant_t *lq_op = &k_empty_lq;
     if (model_stats && !attn_prefix_.empty() && !model_stats->quant_methods.empty()) {
         auto it = model_stats->quant_methods.find(attn_prefix_ + ".out_proj");
@@ -438,7 +438,7 @@ torch::Tensor MultiHeadAttentionImpl::attn_tail(torch::Tensor qkv, const layer_q
     return out;
 };
 
-void MultiHeadAttentionImpl::setup_backend(const fluke_dims &dims, int device_index, enum fluke_format format) {
+void MultiHeadAttentionImpl::setup_backend(const fluke_dims_t &dims, int device_index, enum fluke_format_t format) {
     backend_ = fluke_select_backend(device_index, format, dims);
     if (!backend_) return;
     // wqkv->weight is [3*d_model, d_model]; one int8 scale per output channel (dim 0).
@@ -524,7 +524,7 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 // Fused int8 path: one encoder layer of the int8 residual stream, updating `a` in place.
 // Each fused sublayer consumes the int8 activation directly; the fused RMSNorm re-quantizes
 // (sublayer_out + dequant(a)*alpha) back into `a` as int8 + per-token scale.
-void TxEncoderImpl::forward_quant(tensor_quant &a) {
+void TxEncoderImpl::forward_quant(tensor_quant_t &a) {
 #ifdef USE_GPU
     const float alpha = named_buffers()["deepnorm_alpha"].flatten()[0].item<float>();
     const float eps = 1e-5f;
@@ -578,7 +578,7 @@ torch::Tensor TxEncoderStackImpl::forward(const torch::Tensor &x) {
     // seqlen, so any T works up to the baked sin/cos table extent (S2048 => T<=2048, which also
     // matches the RoPE table's max_seq_len); larger T falls back to fp16.
     if (quant_stream_ && !x.device().is_cpu() && x.size(1) <= 2048) {
-        tensor_quant a = quantize_tensor(x, -1); // per-token int8
+        tensor_quant_t a = quantize_tensor(x, -1); // per-token int8
         for (auto &enc : layer_vec) enc->forward_quant(a);
         return (a.tensor.to(at::kFloat) * a.scale.unsqueeze(-1)).to(at::kHalf);
     }
@@ -716,11 +716,11 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
     // Quantized inference path: parse the requested mode to a kernel format, then eagerly quantize
     // weights + detect a device backend for (arch, format). Engages only when a backend is available
     // for every layer; otherwise the model falls back to the fp16 path transparently.
-    enum fluke_format quant_format = fluke_parse_format(quant_mode);
+    enum fluke_format_t quant_format = fluke_parse_format(quant_mode);
 #ifdef USE_GPU
     if (quant_format != FLUKE_FORMAT_NONE && model->tx_encoder && !options.device().is_cpu()) {
         const auto &txp = model_config.tx->tx;
-        fluke_dims dims{txp.d_model, txp.dim_feedforward, txp.nhead,
+        fluke_dims_t dims{txp.d_model, txp.dim_feedforward, txp.nhead,
                         txp.d_model / txp.nhead, /*max_seq=*/1024};
         const int dev = options.device().index();
         bool all_ok = true;

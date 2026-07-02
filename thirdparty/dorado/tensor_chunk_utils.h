@@ -20,7 +20,7 @@ T pad_to(const T a, const T b) {
 
 // Symmetric int8 quantization container. `tensor` is the int8 data; `scale` is the
 // per-slice dequant multiplier (reciprocal pre-applied) — i.e. fp ≈ tensor * scale.
-struct tensor_quant {
+struct tensor_quant_t {
     at::Tensor tensor; // int8 tensor
     at::Tensor scale;  // float scale per slice, reciprocal pre-applied
 };
@@ -30,13 +30,13 @@ struct tensor_quant {
 //   dim =  1 on a weight    [out, in]     -> one scale per output channel
 // The returned `scale` is the dequant multiplier (amax/128), matching the kernels'
 // mScaleA/mScaleB and the fused RMSNorm's residual_scale conventions.
-inline tensor_quant quantize_tensor(const at::Tensor &x, int dim) {
+inline tensor_quant_t quantize_tensor(const at::Tensor &x, int dim) {
     auto fp_range = x.abs().amax(dim);
     constexpr int i_range = 256 / 2;
     auto quant_scale = (i_range / fp_range);
     auto quant_max = i_range - 1;
     auto x_quant = (x * quant_scale.unsqueeze(dim)).round().clip(-quant_max, quant_max);
-    return tensor_quant {
+    return tensor_quant_t {
         x_quant.to(torch::kInt8).contiguous(),
         quant_scale.to(torch::kFloat32).reciprocal_().contiguous()
     };
