@@ -58,7 +58,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/modbase.o \
 	  $(BUILD_DIR)/lstm_model.o \
 	  $(BUILD_DIR)/tx_model.o \
-	  $(BUILD_DIR)/ModBaseModel.o \
+	  $(BUILD_DIR)/modbase_model.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
 	  $(BUILD_DIR)/fluke.o \
@@ -187,7 +187,7 @@ $(BUILD_DIR)/%.o: thirdparty/fluke/sm80/%.o
 	  --redefine-sym _cuKernelGetAttribute=cuKernelGetAttribute \
 	  $< $@
 
-$(BUILD_DIR)/ModBaseModel.o: thirdparty/dorado/ModBaseModel.cpp
+$(BUILD_DIR)/modbase_model.o: thirdparty/dorado/modbase_model.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/model_config.o: thirdparty/dorado/model_config.cpp

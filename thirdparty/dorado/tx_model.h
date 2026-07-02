@@ -72,12 +72,3 @@ typedef struct {
 tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, const std::string &quant_mode, int nthreads);
 at::Tensor tx_model_forward(tx_model_t *m, at::Tensor x);
 void free_tx_model(tx_model_t *m);
-
-// Still used by the (torch::nn) modbase model.
-struct LinearUpsampleImpl : torch::nn::Module {
-    LinearUpsampleImpl(const EncoderUpsampleParams &params);
-    torch::Tensor forward(const torch::Tensor &x);
-    const int scale_factor;
-    torch::nn::Linear linear{nullptr};
-};
-TORCH_MODULE(LinearUpsample);

@@ -36,7 +36,7 @@ SOFTWARE.
 #include "dorado/tensor_chunk_utils.h"
 #include "dorado/lstm_model.h"
 #include "dorado/tx_model.h"
-#include "dorado/ModBaseModel.h"
+#include "dorado/modbase_model.h"
 #include "dorado/modbase.h"
 #include "dorado/simd.h"
 
@@ -142,8 +142,8 @@ void init_runner(
 
     // Load model first so we can query remaining GPU memory for auto batch size
     if (modbase == true) {
-        LOG_TRACE("%s", "loading modbase model");
-        runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, batch_size);
+        LOG_TRACE("%s", "loading modbase model (procedural)");
+        runner->bc_model = load_modbase_model_proc(*core->modbase_config, runner->tensor_opts, batch_size);
     } else {
         if (core->model_config->family == MODEL_FAMILY_TX) {
             LOG_TRACE("%s", "loading tx model (procedural)");
@@ -411,6 +411,7 @@ void free_runners(core_t *core) {
 
         if (core->modbase_config != NULL) {
             runner_t *mod_runner = (*core->mod_runners)[i];
+            if (mod_runner->bc_model) free_modbase_model((modbase_model_t *)mod_runner->bc_model);
             delete mod_runner;
         }
     }

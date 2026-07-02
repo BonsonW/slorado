@@ -18,16 +18,6 @@
 using namespace torch::nn;
 using Slice = torch::indexing::Slice;
 
-// LinearUpsample — retained for the (torch::nn) modbase model.
-LinearUpsampleImpl::LinearUpsampleImpl(const EncoderUpsampleParams &params) : scale_factor(params.scale_factor) {
-    linear = register_module("linear", Linear(LinearOptions(params.d_model, scale_factor * params.d_model).bias(true)));
-};
-
-torch::Tensor LinearUpsampleImpl::forward(const torch::Tensor &x) {
-    const int64_t N = x.size(0), T = x.size(1), C = x.size(2);
-    return linear(x).reshape({N, scale_factor * T, C});
-};
-
 // =============================== procedural transformer model ===================================
 
 tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, const std::string &quant_mode, int nthreads) {

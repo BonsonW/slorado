@@ -15,6 +15,8 @@
 #include "misc.h"
 #include "error.h"
 
+#include "dorado/modbase_model.h"
+
 #include "dorado/modbase.h"
 #include "dorado/tensor_chunk_utils.h"
 
@@ -71,7 +73,8 @@ static void mod_call_chunks(
     auto active_input_sigs = runner->input_sigs.narrow(0, 0, active_chunks);
     auto active_input_seqs = runner->input_seqs.narrow(0, 0, active_chunks);
 
-    auto scores = runner->module->forward(
+    auto scores = modbase_model_forward(
+        (modbase_model_t *)runner->bc_model,
         active_input_sigs.to(runner->tensor_opts.device_opt().value()),
         active_input_seqs.to(runner->tensor_opts.device_opt().value())
     );
