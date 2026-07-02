@@ -1,6 +1,6 @@
 #pragma once
 
-#include "CRFModel.h"
+#include "lstm_model.h"
 #include "calib.h"
 #include "error.h"
 #include "quant.h"

@@ -1,5 +1,5 @@
 #include "ModBaseModel.h"
-#include "TxModel.h"
+#include "tx_model.h"
 #include "tensor_chunk_utils.h"
 
 #include <stdexcept>

@@ -1,4 +1,4 @@
-#include "TxModel.h"
+#include "tx_model.h"
 #include "quant.h"
 
 #include <ATen/Functions.h>

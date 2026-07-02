@@ -1,5 +1,5 @@
-#ifndef CRF_MODEL_H
-#define CRF_MODEL_H
+#ifndef LSTM_MODEL_H
+#define LSTM_MODEL_H
 
 #include <torch/torch.h>
 

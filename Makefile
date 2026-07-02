@@ -56,8 +56,8 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/sensitivity.o \
 	  $(BUILD_DIR)/tensor_chunk_utils.o \
 	  $(BUILD_DIR)/modbase.o \
-	  $(BUILD_DIR)/CRFModel.o \
-	  $(BUILD_DIR)/TxModel.o \
+	  $(BUILD_DIR)/lstm_model.o \
+	  $(BUILD_DIR)/tx_model.o \
 	  $(BUILD_DIR)/ModBaseModel.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
@@ -163,10 +163,10 @@ $(BUILD_DIR)/tensor_chunk_utils.o: thirdparty/dorado/tensor_chunk_utils.cpp
 $(BUILD_DIR)/modbase.o: thirdparty/dorado/modbase.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/CRFModel.o: thirdparty/dorado/CRFModel.cpp
+$(BUILD_DIR)/lstm_model.o: thirdparty/dorado/lstm_model.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-$(BUILD_DIR)/TxModel.o: thirdparty/dorado/TxModel.cpp
+$(BUILD_DIR)/tx_model.o: thirdparty/dorado/tx_model.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 # fluke — facade over the precompiled fused int8 kernels

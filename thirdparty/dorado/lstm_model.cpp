@@ -1,7 +1,7 @@
 #include <math.h>
 #include <string>
 
-#include "CRFModel.h"
+#include "lstm_model.h"
 #include "error.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
