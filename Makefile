@@ -90,7 +90,7 @@ ifdef cuda
 	CUDART_VER := $(shell grep -E 'define +CUDART_VERSION' $(CUDA_INC)/cuda_runtime_api.h 2>/dev/null | grep -oE '[0-9]+' | head -1)
 	ifeq ($(shell [ "$(CUDART_VER)" -ge 12000 ] 2>/dev/null && echo 1),1)
 	FLUKE_OBJ = $(BUILD_DIR)/gemm_i8_dual_silu_N2048_K512.o \
-	            $(BUILD_DIR)/gemm_i8_rotary_N1536_K512_H8D64R64S1024.o
+	            $(BUILD_DIR)/gemm_i8_rotary_N1536_K512_H8D64R64S2048.o
 	endif
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -L$(CUDA_LIB)/stubs -lcuda -lrt -ldl

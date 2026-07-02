@@ -22,7 +22,7 @@ enum fluke_format fluke_parse_format(const std::string &method) {
 #if defined(HAVE_CUDA) && defined(CUDART_VERSION) && CUDART_VERSION >= 12000
 
 #include "sm80/gemm_i8_dual_silu_N2048_K512.h"
-#include "sm80/gemm_i8_rotary_N1536_K512_H8D64R64S1024.h"
+#include "sm80/gemm_i8_rotary_N1536_K512_H8D64R64S2048.h"
 
 // The backend is just config: dims + format. The kernel modules are process-global (below) and
 // loaded once, so a single shared handle serves every layer and device.
@@ -32,7 +32,7 @@ struct fluke_backend {
 };
 
 // Process-global kernel modules, loaded once by fluke_select_backend.
-static gemm_i8_rotary_N1536_K512_H8D64R64S1024_Kernel_Module_t g_rotary_module;
+static gemm_i8_rotary_N1536_K512_H8D64R64S2048_Kernel_Module_t g_rotary_module;
 static gemm_i8_dual_silu_N2048_K512_Kernel_Module_t            g_mlp_module;
 static int g_modules_loaded = 0;
 
@@ -66,7 +66,7 @@ fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired,
     }
 
     if (!g_modules_loaded) {
-        gemm_i8_rotary_N1536_K512_H8D64R64S1024_Kernel_Module_Load(&g_rotary_module);
+        gemm_i8_rotary_N1536_K512_H8D64R64S2048_Kernel_Module_Load(&g_rotary_module);
         gemm_i8_dual_silu_N2048_K512_Kernel_Module_Load(&g_mlp_module);
         g_modules_loaded = 1;
         fprintf(stderr, "[fluke] int8 kernel backend active on device %d (sm_%d)\n", device_index, cc);
@@ -90,25 +90,27 @@ at::Tensor fluke_qkv_rotary_i8(const fluke_backend *b, const tensor_quant &x, co
     auto a2d = x.tensor.reshape({M, b->d_model});
     auto out = torch::empty({M, 3 * b->d_model}, x.tensor.options().dtype(at::kHalf));
 
-    gemm_i8_rotary_N1536_K512_H8D64R64S1024_Tensor_mA_t mA{};
+    gemm_i8_rotary_N1536_K512_H8D64R64S2048_Tensor_mA_t mA{};
     mA.data = a2d.data_ptr();
     fill_desc(mA.dynamic_shapes, mA.dynamic_strides, a2d);
 
-    gemm_i8_rotary_N1536_K512_H8D64R64S1024_Tensor_mB_t mB{};
+    gemm_i8_rotary_N1536_K512_H8D64R64S2048_Tensor_mB_t mB{};
     mB.data = wqkv.tensor.data_ptr();
     fill_desc(mB.dynamic_shapes, mB.dynamic_strides, wqkv.tensor);
 
-    gemm_i8_rotary_N1536_K512_H8D64R64S1024_Tensor_mC_t mC{};
+    gemm_i8_rotary_N1536_K512_H8D64R64S2048_Tensor_mC_t mC{};
     mC.data = out.data_ptr();
     fill_desc(mC.dynamic_shapes, mC.dynamic_strides, out);
 
-    gemm_i8_rotary_N1536_K512_H8D64R64S1024_Tensor_mScaleA_t mScaleA{ x.scale.data_ptr() };
-    gemm_i8_rotary_N1536_K512_H8D64R64S1024_Tensor_mScaleB_t mScaleB{ wqkv.scale.data_ptr() };
-    gemm_i8_rotary_N1536_K512_H8D64R64S1024_Tensor_mSin_t    mSin{ (void *)sin.data_ptr() };
-    gemm_i8_rotary_N1536_K512_H8D64R64S1024_Tensor_mCos_t    mCos{ (void *)cos.data_ptr() };
+    gemm_i8_rotary_N1536_K512_H8D64R64S2048_Tensor_mScaleA_t mScaleA{ x.scale.data_ptr() };
+    gemm_i8_rotary_N1536_K512_H8D64R64S2048_Tensor_mScaleB_t mScaleB{ wqkv.scale.data_ptr() };
+    gemm_i8_rotary_N1536_K512_H8D64R64S2048_Tensor_mSin_t    mSin{ (void *)sin.data_ptr() };
+    gemm_i8_rotary_N1536_K512_H8D64R64S2048_Tensor_mCos_t    mCos{ (void *)cos.data_ptr() };
 
-    cute_dsl_gemm_i8_rotary_N1536_K512_H8D64R64S1024_wrapper(
-        &g_rotary_module, &mA, &mB, &mC, &mScaleA, &mScaleB, &mSin, &mCos);
+    // Runtime seqlen = T: the kernel indexes rotary as seq = row % seqlen, supporting any
+    // T in [1, baked max_seq] (the sin/cos table extent) without a per-length re-export.
+    cute_dsl_gemm_i8_rotary_N1536_K512_H8D64R64S2048_wrapper(
+        &g_rotary_module, &mA, &mB, &mC, &mScaleA, &mScaleB, &mSin, &mCos, (int32_t)T);
 
     return out.view({N, T, 3, b->nhead, b->head_dim});
 }

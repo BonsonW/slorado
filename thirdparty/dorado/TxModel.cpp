@@ -573,9 +573,11 @@ TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torc
 
 torch::Tensor TxEncoderStackImpl::forward(const torch::Tensor &x) {
 #ifdef USE_GPU
-    // Fused int8 path: quantize once at entry, carry an int8 residual stream through every
-    // layer (re-quantized by each RMSNorm), dequantize once at exit. The kernels are seq<=1024.
-    if (quant_stream_ && !x.device().is_cpu() && x.size(1) <= 1024) {
+    // Fused int8 path: quantize once at entry, carry an int8 residual stream through every layer
+    // (re-quantized by each RMSNorm), dequantize once at exit. The rotary kernel takes the runtime
+    // seqlen, so any T works up to the baked sin/cos table extent (S2048 => T<=2048, which also
+    // matches the RoPE table's max_seq_len); larger T falls back to fp16.
+    if (quant_stream_ && !x.device().is_cpu() && x.size(1) <= 2048) {
         tensor_quant a = quantize_tensor(x, -1); // per-token int8
         for (auto &enc : layer_vec) enc->forward_quant(a);
         return (a.tensor.to(at::kFloat) * a.scale.unsqueeze(-1)).to(at::kHalf);
