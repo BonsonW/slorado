@@ -42,12 +42,10 @@ FAST="dna_r10.4.1_e8.2_400bps_fast@v5.0.0"
 HAC="dna_r10.4.1_e8.2_400bps_hac@v5.0.0"
 SUP="dna_r10.4.1_e8.2_400bps_sup@v5.0.0"
 
-FAST_RNA="rna004_130bps_fast@v5.1.0"
-HAC_RNA="rna004_130bps_hac@v5.1.0"
-SUP_RNA="rna004_130bps_sup@v5.1.0"
-
 HAC_V6="dna_r10.4.1_e8.2_400bps_hac@v6.0.0"
+FAST_RNA_V6="rna004_fast@v6.0.0"
 HAC_RNA_V6="rna004_hac@v6.0.0"
+SUP_RNA_V6="rna004_sup@v6.0.0"
 
 # mod
 METH=5mCG_5hmCG@v3
@@ -119,24 +117,6 @@ check_accuracy() {
             return 0
         fi
         ;;
-    $FAST_RNA )
-        if (( $(echo "$2 >= 0.91" | bc -l) ));
-        then
-            return 0
-        fi
-        ;;
-    $HAC_RNA )
-        if (( $(echo "$2 >= 0.95" | bc -l) ));
-        then
-            return 0
-        fi
-        ;;
-    $SUP_RNA )
-        if (( $(echo "$2 >= 0.97" | bc -l) ));
-        then
-            return 0
-        fi
-        ;;
     $HAC_V6 )
         if (( $(echo "$2 >= 0.97" | bc -l) ));
         then
@@ -145,6 +125,18 @@ check_accuracy() {
         ;;
     $HAC_RNA_V6 )
         if (( $(echo "$2 >= 0.95" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    $FAST_RNA_V6 )
+        if (( $(echo "$2 >= 0.91" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    $SUP_RNA_V6 )
+        if (( $(echo "$2 >= 0.97" | bc -l) ));
         then
             return 0
         fi
@@ -426,15 +418,13 @@ test -d models/$FAST || download_model $FAST
 test -d models/$HAC || download_model $HAC
 test -d models/$SUP || download_model $SUP
 
-test -d models/$FAST_RNA || download_model $FAST_RNA
-test -d models/$HAC_RNA || download_model $HAC_RNA
-test -d models/$SUP_RNA || download_model $SUP_RNA
-
 test -d models/${HAC}_${METH} || download_model ${HAC}_${METH}
 test -d models/${SUP}_${METH} || download_model ${SUP}_${METH}
 
 test -d models/$HAC_V6 || download_model $HAC_V6
+test -d models/$FAST_RNA_V6 || download_model $FAST_RNA_V6
 test -d models/$HAC_RNA_V6 || download_model $HAC_RNA_V6
+test -d models/$SUP_RNA_V6 || download_model $SUP_RNA_V6
 
 # memory check with asan if building from source
 if [ "$SLORADO_MODE" = "build" ]; then
@@ -510,15 +500,9 @@ echo ""
 echo "********************************************************************"
 
 # accuracy check RNA
-echo "GPU - FAST RNA model - 20k reads"
-ex $SLORADO basecaller models/$FAST_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $FAST_BATCH_ARG > tmp.fastq || die "Running the tool failed"
-check_acc_rna $FAST_RNA
-echo ""
-echo "********************************************************************"
-
-echo "GPU - HAC RNA model - 20k reads"
-ex $SLORADO basecaller models/$HAC_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.fastq || die "Running the tool failed"
-check_acc_rna $HAC_RNA
+echo "GPU - FAST RNA v6.0.0 model - 20k reads"
+ex $SLORADO basecaller models/$FAST_RNA_V6 $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $FAST_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_rna $FAST_RNA_V6
 echo ""
 echo "********************************************************************"
 
@@ -528,9 +512,9 @@ check_acc_rna $HAC_RNA_V6
 echo ""
 echo "********************************************************************"
 
-echo "GPU - SUP RNA model - 20k reads"
-ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq || die "Running the tool failed"
-check_acc_rna $SUP_RNA
+echo "GPU - SUP RNA v6.0.0 model - 20k reads"
+ex $SLORADO basecaller models/$SUP_RNA_V6 $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_rna $SUP_RNA_V6
 echo ""
 echo "********************************************************************"
 
@@ -561,9 +545,9 @@ fi
 echo ""
 echo "********************************************************************"
 
-echo "GPU - SUP RNA model (flash) - 20k reads"
-if ex $SLORADO basecaller models/$SUP_RNA $SUBSUBSAMPLE_RNA --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq; then
-    if ! (check_acc_rna $SUP_RNA); then
+echo "GPU - SUP RNA v6.0.0 model (flash) - 20k reads"
+if ex $SLORADO basecaller models/$SUP_RNA_V6 $SUBSUBSAMPLE_RNA --flash yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq; then
+    if ! (check_acc_rna $SUP_RNA_V6); then
         FLASH_SUPPORTED=0
     fi
 else
