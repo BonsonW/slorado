@@ -44,6 +44,10 @@ inline tensor_quant_t quantize_tensor(const at::Tensor &x, int dim) {
 
 void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params);
 
+// Copy `count` elements from src_tensor[src_offset..] into dest_tensor[dest_offset..], converting
+// fp32->fp16 when needed. Both tensors must be contiguous. Used to pack modbase input tensors.
+void copy_tensor_elems(at::Tensor& dest_tensor, std::size_t dest_offset, const at::Tensor& src_tensor, std::size_t src_offset, std::size_t count);
+
 // Scale a single record's signal and split it into overlapping basecall chunks (rec->len_raw_signal > 0).
 void preprocess_signal(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::vector<basecall_chunk_t> &chunks);
 

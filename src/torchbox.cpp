@@ -566,8 +566,6 @@ void postprocess_modbase(core_t *core, read_dat_t *read_dat, std::string &mod_st
     ModBaseContext context_handler;
     context_handler.set_context(core->modbase_config->mods.motif, size_t(core->modbase_config->mods.motif_offset));
     std::string context = context_handler.encode();
-    // ERROR("%s", context.c_str());
-    // exit(1);
 
     if (!context.empty()) {
         if (!context_handler.decode(context, need_to_generate_mask)) {

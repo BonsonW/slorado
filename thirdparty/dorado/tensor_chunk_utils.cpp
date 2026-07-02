@@ -1,5 +1,6 @@
 
 #include <cstdint>
+#include <cstring>
 #include <stdlib.h>
 #include <vector>
 #include <numeric>
@@ -9,6 +10,46 @@
 #include "error.h"
 #include "tensor_chunk_utils.h"
 #include "simd.h"
+
+static void convert_f32_to_f16_impl(c10::Half* const dest, const float* const src, size_t count) {
+    auto src_tensor_f32 = at::from_blob(const_cast<float*>(src), {static_cast<int64_t>(count)});
+    auto src_tensor_f16 = src_tensor_f32.to(at::ScalarType::Half);
+    std::memcpy(dest, src_tensor_f16.data_ptr(), count * sizeof(c10::Half));
+}
+
+void copy_tensor_elems(
+    at::Tensor& dest_tensor,
+    std::size_t dest_offset,
+    const at::Tensor& src_tensor,
+    std::size_t src_offset,
+    std::size_t count
+) {
+    assert(dest_tensor.is_contiguous());
+    assert(src_tensor.is_contiguous());
+    assert(dest_offset + count <= size_t(dest_tensor.numel()));
+    assert(src_offset + count <= size_t(src_tensor.numel()));
+
+    if (dest_tensor.dtype() == src_tensor.dtype()) {
+        // No conversion.
+        char* const dest_ptr = reinterpret_cast<char*>(dest_tensor.data_ptr());
+        const char* const src_ptr = reinterpret_cast<const char*>(src_tensor.data_ptr());
+        const size_t elem_size = dest_tensor.element_size();
+        std::memcpy(&dest_ptr[dest_offset * elem_size], &src_ptr[src_offset * elem_size],
+                    count * elem_size);
+    } else if (dest_tensor.dtype() == at::ScalarType::Half &&
+               src_tensor.dtype() == at::ScalarType::Float) {
+        // float32 -> float16 conversion.
+        auto* const dest_ptr = dest_tensor.data_ptr<c10::Half>();
+        const auto* const src_ptr = src_tensor.data_ptr<float>();
+        convert_f32_to_f16_impl(&dest_ptr[dest_offset], &src_ptr[src_offset], count);
+    } else {
+        // Slow fallback path for other conversions.
+        using at::indexing::Slice;
+        dest_tensor.flatten().index_put_(
+                {Slice(dest_offset, dest_offset + count)},
+                src_tensor.flatten().index({Slice(src_offset, src_offset + count)}));
+    }
+}
 
 #define EPS (1e-9f)
 #define DEFAULT_TRIM_THRESHOLD (2.4f)

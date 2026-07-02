@@ -15,6 +15,9 @@
 #include "misc.h"
 #include "error.h"
 
+#include "dorado/modbase.h"
+#include "dorado/tensor_chunk_utils.h"
+
 #ifdef USE_GPU
 #include <c10/core/DeviceGuard.h>
 #endif
@@ -26,85 +29,6 @@ typedef struct {
     int32_t start;
     int32_t end;
 } model_thread_arg_t;
-
-static int64_t resolve_score_index(
-    const int64_t hit_sig_abs,
-    const int64_t chunk_signal_start,
-    const int64_t scores_states,
-    const int64_t chunk_size,
-    const int64_t context_samples_before,
-    const int64_t context_samples_after,
-    const int64_t modbase_stride
-) {
-    if (hit_sig_abs < chunk_signal_start) {
-        ERROR("%s", "Modbase hit before chunk start.");
-    }
-
-    // Context hit chunk-relative signal index
-    const int64_t hit_sig_rel = hit_sig_abs - chunk_signal_start;
-
-    // Skip hits at end of a chunk without enough downstream context
-    // It will be processed at the start if the next chunk with complete context
-    if (hit_sig_rel > chunk_size - context_samples_after) {
-        return -2;
-    }
-
-    // Skip hits at the start of a chunk with insufficient context
-    // This hit will have been processed in a previous chunk
-    // UNLESS it's the start of a read where there's no useful lead-in
-    if (hit_sig_abs > context_samples_before && hit_sig_rel < context_samples_before) {
-        return -1;
-    }
-
-    // We should land on a canonical base
-    if (hit_sig_rel % modbase_stride != 0) {
-        ERROR("%s", "Modbase score did not align to canonical base.");
-    }
-
-    // Convert chunk-relative signal-space score index into sequence-space (/stride)
-    // and then into scores-space (*num_states)
-    return hit_sig_rel / modbase_stride * scores_states;
-}
-
-static void convert_f32_to_f16_impl(c10::Half* const dest, const float* const src, size_t count) {
-    auto src_tensor_f32 = at::from_blob(const_cast<float*>(src), {static_cast<int64_t>(count)});
-    auto src_tensor_f16 = src_tensor_f32.to(at::ScalarType::Half);
-    std::memcpy(dest, src_tensor_f16.data_ptr(), count * sizeof(c10::Half));
-}
-
-static void copy_tensor_elems(
-    at::Tensor& dest_tensor,
-    std::size_t dest_offset,
-    const at::Tensor& src_tensor,
-    std::size_t src_offset,
-    std::size_t count
-) {
-    assert(dest_tensor.is_contiguous());
-    assert(src_tensor.is_contiguous());
-    assert(dest_offset + count <= size_t(dest_tensor.numel()));
-    assert(src_offset + count <= size_t(src_tensor.numel()));
-
-    if (dest_tensor.dtype() == src_tensor.dtype()) {
-        // No conversion.
-        char* const dest_ptr = reinterpret_cast<char*>(dest_tensor.data_ptr());
-        const char* const src_ptr = reinterpret_cast<const char*>(src_tensor.data_ptr());
-        const size_t elem_size = dest_tensor.element_size();
-        std::memcpy(&dest_ptr[dest_offset * elem_size], &src_ptr[src_offset * elem_size],
-                    count * elem_size);
-    } else if (dest_tensor.dtype() == at::ScalarType::Half &&
-               src_tensor.dtype() == at::ScalarType::Float) {
-        // float32 -> float16 conversion.
-        auto* const dest_ptr = dest_tensor.data_ptr<c10::Half>();
-        const auto* const src_ptr = src_tensor.data_ptr<float>();
-        convert_f32_to_f16_impl(&dest_ptr[dest_offset], &src_ptr[src_offset], count);
-    } else {
-        // Slow fallback path for other conversions.
-        using at::indexing::Slice;
-        dest_tensor.flatten().index_put_(
-                {Slice(dest_offset, dest_offset + count)},
-                src_tensor.flatten().index({Slice(src_offset, src_offset + count)}));
-    }
-}
 
 static void mod_accept_chunk(const int num_chunks, const torch::Tensor& signal, const std::vector<int8_t>& kmers, const core_t* core, const int runner_idx) {
     runner_t* runner = (*core->mod_runners)[runner_idx];
@@ -162,73 +86,7 @@ static void mod_call_chunks(
     const int64_t row_size = scores_f16.size(1);
     const auto* const scores_f16_ptr = scores_f16.data_ptr<c10::Half>();
     for (size_t i = 0; i < chunks.size(); ++i) {
-        mod_chunk_t *chunk = chunks[i];
-        read_dat_t *read_dat = chunk->read_dat;
-        const int64_t row_offset = static_cast<int64_t>(i) * row_size;
-
-        const std::vector<int64_t>& hits_seq = read_dat->per_base_hits_seq.at(chunk->base_id);
-        const std::vector<int64_t>& hits_sig = read_dat->per_base_hits_sig.at(chunk->base_id);
-
-        const auto& cfg = core->modbase_config;
-        const char modbase_model_base = cfg->mods.base;
-        const int64_t modbase_stride = cfg->general.stride;
-        const int64_t chunk_size = cfg->context.chunk_size;
-        const int64_t context_samples_before = cfg->context.samples_before;
-        const int64_t context_samples_after = cfg->context.samples_after;
-
-        // The number of states predicted by this modbase model `num_mods + 1`
-        const int64_t scores_states = chunk->num_states;
-        const int64_t scores_size = row_size;
-        // const int64_t scores_seq_len = scores_size / scores_states;
-
-        const int64_t base_offset = static_cast<int64_t>(core->modbase_info->base_probs_offsets.at(cfg->mods.base_id));
-        const auto num_states = NUM_BASES + cfg->mods.count;
-
-        for (size_t hit = chunk->hit_offset; hit < hits_sig.size(); ++hit) {
-            // Context hit sequence index in the chunk sequence
-            const int64_t hit_seq = hits_seq.at(hit);
-
-            // const auto& seq = is_template_direction
-            //                           ? read.seq[hit_seq]
-            //                           : dorado::utils::complement_table[read_dat->seq[hit_seq]];
-
-            char seq = read_dat->seq[hit_seq];
-
-            // The canonical base should be constant for a single model
-            if (seq != modbase_model_base) {
-                ERROR("Modbase hit base is not correct : %c", seq);
-            }
-
-            int64_t hit_score_idx = resolve_score_index(
-                    hits_sig.at(hit), chunk->signal_offset, scores_states, chunk_size,
-                    context_samples_before, context_samples_after, modbase_stride);
-
-            if (hit_score_idx <= -2) {
-                // No more hits in this chunk
-                break;
-            } else if (hit_score_idx == -1) {
-                // This hit is skipped
-                continue;
-            }
-
-            // Extract the scores for the canonical base and each of the mods in this model
-            for (int64_t mod_offset = 0; mod_offset < scores_states; ++mod_offset) {
-                const int64_t score_idx = hit_score_idx + mod_offset;
-                if (score_idx >= scores_size) {
-                    ERROR("%s", "Modbase score index out of bounds.");
-                }
-
-                const int64_t row_score_idx = row_offset + score_idx;
-                const float score_value = static_cast<float>(scores_f16_ptr[row_score_idx]);
-                const uint8_t score = static_cast<uint8_t>(std::min(std::floor(score_value * 256), 255.0f));
-
-                // Index into the probabilities is calculated by
-                // sequence_index * num_states := canonical "A" base probs index
-                // offset then by the canonical base modification offsets
-                const int64_t prob_idx = hit_seq * num_states + base_offset + mod_offset;
-                read_dat->base_mod_probs.at(prob_idx) = score;
-            }
-        }
+        extract_mod_probs(core, chunks[i], scores_f16_ptr, static_cast<int64_t>(i) * row_size, row_size);
     }
 }
 
@@ -265,14 +123,14 @@ void mod_basecall_chunks(
         );
 
         if (len < chunk_size) {
-            // Tile the signal tensor
+            // tile the signal tensor
             auto result = std::div(chunk_size, len);
             int n_tiles = result.quot;
             int n_overhang = result.rem;
             signal_chunk = at::concat({signal_chunk.repeat({n_tiles}),
                                        signal_chunk.index({at::indexing::Slice(0, n_overhang)})},
                                       -1);
-            // Tile the kmer vector
+            // tile the kmer vector
             const int64_t original_size = static_cast<int64_t>(encoded_kmers_chunk.size());
             const int64_t extended_size = chunk_size * kmer_size_per_sample;
             encoded_kmers_chunk.resize(extended_size);
