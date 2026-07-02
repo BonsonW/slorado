@@ -222,8 +222,8 @@ typedef struct {
     opt_t opt;
     openfish_opt_t decoder_opts;
     model_config_t *model_config;
-    ModBaseModelConfig *modbase_config = NULL;
-    ModBaseInfo *modbase_info = NULL;
+    modbase_model_config_t *modbase_config = NULL;
+    modbase_info_t *modbase_info = NULL;
     size_t model_stride;
     size_t chunk_size;
 

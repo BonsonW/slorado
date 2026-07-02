@@ -120,8 +120,8 @@ bool toml_key_fallback(toml_table_t *config_toml, std::vector<std::string> fallb
 }
 
 // Parse sublayer extracting convolution parameters. This is for use on v4+ models only
-ConvParams parse_conv_params(const toml_table_t *segment, bool clamp) {
-    ConvParams params;
+conv_params_t parse_conv_params(const toml_table_t *segment, bool clamp) {
+    conv_params_t params;
     toml_datum_t insize = toml_int_in(segment, "insize");
     check_toml_datum(insize);
     toml_datum_t size   = toml_int_in(segment, "size");
@@ -175,14 +175,14 @@ bool has_clamp(const std::vector<toml_table_t *> &sublayers) {
 }
 
 // Parse sublayers extracting convolution parameters. This is for use on v4+ models only
-std::vector<ConvParams> parse_convs(const std::vector<toml_table_t *> &sublayers) {
-    std::vector<ConvParams> convs;
+std::vector<conv_params_t> parse_convs(const std::vector<toml_table_t *> &sublayers) {
+    std::vector<conv_params_t> convs;
     for (size_t i = 0; i < sublayers.size(); ++i) {
         // If the sublayer after a convolution is a clamp, the activation function may have
         // a fused implementation
         if (sublayer_type(sublayers.at(i)) == SublayerType::CONVOLUTION) {
             const bool has_clamp_next = ((i + 1) < sublayers.size()) &&sublayer_type(sublayers.at(i + 1)) == SublayerType::CLAMP;
-            ConvParams conv = parse_conv_params(sublayers.at(i), has_clamp_next);
+            conv_params_t conv = parse_conv_params(sublayers.at(i), has_clamp_next);
             convs.push_back(conv);
         }
     }
@@ -205,8 +205,8 @@ ScalingStrategy scaling_strategy_from_string(const char *strategy) {
 }
 
 // Parse a the config.toml to resolve the scaling parameters.
-SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *config_toml) {
-    SignalNormalisationParams params;
+signal_norm_params_t parse_signal_normalisation_params(const toml_table_t *config_toml) {
+    signal_norm_params_t params;
 
     // scaling.strategy introduced with v4.3 models
     if (toml_key_exists(config_toml, "scaling")) {
@@ -274,9 +274,9 @@ SignalNormalisationParams parse_signal_normalisation_params(const toml_table_t *
     return params;
 }
 
-TxEncoderParams parse_tx_encoder_params(toml_table_t *cfg) {
+tx_encoder_params_t parse_tx_encoder_params(toml_table_t *cfg) {
     toml_table_t *enc = toml_table_fallback(cfg, {"model", "encoder", "transformer_encoder"});
-    TxEncoderParams params;
+    tx_encoder_params_t params;
 
     toml_datum_t depth = toml_int_in(enc, "depth");
     check_toml_datum(depth);
@@ -319,9 +319,9 @@ TxEncoderParams parse_tx_encoder_params(toml_table_t *cfg) {
     return params;
 }
 
-EncoderUpsampleParams parse_encoder_upsample_params(toml_table_t *cfg) {
+encoder_upsample_params_t parse_encoder_upsample_params(toml_table_t *cfg) {
     toml_table_t *ups = toml_table_fallback(cfg, {"model", "encoder", "upsample"});
-    EncoderUpsampleParams params;
+    encoder_upsample_params_t params;
 
     toml_datum_t d_model = toml_int_in(ups, "d_model");
     check_toml_datum(d_model);
@@ -334,9 +334,9 @@ EncoderUpsampleParams parse_encoder_upsample_params(toml_table_t *cfg) {
     return params;
 }
 
-CRFEncoderParams parse_crf_encoder_params(toml_table_t *cfg) {
+crf_encoder_params_t parse_crf_encoder_params(toml_table_t *cfg) {
     toml_table_t *crf = toml_table_fallback(cfg, {"model", "encoder", "crf"});
-    CRFEncoderParams params;
+    crf_encoder_params_t params;
 
     toml_datum_t insize = toml_int_in(crf, "insize");
     check_toml_datum(insize);
@@ -534,14 +534,14 @@ static void load_tx_family(model_config_t &cfg, toml_table_t *config_toml) {
         bool is_conv = (strcmp(type_dt.u.s, "convolution") == 0);
         free(type_dt.u.s);
         if (!is_conv) continue;
-        const ConvParams conv = parse_conv_params(segment, false); // TX has no swish clamp
+        const conv_params_t conv = parse_conv_params(segment, false); // TX has no swish clamp
         cfg.convs.push_back(conv);
         cfg.stride *= conv.stride;
     }
 
     cfg.stride /= cfg.tx.upsample.scale_factor;
     cfg.out_features = pow(cfg.tx.crf.n_base, cfg.tx.crf.state_len + 1);
-    cfg.outsize = cfg.tx.crf.outsize();
+    cfg.outsize = crf_outsize(cfg.tx.crf);
     cfg.state_len = cfg.tx.crf.state_len;
     cfg.num_features = cfg.convs.front().insize;
     cfg.lstm_size = -1; // force a downstream error if misused as an LSTM model
@@ -653,8 +653,8 @@ bool is_modbase_model(const char *path) {
     return get_modbase_model_type(path) != ModelType::UNKNOWN;
 }
 
-LinearParams parse_linear(toml_table_t *segment) {
-    LinearParams p;
+linear_params_t parse_linear(toml_table_t *segment) {
+    linear_params_t p;
 
     toml_datum_t in_size = toml_int_in(segment, "in_features");
     check_toml_datum(in_size);
@@ -668,8 +668,8 @@ LinearParams parse_linear(toml_table_t *segment) {
     return p;
 }
 
-LSTMConfigParams parse_lstm(toml_table_t *segment) {
-    LSTMConfigParams p;
+lstm_config_params_t parse_lstm(toml_table_t *segment) {
+    lstm_config_params_t p;
 
     toml_datum_t lstm_size = toml_int_in(segment, "size");
     check_toml_datum(lstm_size);
@@ -683,8 +683,8 @@ LSTMConfigParams parse_lstm(toml_table_t *segment) {
     return p;
 }
 
-std::vector<LSTMConfigParams> parse_lstms(const std::vector<toml_table_t *>& sublayers) {
-    std::vector<LSTMConfigParams> lstms;
+std::vector<lstm_config_params_t> parse_lstms(const std::vector<toml_table_t *>& sublayers) {
+    std::vector<lstm_config_params_t> lstms;
     for (const auto& sublayer : sublayers) {
         if (sublayer_type(sublayer) == SublayerType::LSTM) {
             lstms.push_back(parse_lstm(sublayer));
@@ -708,7 +708,7 @@ std::vector<LSTMConfigParams> parse_lstms(const std::vector<toml_table_t *>& sub
     return lstms;
 }
 
-ConvParams parse_merge_conv(const std::vector<toml_table_t *>& sublayers) {
+conv_params_t parse_merge_conv(const std::vector<toml_table_t *>& sublayers) {
     if (sublayers.empty()) {
         ERROR("%s", "Modbase model config missing enoder sublayers");
     }
@@ -736,8 +736,8 @@ std::vector<toml_table_t *> get_layers(const toml_table_t *config_toml, const ch
     return ret;
 }
 
-EncoderUpsampleParams parse_linear_upsample(const toml_table_t *segment) {
-    EncoderUpsampleParams params;
+encoder_upsample_params_t parse_linear_upsample(const toml_table_t *segment) {
+    encoder_upsample_params_t params;
 
     toml_datum_t d_model = toml_int_in(segment, "size");
     check_toml_datum(d_model);
@@ -750,8 +750,8 @@ EncoderUpsampleParams parse_linear_upsample(const toml_table_t *segment) {
     return params;
 }
 
-ModulesParams parse_modules_params(const toml_table_t *config_toml) {
-    ModulesParams m;
+modules_params_t parse_modules_params(const toml_table_t *config_toml) {
+    modules_params_t m;
     m.sequence_convs = parse_convs(get_layers(config_toml, "sequence_encoder"));
     m.sequence_convs = parse_convs(get_layers(config_toml, "signal_encoder"));
 
@@ -776,61 +776,222 @@ ModulesParams parse_modules_params(const toml_table_t *config_toml) {
     return m;
 }
 
-int stride_product(const std::vector<ConvParams>& cs) {
+int stride_product(const std::vector<conv_params_t>& cs) {
     return std::accumulate(cs.cbegin(), cs.cend(), 1,
                            [](const int s, const auto& c) { return s * c.stride; });
 }
 
-ModelGeneralParams::ModelGeneralParams(
-    ModelType model_type_,
-    int size_,
-    int kmer_len_,
-    int num_out_,
-    int stride_,
-    int sequence_stride_,
-    std_optional<ModulesParams> modules_
-) : model_type(model_type_),
-    size(size_),
-    kmer_len(kmer_len_),
-    num_out(num_out_),
-    stride(stride_),
-    sequence_stride(sequence_stride_),
-    modules(std::move(modules_)) 
-{
-    if (model_type == ModelType::UNKNOWN) {
-        ERROR("%s", "general params: 'model type is unknown'");
+// --- modbase param free functions (behaviour split out of the now-inert structs) ---------------
+
+int crf_outsize(const crf_encoder_params_t &p) {
+    if (p.expand_blanks) return static_cast<int>(pow(p.n_base, p.state_len + 1));
+    return (p.n_base + 1) * static_cast<int>(pow(p.n_base, p.state_len));
+}
+int crf_out_features(const crf_encoder_params_t &p) { return static_cast<int>(pow(p.n_base, p.state_len + 1)); }
+
+int modules_stride_ratio(const modules_params_t &m) {
+    const int seq = stride_product(m.sequence_convs);
+    const int sig = stride_product(m.signal_convs);
+    assert(sig < seq);
+    assert(sig % seq != 0);
+    return sig / seq;
+}
+int general_stride_ratio(const model_general_params_t &g) {
+    return g.modules ? modules_stride_ratio(*g.modules) : 1;
+}
+int64_t context_normalise(int64_t v, int64_t stride) {
+    const int64_t remainder = v % stride;
+    return remainder == 0 ? v : v + stride - remainder;
+}
+context_params_t context_normalised(const context_params_t &c, int stride) {
+    const int64_t sb = context_normalise(c.samples_before, stride);
+    const int64_t sa = context_normalise(c.samples_after, stride);
+    const int64_t cs = context_normalise(c.chunk_size, stride);
+    return context_params_t{sb, sa, sb + sa, cs, c.bases_before, c.bases_after, c.kmer_len, c.reverse, c.base_start_justify};
+}
+bool is_chunked_input_model(const modbase_model_config_t &config) {
+    return config.general.model_type == ModelType::CONV_LSTM_V2 ||
+           config.general.model_type == ModelType::CONV_LSTM_V3;
+}
+
+// --- modbase context (was the ModBaseContext class + MotifMatcher) ------------------------------
+
+std::vector<size_t> modbase_motif_hits(const std::string &motif, size_t offset, const char *seq, size_t seqlen) {
+    std::vector<size_t> context_hits;
+    regex_t compiled;
+    if (regcomp(&compiled, motif.c_str(), REG_EXTENDED) != 0) {
+        return context_hits;
     }
-    if (size < 1 || kmer_len < 1 || num_out < 1 || stride < 1) {
-        ERROR("%s", "general params: 'negative or zero value'.");
+    size_t pos = 0;
+    while (pos < seqlen) {
+        regmatch_t match;
+        if (regexec(&compiled, seq + pos, 1, &match, 0) != 0) {
+            break;
+        }
+        context_hits.push_back(pos + match.rm_so + offset);
+        pos += match.rm_so + 1;
     }
-    if (kmer_len % 2 != 1) {
-        ERROR("%s", "general params: 'kmer_length is not odd'");
+    regfree(&compiled);
+    return context_hits;
+}
+
+int mb_ubase_to_int(char c) { return 0b11 & ((c >> 2) ^ (c >> 1)); }
+
+void mb_set_context(modbase_context_t &ctx, std::string motif, size_t offset) {
+    if (motif.size() < 2) {
+        return;  // empty motif, or just the canonical base
+    }
+    const int index = mb_ubase_to_int(motif.at(offset));
+    ctx.motifs[index] = std::move(motif);
+    ctx.offsets[index] = offset;
+}
+
+const std::string &mb_motif(const modbase_context_t &ctx, char base) {
+    return ctx.motifs[mb_ubase_to_int(base)];
+}
+
+std::string mb_encode(const modbase_context_t &ctx) {
+    std::ostringstream s;
+    for (size_t i = 0; i < 4; ++i) {
+        if (ctx.motifs[i].empty()) {
+            s << '_';
+        } else {
+            auto m = ctx.motifs[i];
+            m[ctx.offsets[i]] = 'X';
+            s << m;
+        }
+        if (i < 3) s << ':';
+    }
+    return s.str();
+}
+
+bool mb_decode(modbase_context_t &ctx, const std::string &context_string) {
+    std::vector<std::string> tokens;
+    std::istringstream context_stream(context_string);
+    std::string token;
+    while (std::getline(context_stream, token, ':')) {
+        tokens.push_back(token);
+    }
+    if (tokens.size() != 4) {
+        return false;
+    }
+    const char *canonical = "ACGT";
+    for (size_t i = 0; i < 4; ++i) {
+        if (tokens[i] == "_") {
+            ctx.motifs[i].clear();
+            ctx.offsets[i] = 0;
+        } else {
+            auto x = tokens[i].find('X');
+            if (x == std::string::npos) {
+                return false;
+            }
+            ctx.motifs[i] = tokens[i];
+            ctx.motifs[i][x] = canonical[i];
+            ctx.offsets[i] = x;
+        }
+    }
+    return true;
+}
+
+std::vector<bool> mb_get_sequence_mask(const modbase_context_t &ctx, const char *seq, size_t seqlen) {
+    std::vector<bool> mask(seqlen, false);
+    for (size_t i = 0; i < 4; ++i) {
+        if (ctx.motifs[i].empty()) continue;
+        for (auto hit : modbase_motif_hits(ctx.motifs[i], ctx.offsets[i], seq, seqlen)) {
+            mask[hit] = true;
+        }
+    }
+    return mask;
+}
+
+void mb_update_mask(const modbase_context_t &ctx,
+                    std::vector<bool> &mask,
+                    const std::string &sequence,
+                    const std::vector<std::string> &modbase_alphabet,
+                    const std::vector<uint8_t> &modbase_probs,
+                    uint8_t threshold) {
+    // First decide which elements of modbase_alphabet are modifications.
+    struct ModifiedBase {
+        char cardinal_base{0};
+        std::vector<size_t> modified_channels;
+    };
+    const size_t num_channels = modbase_alphabet.size();
+    const std::string CARDINAL_BASES{"ACGT"};
+    std::vector<ModifiedBase> adjustments;
+    ModifiedBase current_adjustment;
+    for (size_t channel_idx = 0; channel_idx < num_channels; channel_idx++) {
+        if (CARDINAL_BASES.find(modbase_alphabet[channel_idx]) != std::string::npos) {
+            if (!current_adjustment.modified_channels.empty()) {
+                adjustments.emplace_back(std::move(current_adjustment));
+            }
+            current_adjustment = {modbase_alphabet[channel_idx][0], {}};
+        } else {
+            if (!ctx.motifs[mb_ubase_to_int(current_adjustment.cardinal_base)].empty()) {
+                // This cardinal base has a context associated with modifications, so the mask should
+                // not be updated, regardless of the threshold.
+                continue;
+            }
+            current_adjustment.modified_channels.push_back(channel_idx);
+        }
+    }
+    if (!current_adjustment.modified_channels.empty()) {
+        adjustments.emplace_back(std::move(current_adjustment));
+    }
+    if (adjustments.empty()) {
+        return;  // No bases to adjust, so nothing to do.
     }
 
-    if (modules) {
-        if ((size != modules->lstms.front().size) ||
-            (modules->lstms.front().size != modules->lstms.back().size)) {
+    for (size_t base_idx = 0; base_idx < sequence.size(); ++base_idx) {
+        bool requires_update = false;
+        bool flag = false;
+        for (const auto &adjustment : adjustments) {
+            if (adjustment.cardinal_base == sequence[base_idx]) {
+                requires_update = true;
+                for (const auto channel_idx : adjustment.modified_channels) {
+                    flag |= (modbase_probs[base_idx * num_channels + channel_idx] >= threshold);
+                }
+            }
+        }
+        if (requires_update) {
+            mask[base_idx] = flag;
+        }
+    }
+}
+
+static void validate_general_params(const model_general_params_t &g) {
+    if (g.model_type == ModelType::UNKNOWN) {
+        ERROR("%s", "general params: 'model type is unknown'");
+    }
+    if (g.size < 1 || g.kmer_len < 1 || g.num_out < 1 || g.stride < 1) {
+        ERROR("%s", "general params: 'negative or zero value'.");
+    }
+    if (g.kmer_len % 2 != 1) {
+        ERROR("%s", "general params: 'kmer_length is not odd'");
+    }
+    if (g.modules) {
+        const auto &m = *g.modules;
+        if ((g.size != m.lstms.front().size) || (m.lstms.front().size != m.lstms.back().size)) {
             ERROR("%s", "Modbase model config lstm size mismatch");
         }
-        if (stride != stride_product(modules->signal_convs)) {
+        if (g.stride != stride_product(m.signal_convs)) {
             ERROR("%s", "Modbase model config signal convolution stride mismatch");
         }
-        if (sequence_stride != stride_product(modules->sequence_convs)) {
+        if (g.sequence_stride != stride_product(m.sequence_convs)) {
             ERROR("%s", "Modbase model config sequence convolution stride mismatch");
         }
-        if (num_out != modules->linear.out_size) {
+        if (g.num_out != m.linear.out_size) {
             ERROR("%s", "Modbase model config linear and num_out mismatch");
         }
     }
 }
 
-ModelGeneralParams parse_general_params(const toml_table_t *config_toml) {
+model_general_params_t parse_general_params(const toml_table_t *config_toml) {
     const auto type_datum = toml_string_fallback(config_toml, {"general", "model"});
     check_toml_datum(type_datum);
     ModelType model_type = model_type_from_string(type_datum.u.s);
     free(type_datum.u.s);
 
-    std_optional<ModulesParams> modules = model_type == ModelType::CONV_LSTM_V3 ? std_optional<ModulesParams>(parse_modules_params(config_toml)) : STD_NULLOPT;
+    std_optional<modules_params_t> modules = model_type == ModelType::CONV_LSTM_V3 ? std_optional<modules_params_t>(parse_modules_params(config_toml)) : STD_NULLOPT;
     const auto segment = toml_table_in(config_toml, "model_params");
     check_toml_table(segment);
 
@@ -845,7 +1006,8 @@ ModelGeneralParams parse_general_params(const toml_table_t *config_toml) {
     const auto stride = get_int_in_range(segment, "stride", 1, MAX_STRIDE, 3);
     const auto sequence_stride = get_int_in_range(segment, "sequence_stride", 1, MAX_STRIDE, stride);
 
-    ModelGeneralParams params{model_type, size, kmer_len, num_out, stride, sequence_stride, modules};
+    model_general_params_t params{model_type, size, kmer_len, num_out, stride, sequence_stride, modules};
+    validate_general_params(params);
     return params;
 }
 
@@ -877,37 +1039,24 @@ static bool validate_bam_tag_code(const std::string& bam_name) {
     return false;
 }
 
-ModificationParams::ModificationParams(
-    std::vector<std::string> codes_,
-    std::vector<std::string> long_names_,
-    std::string motif_,
-    const size_t motif_offset_
-) : codes(std::move(codes_)),
-    long_names(std::move(long_names_)),
-    count(codes.size()),
-    motif(std::move(motif_)),
-    motif_offset(motif_offset_),
-    base(get_canonical_base_name(motif, motif_offset)),
-    base_id(BASE_IDS[base])
-{
-    if (codes.empty()) {
+static void validate_modification_params(const modification_params_t &p) {
+    if (p.codes.empty()) {
         ERROR("%s", "mods params: 'empty modifications.");
     }
-    if (long_names.empty()) {
+    if (p.long_names.empty()) {
         ERROR("%s", "mods params: 'empty long names.");
     }
-    if (codes.size() != long_names.size()) {
+    if (p.codes.size() != p.long_names.size()) {
         ERROR("%s", "mods params: 'mods and names size mismatch.");
     }
-
-    for (const auto& code : codes) {
+    for (const auto &code : p.codes) {
         if (!validate_bam_tag_code(code)) {
             ERROR("%s", "mods params: 'invalid mod code ");
         }
     }
 }
 
-ModificationParams parse_modification_params(const toml_table_t *config_toml) {
+modification_params_t parse_modification_params(const toml_table_t *config_toml) {
     const auto& params = toml_table_in(config_toml, "modbases");
     check_toml_table(params);
 
@@ -946,39 +1095,27 @@ ModificationParams parse_modification_params(const toml_table_t *config_toml) {
     const auto motif_offset = static_cast<size_t>(get_int_in_range(params, "motif_offset", 0, int(motif_string.size()), REQUIRED));
     free(motif.u.s);
 
-    return ModificationParams{std::move(codes), std::move(long_names), motif_string, motif_offset};
+    const char base = get_canonical_base_name(motif_string, motif_offset);
+    const size_t count = codes.size();
+    modification_params_t mp{std::move(codes), std::move(long_names), count, motif_string, motif_offset,
+                          base, BASE_IDS[base], {}};
+    validate_modification_params(mp);
+    return mp;
 }
 
-ContextParams::ContextParams(
-    int64_t samples_before_,
-    int64_t samples_after_,
-    int64_t chunk_size_,
-    int bases_before_,
-    int bases_after_,
-    bool reverse_,
-    bool base_start_justify_
-) : samples_before(samples_before_),
-    samples_after(samples_after_),
-    samples(samples_before + samples_after),
-    chunk_size(chunk_size_),
-    bases_before(bases_before_),
-    bases_after(bases_after_),
-    kmer_len(bases_before_ + bases_after_ + 1),
-    reverse(reverse_),
-    base_start_justify(base_start_justify_)
-{
-    if (samples_before < 0 || samples_after < 0) {
+static void validate_context_params(const context_params_t &c) {
+    if (c.samples_before < 0 || c.samples_after < 0) {
         ERROR("%s", "context params: 'negative context samples'.");
     }
-    if (chunk_size < samples) {
+    if (c.chunk_size < c.samples) {
         ERROR("%s", "mods params: 'context params: 'chunk size < context size'.");
     }
-    if (bases_before < 1 || bases_after < 1) {
+    if (c.bases_before < 1 || c.bases_after < 1) {
         ERROR("%s", "mods params: 'context params: 'negative or zero context bases'.");
     }
 }
 
-ContextParams parse_context_params(const toml_table_t *config_toml) {
+context_params_t parse_context_params(const toml_table_t *config_toml) {
     const auto& params = toml_table_in(config_toml, "modbases");
     check_toml_table(params);
 
@@ -998,39 +1135,16 @@ ContextParams parse_context_params(const toml_table_t *config_toml) {
     toml_datum_t justify_datum = toml_bool_in(params, "base_start_justify");
     const auto base_start_justify = justify_datum.ok ? justify_datum.u.b : false;
 
-    return ContextParams(context_before, context_after, chunk_size, bases_before, bases_after,
-                         reverse, base_start_justify);
+    context_params_t cp{context_before, context_after, context_before + context_after, chunk_size,
+                     bases_before, bases_after, bases_before + bases_after + 1,
+                     reverse, base_start_justify};
+    validate_context_params(cp);
+    return cp;
 }
 
-int64_t ContextParams::normalise(const int64_t v, const int64_t stride) {
-    const int64_t remainder = v % stride;
-    if (remainder == 0) {
-        return v;
-    }
-    return v + stride - remainder;
-}
-
-ContextParams ContextParams::normalised(const int stride) const {
-    const int64_t sb = normalise(samples_before, stride);
-    const int64_t sa = normalise(samples_after, stride);
-    const int64_t cs = normalise(chunk_size, stride);
-
-    return ContextParams(sb, sa, cs, bases_before, bases_after, reverse, base_start_justify);
-}
-
-RefinementParams::RefinementParams(
-    int center_idx_
-) : do_rough_rescale(true),
-    center_idx(static_cast<size_t>(center_idx_))
-{
-    if (center_idx_ < 0) {
-        ERROR("%s", "refinement params: 'negative center index'.");
-    }
-}
-
-RefinementParams parse_refinement_params(const toml_table_t *config_toml) {
+refinement_params_t parse_refinement_params(const toml_table_t *config_toml) {
     if (!toml_key_exists(config_toml, "refinement")) {
-        return RefinementParams{};
+        return refinement_params_t{};
     }
 
     const auto segment = toml_table_in(config_toml, "refinement");
@@ -1038,34 +1152,14 @@ RefinementParams parse_refinement_params(const toml_table_t *config_toml) {
 
     const auto do_rough_rescale = toml_int_in(segment, "refine_do_rough_rescale");
     if (do_rough_rescale.u.i != 1) {
-        return RefinementParams{};
+        return refinement_params_t{};
     }
 
     const int center_index = get_int_in_range(segment, "refine_kmer_center_idx", 0, 19, REQUIRED);
-    return RefinementParams(center_index);
+    return refinement_params_t{true, static_cast<size_t>(center_index)};
 }
 
-ModBaseModelConfig::ModBaseModelConfig(
-    const char *model_path_,
-    ModelGeneralParams general_,
-    ModificationParams mods_,
-    ContextParams context_,
-    RefinementParams refine_
-) : model_path(std::string(model_path_)),
-    general(std::move(general_)),
-    mods(std::move(mods_)),
-    context(general_.model_type == ModelType::CONV_LSTM_V2 ? context_.normalised(general.stride) : std::move(context_)),
-    refine(std::move(refine_))
-{
-    // Kmer length is duplicated in modbase model configs - check they match
-    if (general.kmer_len != context.kmer_len) {
-        // auto kl_a = std::to_string(general.kmer_len);
-        // auto kl_b = std::to_string(context.kmer_len);
-        ERROR("%s", "config: 'inconsistent kmer_len'");
-    }
-}
-
-std::vector<float> load_kmer_refinement_levels(const ModBaseModelConfig& config) {
+std::vector<float> load_kmer_refinement_levels(const modbase_model_config_t& config) {
     std::vector<float> levels;
     if (!config.refine.do_rough_rescale) {
         return levels;
@@ -1083,7 +1177,7 @@ std::vector<float> load_kmer_refinement_levels(const ModBaseModelConfig& config)
     return levels;
 }
 
-ModBaseModelConfig load_modbase_model_config(const char *path) {
+modbase_model_config_t load_modbase_model_config(const char *path) {
     FILE* fp;
     char errbuf[200];
 
@@ -1102,10 +1196,19 @@ ModBaseModelConfig load_modbase_model_config(const char *path) {
     check_toml_table(config_toml);
     
 
-    auto ret = ModBaseModelConfig {
+    modbase_model_config_t ret{
         path, parse_general_params(config_toml), parse_modification_params(config_toml),
         parse_context_params(config_toml), parse_refinement_params(config_toml)
     };
+
+    // v2 models normalise the context to the model stride (was done in the old ctor).
+    if (ret.general.model_type == ModelType::CONV_LSTM_V2) {
+        ret.context = context_normalised(ret.context, ret.general.stride);
+    }
+    // Kmer length is duplicated in modbase configs - check they match.
+    if (ret.general.kmer_len != ret.context.kmer_len) {
+        ERROR("%s", "config: 'inconsistent kmer_len'");
+    }
 
     ret.mods.kmer_levels = load_kmer_refinement_levels(ret);
 
@@ -1130,7 +1233,7 @@ bool is_rna(SampleType sample_type) {
     return (sample_type == SampleType::RNA002 || sample_type == SampleType::RNA004);
 }
 
-ModBaseInfo get_modbase_info(std::vector<ModBaseModelConfig>& base_mod_params) {
+modbase_info_t get_modbase_info(std::vector<modbase_model_config_t>& base_mod_params) {
     struct ModelInfo {
         std::vector<std::string> long_names;
         std::vector<std::string> alphabet;
@@ -1158,7 +1261,7 @@ ModBaseInfo get_modbase_info(std::vector<ModBaseModelConfig>& base_mod_params) {
         map_entry.base_counts = params.count + 1;
     }
 
-    ModBaseInfo result;
+    modbase_info_t result;
     size_t index = 0;
     for (const auto& info : model_info) {
         for (const auto& name : info.long_names) {

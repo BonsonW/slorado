@@ -38,56 +38,48 @@ enum class SampleType {
     UNKNOWN,
 };
 
-struct StandardisationScalingParams {
+typedef struct {
     bool standardise = false;
     float mean = 0.0f;
     float stdev = 1.0f;
-};
+} standardisation_scaling_params_t;
 
-struct QuantileScalingParams {
+typedef struct {
     float quantile_a = 0.2f;
     float quantile_b = 0.9f;
     float shift_multiplier = 0.51f;
     float scale_multiplier = 0.53f;
-};
+} quantile_scaling_params_t;
 
-struct SignalNormalisationParams {
+typedef struct {
     ScalingStrategy strategy = ScalingStrategy::QUANTILE;
-    QuantileScalingParams quantile;
-    StandardisationScalingParams standarisation;
-};
+    quantile_scaling_params_t quantile;
+    standardisation_scaling_params_t standarisation;
+} signal_norm_params_t;
 
-struct ConvParams {
+typedef struct {
     int insize;
     int size;
     int winlen;
     int stride = 1;
     Activation activation;
-};
+} conv_params_t;
 
-struct TxEncoderParams {
-    // The number of expected features in the encoder/decoder inputs
-    int d_model = -1;
-    // The number of heads in the multi-head attention (MHA) models
-    int nhead = -1;
-    // The number of transformer layers
-    int depth = -1;
-    // The dimension of the feedforward model
-    int dim_feedforward = -1;
-    // Pair of ints defining (possibly asymmetric) sliding attention window mask
-    std::pair<int, int> attn_window{-1, -1};
-    // The deepnorm normalisation alpha parameter
+typedef struct {
+    int d_model = -1;         // expected features in the encoder/decoder inputs
+    int nhead = -1;           // heads in the multi-head attention
+    int depth = -1;           // transformer layers
+    int dim_feedforward = -1; // feedforward dimension
+    std::pair<int, int> attn_window{-1, -1};  // (possibly asymmetric) sliding attention window
     float deepnorm_alpha = 1.0;
-};
+} tx_encoder_params_t;
 
-struct EncoderUpsampleParams {
-    // The number of expected features in the encoder/decoder inputs
-    int d_model;
-    // Linear upsample scale factor
-    int scale_factor;
-};
+typedef struct {
+    int d_model;      // expected features in the encoder/decoder inputs
+    int scale_factor; // linear upsample scale factor
+} encoder_upsample_params_t;
 
-struct CRFEncoderParams {
+typedef struct {
     int insize;
     int n_base;
     int state_len;
@@ -95,22 +87,16 @@ struct CRFEncoderParams {
     float blank_score;
     bool expand_blanks;
     std::vector<int> permute;
+} crf_encoder_params_t;
 
-    int outsize() const {
-        if (expand_blanks) {
-            return static_cast<int>(pow(n_base, state_len + 1));
-        }
-        return (n_base + 1) * static_cast<int>(pow(n_base, state_len));
-    };
+int crf_outsize(const crf_encoder_params_t &p);
+int crf_out_features(const crf_encoder_params_t &p);
 
-    int out_features() const { return static_cast<int>(pow(n_base, state_len + 1)); };
-};
-
-struct TxParams {
-    TxEncoderParams tx;
-    EncoderUpsampleParams upsample;
-    CRFEncoderParams crf;
-};
+typedef struct {
+    tx_encoder_params_t tx;
+    encoder_upsample_params_t upsample;
+    crf_encoder_params_t crf;
+} tx_params_t;
 
 // Simplified basecall model config (models >= v5.0.0 only). Fixed architecture per family; carries
 // only the fields used downstream.
@@ -132,9 +118,9 @@ typedef struct {
     int outsize = 0;       // 4^state_len * 4
     int num_features = 1;
 
-    SignalNormalisationParams signal_norm_params;  // used by scale_signal() in preprocessing
+    signal_norm_params_t signal_norm_params;  // used by scale_signal() in preprocessing
 
-    std::vector<ConvParams> convs;
+    std::vector<conv_params_t> convs;
 
     // LSTM / FLSTM families
     int lstm_size = 0;
@@ -147,7 +133,7 @@ typedef struct {
     bool crf_encoder_has_tanh = false;
 
     // TX family
-    TxParams tx;
+    tx_params_t tx;
 } model_config_t;
 
 // v5.0.0+ loader: reads the model dir and returns the simplified config.
@@ -155,373 +141,125 @@ model_config_t load_model_config(const char *path);
 
 enum ModelType { CONV_LSTM_V1, CONV_LSTM_V2, CONV_LSTM_V3, CONV_V1, UNKNOWN };
 
-struct LinearParams {
+typedef struct {
     int in_size;
     int out_size;
-};
+} linear_params_t;
 
-struct LSTMConfigParams {
+typedef struct {
     int size;
     bool reverse;
-};
+} lstm_config_params_t;
 
-struct ModulesParams {
-    std::vector<ConvParams> sequence_convs;
-    std::vector<ConvParams> signal_convs;
-    ConvParams merge_conv;
-    std::vector<LSTMConfigParams> lstms;  //< LSTM sizes per layer
-    LinearParams linear;
-    std_optional<EncoderUpsampleParams> upsample;
+// Inert modbase parameter blocks (populated by the parse_* builders in model_config.cpp; behaviour
+// lives in the free functions below).
+typedef struct {
+    std::vector<conv_params_t> sequence_convs;
+    std::vector<conv_params_t> signal_convs;
+    conv_params_t merge_conv;
+    std::vector<lstm_config_params_t> lstms;  //< LSTM sizes per layer
+    linear_params_t linear;
+    std_optional<encoder_upsample_params_t> upsample;
+} modules_params_t;
 
-    int stride_product(const std::vector<ConvParams>& cs) {
-        return std::accumulate(cs.cbegin(), cs.cend(), 1, [](const int s, const auto& c) { return s * c.stride; });
-    }
+typedef struct {
+    ModelType model_type;
+    int size;
+    int kmer_len;
+    int num_out;
+    int stride;
+    int sequence_stride;
+    std_optional<modules_params_t> modules;  // conv_lstm_v3 models only
+} model_general_params_t;
 
-    int sequence_stride() { return stride_product(sequence_convs); };
-    int signal_stride() { return stride_product(signal_convs); };
-    int stride_ratio() {
-        const auto seq = sequence_stride();
-        const auto sig = signal_stride();
-        assert(sig < seq);
-        assert(sig % seq != 0);
-        return sig / seq;
-    };
-};
+typedef struct {
+    bool do_rough_rescale = false;  ///< Whether to perform rough rescaling
+    size_t center_idx = 0;          ///< The position in the kmer at which to check the levels
+} refinement_params_t;
 
-struct ModelGeneralParams {
-    const ModelType model_type;
-    const int size;
-    const int kmer_len;
-    const int num_out;
-    const int stride;
-    const int sequence_stride;
+typedef struct {
+    std::vector<std::string> codes;       ///< The modified bases codes (e.g 'h', 'm', CHEBI)
+    std::vector<std::string> long_names;  ///< The long names of the modified bases.
+    size_t count;                         ///< Number of mods
 
-    // For conv_lstm_v3 models only
-    std_optional<ModulesParams> modules;
+    std::string motif;    ///< The motif to look for modified bases within.
+    size_t motif_offset;  ///< The position of the canonical base within the motif.
 
-    int stride_ratio() {
-        if (modules) {
-            return modules->stride_ratio();
-        } else {
-            return 1;
-        }
-    }
-
-    ModelGeneralParams(ModelType model_type_,
-                       int size_,
-                       int kmer_len_,
-                       int num_out_,
-                       int stride_,
-                       int sequence_stride_,
-                       std_optional<ModulesParams> modules_);
-};
-
-struct RefinementParams {
-    const bool do_rough_rescale;  ///< Whether to perform rough rescaling
-    const size_t center_idx;      ///< The position in the kmer at which to check the levels
-
-    RefinementParams() : do_rough_rescale(false), center_idx(0) {}
-    RefinementParams(int center_idx_);
-};
-
-struct ModificationParams {
-    const std::vector<std::string> codes;       ///< The modified bases codes (e.g 'h', 'm', CHEBI)
-    const std::vector<std::string> long_names;  ///< The long names of the modified bases.
-    const size_t count;                         ///< Number of mods
-
-    const std::string motif;    ///< The motif to look for modified bases within.
-    const size_t motif_offset;  ///< The position of the canonical base within the motif.
-
-    const char base;    ///< The canonical base 'ACGT'
-    const int base_id;  ///< The canonical base id 0-3
+    char base;    ///< The canonical base 'ACGT'
+    int base_id;  ///< The canonical base id 0-3
 
     std::vector<float> kmer_levels;
+} modification_params_t;
 
-    ModificationParams(std::vector<std::string> codes_,
-                       std::vector<std::string> long_names_,
-                       std::string motif_,
-                       const size_t motif_offset_);
-};
+typedef struct {
+    int64_t samples_before;  ///< Number of context signal samples before a context hit.
+    int64_t samples_after;   ///< Number of context signal samples after a context hit.
+    int64_t samples;         ///< The total context samples (before + after)
+    int64_t chunk_size;      ///< The total samples in a chunk
 
-struct ContextParams {
-    const int64_t samples_before;  ///< Number of context signal samples before a context hit.
-    const int64_t samples_after;   ///< Number of context signal samples after a context hit.
-    const int64_t samples;         ///< The total context samples (before + after)
-    const int64_t chunk_size;      ///< The total samples in a chunk
+    int bases_before;  ///< Number of bases before the primary base of a kmer.
+    int bases_after;   ///< Number of bases after the primary base of a kmer.
+    int kmer_len;      ///< The kmer length given by `bases_before + bases_after + 1`
 
-    const int bases_before;  ///< Number of bases before the primary base of a kmer.
-    const int bases_after;   ///< Number of bases after the primary base of a kmer.
-    const int kmer_len;      ///< The kmer length given by `bases_before + bases_after + 1`
+    bool reverse;             ///< Reverse model data before processing (rna model)
+    bool base_start_justify;  ///< Justify the kmer encoding to start the context hit
+} context_params_t;
 
-    const bool reverse;             ///< Reverse model data before processing (rna model)
-    const bool base_start_justify;  ///< Justify the kmer encoding to start the context hit
+// Product of conv strides.
+int stride_product(const std::vector<conv_params_t> &cs);
+// Sequence/signal stride ratio for a v3 modules block.
+int modules_stride_ratio(const modules_params_t &m);
+// Overall stride ratio (1 when there are no v3 modules).
+int general_stride_ratio(const model_general_params_t &g);
+// Normalise `v` up to the next multiple of `stride`; return the context params normalised likewise.
+int64_t context_normalise(int64_t v, int64_t stride);
+context_params_t context_normalised(const context_params_t &c, int stride);
 
-    ContextParams(int64_t samples_before_,
-                  int64_t samples_after_,
-                  int64_t chunk_size_,
-                  int bases_before_,
-                  int bases_after_,
-                  bool reverse_,
-                  bool base_start_justify_);
-
-    // Normalise `v` by `stride` strictly increasing the if needed.
-    static int64_t normalise(const int64_t v, const int64_t stride);
-    // Return the context params but normalised by a stride
-    ContextParams normalised(const int stride) const;
-};
-
-struct ModBaseModelConfig {
+typedef struct {
     std::string model_path;
 
-    ModelGeneralParams general;        ///< General model params for legacy model architectures
-    ModificationParams mods;           ///< Params for the modifications being detected
-    ContextParams context;             ///< Params for the context over which mods are inferred
-    RefinementParams refine;           ///< Params for kmer refinement
+    model_general_params_t general;  ///< General model params for legacy model architectures
+    modification_params_t mods;      ///< Params for the modifications being detected
+    context_params_t context;        ///< Params for the context over which mods are inferred
+    refinement_params_t refine;      ///< Params for kmer refinement
+} modbase_model_config_t;
 
-    bool is_chunked_input_model() const {
-        return (general.model_type == ModelType::CONV_LSTM_V2) ||
-               (general.model_type == ModelType::CONV_LSTM_V3);
-    };
+bool is_chunked_input_model(const modbase_model_config_t &config);
 
-    ModBaseModelConfig(const char *model_path_,
-                       ModelGeneralParams general_,
-                       ModificationParams mods_,
-                       ContextParams context_,
-                       RefinementParams refine_);
-};
-
-struct ModBaseInfo {
-    ModBaseInfo() = default;
-    ModBaseInfo(std::vector<std::string> alphabet_, std::string long_names_, std::string context_)
-            : alphabet(std::move(alphabet_)),
-              long_names(std::move(long_names_)),
-              context(std::move(context_)) {}
+typedef struct {
     std::vector<std::string> alphabet;
     std::string long_names;
     std::string context;
     std::array<size_t, 4> base_counts{};
     std::array<size_t, 4> base_probs_offsets{};
-};
+} modbase_info_t;
 
-static const std::unordered_map<char, std::string> IUPAC_CODES =
-        {
-                // clang-format off
-        {'A', "A"},
-        {'C', "C"},
-        {'G', "G"},
-        {'T', "T"},
-        {'U', "T"},  // basecalls will have "T"s instead of "U"s
-        {'R', "[AG]"},
-        {'Y', "[CT]"}, 
-        {'S', "[GC]"}, 
-        {'W', "[AT]"},
-        {'K', "[GT]"}, 
-        {'M', "[AC]"}, 
-        {'B', "[CGT]"},
-        {'D', "[AGT]"},
-        {'H', "[ACT]"},
-        {'V', "[ACG]"},
-        {'N', "[ACGT]"},
-                // clang-format on
-};
+// Inert base-modification context: which motif (per canonical base) marks a modifiable site.
+// Behaviour is in the mb_* free functions below; create with `modbase_context_t ctx{};`.
+typedef struct {
+    std::array<std::string, 4> motifs;   // indexed by mb_ubase_to_int(base); empty = none
+    std::array<size_t, 4> offsets;
+} modbase_context_t;
 
-struct MotifMatcher {
-    MotifMatcher(const std::string& _motif, size_t _offset) : motif{_motif}, motif_offset{_offset} {};
+// Signal-space motif hit positions of `motif` (used as an REG_EXTENDED regex) within seq[0..seqlen),
+// shifted by `offset`. Shared by populate_hits_seq and mb_get_sequence_mask.
+std::vector<size_t> modbase_motif_hits(const std::string &motif, size_t offset, const char *seq, size_t seqlen);
 
-    std::string expand_motif_regex(const std::string& motif) {
-        std::string motif_regex = "(";
-        for (auto base : motif) {
-            motif_regex += IUPAC_CODES.at(base);
-        }
-        motif_regex += ")";
-        return motif_regex;
-    }
+int mb_ubase_to_int(char c);
+void mb_set_context(modbase_context_t &ctx, std::string motif, size_t offset);
+const std::string &mb_motif(const modbase_context_t &ctx, char base);
+std::string mb_encode(const modbase_context_t &ctx);
+bool mb_decode(modbase_context_t &ctx, const std::string &context_string);
+std::vector<bool> mb_get_sequence_mask(const modbase_context_t &ctx, const char *seq, size_t seqlen);
+void mb_update_mask(const modbase_context_t &ctx,
+                    std::vector<bool> &mask,
+                    const std::string &sequence,
+                    const std::vector<std::string> &modbase_alphabet,
+                    const std::vector<uint8_t> &modbase_probs,
+                    uint8_t threshold);
 
-    std::vector<size_t> get_motif_hits(const char *seq, size_t seqlen) {
-        std::vector<size_t> context_hits;
-        regex_t compiled;
-        if (regcomp(&compiled, motif.c_str(), REG_EXTENDED) != 0) {
-            return context_hits;
-        }
-
-        size_t pos = 0;
-        while (pos < seqlen) {
-            regmatch_t match;
-            if (regexec(&compiled, seq + pos, 1, &match, 0) != 0) {
-                break;
-            }
-            auto hit = pos + match.rm_so + motif_offset;
-            context_hits.push_back(hit);
-            pos += match.rm_so + 1;
-        }
-
-        regfree(&compiled);
-        return context_hits;
-    }
-
-    const std::string motif;
-    const size_t motif_offset;
-};
-
-class ModBaseContext {
-public:
-    ModBaseContext() {};
-    ~ModBaseContext() {};
-
-    int ubase_to_int(char c) { return 0b11 & ((c >> 2) ^ (c >> 1)); }
-
-    void set_context(std::string motif, size_t offset) {
-        if (motif.size() < 2) {
-            // empty motif, or just the canonical base
-            return;
-        }
-        char base = motif.at(offset);
-        auto index = ubase_to_int(base);
-        motif_matchers[index] = std::make_unique<MotifMatcher>(motif, offset);
-        motifs[index] = std::move(motif);
-        offsets[index] = offset;
-    }
-
-    const std::string& motif(char base) {
-        return motifs[ubase_to_int(base)];
-    }
-
-    size_t motif_offset(char base) { return offsets[ubase_to_int(base)]; }
-
-    std::vector<bool> get_sequence_mask(char *sequence, size_t seqlen) {
-        std::vector<bool> mask(seqlen, false);
-        for (auto& matcher : motif_matchers) {
-            if (matcher) {
-                auto hits = matcher->get_motif_hits(sequence, seqlen);
-                for (auto hit : hits) {
-                    mask[hit] = true;
-                }
-            }
-        }
-        return mask;
-    }
-
-    std::string encode() {
-        std::ostringstream s;
-        for (size_t i = 0; i < 4; ++i) {
-            if (motifs[i].empty()) {
-                s << '_';
-            } else {
-                auto m = motifs[i];
-                m[offsets[i]] = 'X';
-                s << m;
-            }
-            if (i < 3) {
-                s << ':';
-            }
-        }
-        return s.str();
-    }
-
-    void update_mask(
-        std::vector<bool>& mask,
-        const std::string& sequence,
-        const std::vector<std::string>& modbase_alphabet,
-        const std::vector<uint8_t>& modbase_probs,
-        uint8_t threshold
-    ) {
-        // First decide which elements of modbase_alphabet are modifications.
-        struct ModifiedBase {
-            char cardinal_base{0};
-            std::vector<size_t> modified_channels;
-        };
-        const size_t num_channels = modbase_alphabet.size();
-        const std::string CARDINAL_BASES{"ACGT"};
-        std::vector<ModifiedBase> adjustments;
-        ModifiedBase current_adjustment;
-        for (size_t channel_idx = 0; channel_idx < num_channels; channel_idx++) {
-            if (CARDINAL_BASES.find(modbase_alphabet[channel_idx]) != std::string::npos) {
-                if (!current_adjustment.modified_channels.empty()) {
-                    adjustments.emplace_back(std::move(current_adjustment));
-                }
-                current_adjustment = {modbase_alphabet[channel_idx][0], {}};
-            } else {
-                if (!motifs[ubase_to_int(current_adjustment.cardinal_base)].empty()) {
-                    // This cardinal base has a context associated with modifications, so the mask should
-                    // not be updated, regardless of the threshold.
-                    continue;
-                }
-                current_adjustment.modified_channels.push_back(channel_idx);
-            }
-        }
-        if (!current_adjustment.modified_channels.empty()) {
-            adjustments.emplace_back(std::move(current_adjustment));
-        }
-
-        if (adjustments.empty()) {
-            // No bases to adjust, so nothing to do.
-            return;
-        }
-
-        // Update the mask only for canonical bases we have determined require an update.
-        for (size_t base_idx = 0; base_idx < sequence.size(); ++base_idx) {
-            bool requires_update = false;
-            bool flag = false;
-            for (const auto& adjustment : adjustments) {
-                if (adjustment.cardinal_base == sequence[base_idx]) {
-                    requires_update = true;
-                    for (const auto channel_idx : adjustment.modified_channels) {
-                        // We use |= here so that if there are multiple modifications possible for
-                        // a canonical base, and any of them exceed the threshold, then we will have
-                        // set the flag to true.
-                        flag |= (modbase_probs[base_idx * num_channels + channel_idx] >= threshold);
-                    }
-                }
-            }
-            if (requires_update) {
-                // Replace the flag if we need to, otherwise leave it unchanged.
-                mask[base_idx] = flag;
-            }
-        }
-    }
-
-
-    bool decode(const std::string& context_string, bool create_matchers) {
-        std::vector<std::string> tokens;
-        std::istringstream context_stream(context_string);
-        std::string token;
-        while (std::getline(context_stream, token, ':')) {
-            tokens.push_back(token);
-        }
-        if (tokens.size() != 4) {
-            return false;
-        }
-        auto canonical = "ACGT";
-        for (size_t i = 0; i < 4; ++i) {
-            if (tokens[i] == "_") {
-                motif_matchers[i].reset();
-                motifs[i].clear();
-                offsets[i] = 0;
-            } else {
-                auto x = tokens[i].find('X');
-                if (x == std::string::npos) {
-                    return false;
-                }
-                motifs[i] = tokens[i];
-                motifs[i][x] = canonical[i];
-                offsets[i] = x;
-                if (create_matchers) {
-                    motif_matchers[i] = std::make_unique<MotifMatcher>(motifs[i], offsets[i]);
-                } else {
-                    motif_matchers[i].reset();
-                }
-            }
-        }
-        return true;
-    }
-private:
-    std::array<std::string, 4> motifs;
-    std::array<size_t, 4> offsets = {{0, 0, 0, 0}};
-    std::array<std::unique_ptr<MotifMatcher>, 4> motif_matchers;
-};
-
-ModBaseInfo get_modbase_info(std::vector<ModBaseModelConfig>& base_mod_params);
-ModBaseModelConfig load_modbase_model_config(const char *model_path);
+modbase_info_t get_modbase_info(std::vector<modbase_model_config_t>& base_mod_params);
+modbase_model_config_t load_modbase_model_config(const char *model_path);
 SampleType get_sample_type_from_model_name(const std::string& model_name);
 bool is_rna(SampleType);
 

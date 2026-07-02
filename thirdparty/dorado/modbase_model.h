@@ -17,7 +17,7 @@ typedef struct {
     bool chunked;                // v2 (per-timestep output) vs v1 (final timestep only)
 } modbase_model_t;
 
-modbase_model_t *load_modbase_model_proc(const ModBaseModelConfig &config, const at::TensorOptions &options, int batchsize);
+modbase_model_t *load_modbase_model_proc(const modbase_model_config_t &config, const at::TensorOptions &options, int batchsize);
 // sigs: [N, 1, T] (NCT); seqs: [N, T, kmer_len*4] one-hot int8 (NTC). Returns per-read mod scores.
 at::Tensor modbase_model_forward(const modbase_model_t *m, at::Tensor sigs, at::Tensor seqs);
 void free_modbase_model(modbase_model_t *m);

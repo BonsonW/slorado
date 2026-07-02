@@ -545,7 +545,7 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
 
     const auto base_skips = get_minimal_encoding_skips(core, mod_chunks, seq_to_sig_map, int_seq);
 
-    auto sequence_stride_ratio = core->modbase_config->general.stride_ratio();
+    auto sequence_stride_ratio = general_stride_ratio(core->modbase_config->general);
     auto kmer_len = core->modbase_config->context.bases_before + core->modbase_config->context.bases_after + 1;
 
     populate_encoded_kmer(read_dat->encoded_kmers, read_dat->scaled_signal.size(0), int_seq, seq_to_sig_map, base_skips, kmer_len, sequence_stride_ratio);
@@ -592,17 +592,17 @@ void postprocess_modbase(core_t *core, read_dat_t *read_dat, std::string &mod_st
     // Create a mask indicating which bases are modified.
     std::bitset<256> base_has_context{};
 
-    ModBaseContext context_handler;
-    context_handler.set_context(core->modbase_config->mods.motif, size_t(core->modbase_config->mods.motif_offset));
-    std::string context = context_handler.encode();
+    modbase_context_t context_handler{};
+    mb_set_context(context_handler, core->modbase_config->mods.motif, size_t(core->modbase_config->mods.motif_offset));
+    std::string context = mb_encode(context_handler);
 
     if (!context.empty()) {
-        if (!context_handler.decode(context, need_to_generate_mask)) {
+        if (!mb_decode(context_handler, context)) {
             ERROR("%s", "Invalid base modification context string.");
             exit(1);
         }
         for (auto base : cardinal_bases) {
-            if (context_handler.motif(base).size() > 1) {
+            if (mb_motif(context_handler, base).size() > 1) {
                 // If the context is just the single base, then this is equivalent to no context.
                 base_has_context[base] = true;
             }
@@ -612,8 +612,8 @@ void postprocess_modbase(core_t *core, read_dat_t *read_dat, std::string &mod_st
         exit(1);
     }
 
-    auto modbase_mask = need_to_generate_mask ? context_handler.get_sequence_mask(seq_mut, strlen(seq)) : read_dat->base_mod_simplex_motif_hits;
-    context_handler.update_mask(modbase_mask, seq, core->modbase_info->alphabet, read_dat->base_mod_probs, threshold);
+    auto modbase_mask = need_to_generate_mask ? mb_get_sequence_mask(context_handler, seq_mut, strlen(seq)) : read_dat->base_mod_simplex_motif_hits;
+    mb_update_mask(context_handler, modbase_mask, seq, core->modbase_info->alphabet, read_dat->base_mod_probs, threshold);
 
     // Iterate over the provided alphabet and find all the channels we need to write out
     char current_cardinal = 0;

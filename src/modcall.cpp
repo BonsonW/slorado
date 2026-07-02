@@ -101,9 +101,9 @@ void mod_basecall_chunks(
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
     const auto chunk_size = core->modbase_config->context.chunk_size;
     const int kmer_size_per_sample = core->modbase_config->context.kmer_len * NUM_BASES;
-    auto sequence_stride_ratio = core->modbase_config->general.stride_ratio();
+    auto sequence_stride_ratio = general_stride_ratio(core->modbase_config->general);
 
-    assert(core->modbase_config->is_chunked_input_model());
+    assert(is_chunked_input_model(*core->modbase_config));
 
     ts->time_modcall -= realtime();
     for (size_t i = 0; i < results.size(); ++i) {

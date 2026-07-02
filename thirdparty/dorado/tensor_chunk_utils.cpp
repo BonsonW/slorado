@@ -93,7 +93,7 @@ int trim(const torch::Tensor& signal, float threshold, int window_size, int min_
     return min_trim;
 }
 
-std::pair<float, float> normalisation(QuantileScalingParams& params, torch::Tensor& x) {
+std::pair<float, float> normalisation(quantile_scaling_params_t& params, torch::Tensor& x) {
     auto quantiles = quantile_counting(x, torch::tensor({params.quantile_a, params.quantile_b}));
     float q20 = quantiles[0].item<float>();
     float q90 = quantiles[1].item<float>();
@@ -163,7 +163,7 @@ int determine_rna_adapter_pos(torch::Tensor &signal) {
     return break_point;
 }
 
-void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params) {
+void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, signal_norm_params_t &scaling_params) {
     auto strategy = scaling_params.strategy;
     float scale = 1.0f;
     float shift = 0.0f;

@@ -49,9 +49,9 @@ at::Tensor modbase_model_forward(const modbase_model_t *m, at::Tensor sigs, at::
     return at::linear(z, m->linear_w, m->linear_b).softmax(1);
 }
 
-modbase_model_t *load_modbase_model_proc(const ModBaseModelConfig &config, const at::TensorOptions &options, int /*batchsize*/) {
+modbase_model_t *load_modbase_model_proc(const modbase_model_config_t &config, const at::TensorOptions &options, int /*batchsize*/) {
     modbase_model_t *m = new modbase_model_t();
-    m->chunked = config.is_chunked_input_model();
+    m->chunked = is_chunked_input_model(config);
     const auto &p = config.general;
     const int stride = p.stride;
     const bool v2 = m->chunked;

@@ -42,7 +42,7 @@ inline tensor_quant_t quantize_tensor(const at::Tensor &x, int dim) {
     };
 }
 
-void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, SignalNormalisationParams &scaling_params);
+void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offset, signal_norm_params_t &scaling_params);
 
 // Copy `count` elements from src_tensor[src_offset..] into dest_tensor[dest_offset..], converting
 // fp32->fp16 when needed. Both tensors must be contiguous. Used to pack modbase input tensors.

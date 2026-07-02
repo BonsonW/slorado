@@ -73,8 +73,7 @@ void initialise_base_mod_probs(const core_t *core, read_dat_t *read_dat, char *s
 }
 
 std::vector<size_t> get_motif_hits(char *seq, std::string motif, size_t motif_offset) {
-	MotifMatcher matcher(motif, motif_offset);
-	return matcher.get_motif_hits(seq, strlen(seq));
+	return modbase_motif_hits(motif, motif_offset, seq, strlen(seq));
 }
 
 bool populate_hits_seq(const core_t *core, read_dat_t *read_dat, char *seq) {
@@ -312,13 +311,13 @@ size_t create_mod_chunks(std::vector<mod_chunk_t> &chunks, core_t *core, read_da
 	ASSERT(chunks.size() == 0);
 	const auto model_id = 0;
 
-	ModBaseModelConfig *config = core->modbase_config;
+	modbase_model_config_t *config = core->modbase_config;
 	const int base_id = config->mods.base_id;
 
 	const std::vector<int64_t>& hits_to_sig = read_dat->per_base_hits_sig[base_id];
 
 	const int64_t num_states = static_cast<int64_t>(config->mods.count + 1);
-	ContextParams ctx = config->context;
+	context_params_t ctx = config->context;
 	const size_t signal_len = static_cast<size_t>(read_dat->scaled_signal.size(0));
 
 	const size_t chunk_size = static_cast<size_t>(ctx.chunk_size);

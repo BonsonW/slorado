@@ -116,11 +116,11 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
             model_str.pop_back(); // remove trailing slash if exists
         }
         auto modbase_config_path = model_str + "_" + opt.mod;
-        ModBaseModelConfig modbase_config = load_modbase_model_config(modbase_config_path.c_str());
-        auto configs = std::vector<ModBaseModelConfig>({modbase_config});
-        ModBaseInfo modbase_info = get_modbase_info(configs);
-        core->modbase_config = new ModBaseModelConfig(modbase_config);
-        core->modbase_info = new ModBaseInfo(modbase_info);
+        modbase_model_config_t modbase_config = load_modbase_model_config(modbase_config_path.c_str());
+        auto configs = std::vector<modbase_model_config_t>({modbase_config});
+        modbase_info_t modbase_info = get_modbase_info(configs);
+        core->modbase_config = new modbase_model_config_t(modbase_config);
+        core->modbase_info = new modbase_info_t(modbase_info);
         LOG_TRACE("%s", "modbase config loaded");
     }
 
