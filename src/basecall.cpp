@@ -95,10 +95,10 @@ static void call_chunks(
     if (core->sensitivity_stats) {
         // Sensitivity mode: run fp16 baseline first, then quantized pass.
         g_quant_active = false;
-        fp16_scores = runner->module->forward(input);
+        fp16_scores = model_forward(runner, input);
         g_quant_active = true;
     }
-    auto scores = runner->module->forward(input);
+    auto scores = model_forward(runner, input);
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif

@@ -161,6 +161,51 @@ struct CRFModelConfig {
     bool crf_encoder_has_tanh = false;
 };
 
+// Simplified basecall model config (models >= v5.0.0 only). Fixed architecture per family; carries
+// only the fields used downstream. Replaces the generic CRFModelConfig at the loader boundary.
+typedef enum { MODEL_FAMILY_LSTM, MODEL_FAMILY_FLSTM, MODEL_FAMILY_TX } model_family_t;
+
+typedef struct {
+    model_family_t family;
+    SampleType sample_type;
+    std::string model_path;
+
+    int chunk_size = -1;   // from [basecaller]; -1 if absent
+    int overlap = -1;
+    int stride = 1;        // product of conv strides (÷ upsample for TX)
+
+    float qscale = 1.0f;   // [qscore]
+    float qbias = 0.0f;
+
+    int state_len = 0;
+    int outsize = 0;       // 4^state_len * 4
+    int num_features = 1;
+
+    SignalNormalisationParams signal_norm_params;  // used by scale_signal() in preprocessing
+
+    std::vector<ConvParams> convs;
+
+    // LSTM / FLSTM families
+    int lstm_size = 0;
+    int lstm_layers = 0;
+    int lstm_inner_dim = -1;   // >= 0 => FLSTM
+    bool has_out_features = false;
+    int out_features = 0;
+    bool bias = true;
+    bool clamp = false;
+    bool crf_encoder_has_tanh = false;
+
+    // TX family
+    TxParams tx;
+} model_config_t;
+
+// v5.0.0+ loader: reads the model dir and returns the simplified config.
+model_config_t load_model_config(const char *path);
+
+// Transitional: build the legacy CRFModelConfig from the simplified config (used while modules are
+// ported family-by-family; removed once all consumers take model_config_t directly).
+CRFModelConfig crf_config_from_model_config(const model_config_t &cfg);
+
 enum ModelType { CONV_LSTM_V1, CONV_LSTM_V2, CONV_LSTM_V3, CONV_V1, UNKNOWN };
 
 struct LinearParams {

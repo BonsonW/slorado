@@ -659,6 +659,204 @@ bool is_tx_model_config(const char *path) {
     return is_tx_model;
 }
 
+// --- simplified v5.0.0+ loader ----------------------------------------------------------------
+
+static toml_table_t *open_config_toml(const char *path) {
+    char errbuf[200];
+    char *cpath = (char *)malloc(strlen(path) + 100);
+    MALLOC_CHK(cpath);
+    sprintf(cpath, "%s/config.toml", path);
+    FILE *fp = fopen(cpath, "r");
+    if (!fp) {
+        ERROR("cannot open toml - %s: %s", cpath, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    toml_table_t *config_toml = toml_parse_file(fp, errbuf, sizeof(errbuf));
+    fclose(fp);
+    free(cpath);
+    check_toml_table(config_toml);
+    return config_toml;
+}
+
+// Read [qscore] scale/bias into the simplified config (no defaulting noise).
+static void load_qscore(model_config_t &cfg, toml_table_t *config_toml) {
+    if (!toml_key_exists(config_toml, "qscore")) return;
+    toml_table_t *qscore = toml_table_in(config_toml, "qscore");
+    check_toml_table(qscore);
+    toml_datum_t qbias = toml_double_in(qscore, "bias");
+    check_toml_datum(qbias);
+    toml_datum_t qscale = toml_double_in(qscore, "scale");
+    check_toml_datum(qscale);
+    cfg.qbias = qbias.u.d;
+    cfg.qscale = qscale.u.d;
+}
+
+static void load_basecaller(model_config_t &cfg, toml_table_t *config_toml) {
+    toml_table_t *basecaller = toml_table_in(config_toml, "basecaller");
+    if (!basecaller) return;
+    toml_datum_t chunksize = toml_int_in(basecaller, "chunksize");
+    if (chunksize.ok) cfg.chunk_size = (int)chunksize.u.i;
+    toml_datum_t overlap = toml_int_in(basecaller, "overlap");
+    if (overlap.ok) cfg.overlap = (int)overlap.u.i;
+}
+
+static void load_lstm_family(model_config_t &cfg, toml_table_t *config_toml) {
+    toml_table_t *input = toml_table_in(config_toml, "input");
+    check_toml_table(input);
+    toml_datum_t num_features = toml_int_in(input, "features");
+    check_toml_datum(num_features);
+    cfg.num_features = num_features.u.i;
+
+    toml_table_t *encoder = toml_table_in(config_toml, "encoder");
+    check_toml_table(encoder);
+    if (!toml_key_exists(encoder, "type")) {
+        ERROR("%s", "pre-v4 model configs are not supported (require models >= v5.0.0)");
+        exit(EXIT_FAILURE);
+    }
+
+    toml_array_t *_sublayers = toml_array_in(encoder, "sublayers");
+    check_toml_array(_sublayers);
+    std::vector<toml_table_t *> sublayers;
+    for (int i = 0;; i++) {
+        toml_table_t *segment = toml_table_at(_sublayers, i);
+        if (!segment) break;
+        sublayers.push_back(segment);
+    }
+
+    cfg.bias = false;
+    cfg.clamp = has_clamp(sublayers);
+    cfg.convs = parse_convs(sublayers);
+    for (const auto &cv : cfg.convs) cfg.stride *= cv.stride;
+    cfg.lstm_size = cfg.convs.back().size;
+
+    cfg.lstm_layers = 0;
+    for (const auto &segment : sublayers) {
+        const auto type = sublayer_type(segment);
+        if (type == SublayerType::LSTM) {
+            cfg.lstm_layers++;
+        } else if (type == SublayerType::FLSTM_SOFTOUT) {
+            cfg.lstm_layers++;
+            toml_datum_t inner_dim = toml_int_in(segment, "inner_dim");
+            check_toml_datum(inner_dim);
+            cfg.lstm_inner_dim = inner_dim.u.i;
+        } else if (type == SublayerType::LINEAR) {
+            toml_datum_t out_features = toml_int_in(segment, "out_features");
+            check_toml_datum(out_features);
+            cfg.out_features = out_features.u.i;
+            cfg.has_out_features = true;
+            toml_datum_t bias_d = toml_bool_in(segment, "bias");
+            cfg.bias = bias_d.ok ? (bool)bias_d.u.b : (cfg.lstm_size > 128);
+        } else if (type == SublayerType::LINEAR_CRF_ENCODER) {
+            toml_datum_t activation = toml_string_in(segment, "activation");
+            if (activation.ok) {
+                cfg.crf_encoder_has_tanh = (strcmp(activation.u.s, "tanh") == 0);
+                free(activation.u.s);
+            }
+        }
+    }
+
+    toml_table_t *global_norm = toml_table_in(config_toml, "global_norm");
+    check_toml_table(global_norm);
+    toml_datum_t state_len = toml_int_in(global_norm, "state_len");
+    check_toml_datum(state_len);
+    cfg.state_len = state_len.u.i;
+    cfg.outsize = pow(4, cfg.state_len) * 4;
+
+    if (cfg.convs.size() != 3) {
+        ERROR("Expected 3 convolution layers but found: %lu", cfg.convs.size());
+        exit(EXIT_FAILURE);
+    }
+    if (cfg.convs[0].size != 4 && cfg.convs[0].size != 16) {
+        ERROR("Invalid CRF model configuration - first convolution layer must be size 4 or 16. Got: %u", cfg.convs[0].size);
+        exit(EXIT_FAILURE);
+    }
+
+    cfg.family = (cfg.lstm_inner_dim >= 0) ? MODEL_FAMILY_FLSTM : MODEL_FAMILY_LSTM;
+}
+
+static void load_tx_family(model_config_t &cfg, toml_table_t *config_toml) {
+    toml_table_t *model_toml = toml_table_in(config_toml, "model");
+    check_toml_table(model_toml);
+
+    cfg.tx.tx = parse_tx_encoder_params(config_toml);
+    cfg.tx.upsample = parse_encoder_upsample_params(config_toml);
+    cfg.tx.crf = parse_crf_encoder_params(config_toml);
+
+    toml_table_t *convs = toml_table_fallback(model_toml, {"encoder", "conv"});
+    toml_array_t *sublayers = toml_array_in(convs, "sublayers");
+    check_toml_array(sublayers);
+    for (int i = 0;; i++) {
+        toml_table_t *segment = toml_table_at(sublayers, i);
+        if (!segment) break;
+        toml_datum_t type_dt = toml_string_in(segment, "type");
+        check_toml_datum(type_dt);
+        bool is_conv = (strcmp(type_dt.u.s, "convolution") == 0);
+        free(type_dt.u.s);
+        if (!is_conv) continue;
+        const ConvParams conv = parse_conv_params(segment, false); // TX has no swish clamp
+        cfg.convs.push_back(conv);
+        cfg.stride *= conv.stride;
+    }
+
+    cfg.stride /= cfg.tx.upsample.scale_factor;
+    cfg.out_features = pow(cfg.tx.crf.n_base, cfg.tx.crf.state_len + 1);
+    cfg.outsize = cfg.tx.crf.outsize();
+    cfg.state_len = cfg.tx.crf.state_len;
+    cfg.num_features = cfg.convs.front().insize;
+    cfg.lstm_size = -1; // force a downstream error if misused as an LSTM model
+    cfg.family = MODEL_FAMILY_TX;
+}
+
+model_config_t load_model_config(const char *path) {
+    model_config_t cfg;
+    cfg.model_path = std::string(path);
+    cfg.sample_type = get_sample_type_from_model_name(cfg.model_path);
+
+    toml_table_t *config_toml = open_config_toml(path);
+    load_qscore(cfg, config_toml);
+    cfg.signal_norm_params = parse_signal_normalisation_params(config_toml);
+    if (is_tx_model_config(path)) {
+        load_tx_family(cfg, config_toml);
+    } else {
+        load_lstm_family(cfg, config_toml);
+    }
+    load_basecaller(cfg, config_toml);
+    toml_free(config_toml);
+    return cfg;
+}
+
+// Transitional adapter: fill the legacy CRFModelConfig from the simplified config so the existing
+// model modules keep working unchanged while they are ported family-by-family. Dropped legacy
+// fields (blank_score, scale, sample_rate, signal_norm_params, mean_qscore_start_pos) keep their
+// CRFModelConfig defaults.
+CRFModelConfig crf_config_from_model_config(const model_config_t &cfg) {
+    CRFModelConfig c;
+    c.qscale = cfg.qscale;
+    c.qbias = cfg.qbias;
+    c.lstm_size = cfg.lstm_size;
+    c.stride = cfg.stride;
+    c.bias = cfg.bias;
+    c.clamp = cfg.clamp;
+    c.has_out_features = cfg.has_out_features;
+    c.out_features = cfg.out_features;
+    c.state_len = cfg.state_len;
+    c.outsize = cfg.outsize;
+    c.num_features = cfg.num_features;
+    c.signal_norm_params = cfg.signal_norm_params;
+    c.convs = cfg.convs;
+    c.model_path = cfg.model_path;
+    c.sample_type = cfg.sample_type;
+    c.chunk_size = cfg.chunk_size;
+    c.overlap = cfg.overlap;
+    c.lstm_layers = cfg.lstm_layers;
+    c.lstm_inner_dim = cfg.lstm_inner_dim;
+    c.crf_encoder_has_tanh = cfg.crf_encoder_has_tanh;
+    if (cfg.family == MODEL_FAMILY_TX) {
+        c.tx = new TxParams(cfg.tx);
+    }
+    return c;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////// modbase
 
 // Get an integer value from a toml::value asserting that it is within a closed interval.

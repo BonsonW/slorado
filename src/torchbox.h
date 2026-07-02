@@ -26,6 +26,10 @@ struct runner {
     torch::Tensor input_tensor;
     torch::TensorOptions tensor_opts;
     torch::nn::ModuleHolder<torch::nn::AnyModule> module{nullptr};
+    // Procedural basecall model (ported families). When non-null, model_forward() uses it instead
+    // of the torch::nn `module`. Opaque here to avoid pulling model headers into slorado.h.
+    void *bc_model = nullptr;
+    model_family_t bc_family;   // valid when bc_model != nullptr
 #ifdef USE_GPU
     int64_t device_idx;
     openfish_gpubuf_t *gpubuf;
@@ -35,5 +39,9 @@ struct runner {
     at::Tensor input_sigs;
     at::Tensor input_seqs;
 };
+
+// Run a basecall runner's model forward: procedural model if bc_model is set, else the torch::nn
+// module. (Modbase runners call module->forward directly.)
+at::Tensor model_forward(runner_t *runner, const at::Tensor &x);
 
 #endif

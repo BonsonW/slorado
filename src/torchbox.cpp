@@ -63,6 +63,19 @@ void free_read_dat(read_dat_t *read_dat) {
     delete read_dat;
 }
 
+at::Tensor model_forward(runner_t *runner, const at::Tensor &x) {
+    if (runner->bc_model) {
+        if (runner->bc_family == MODEL_FAMILY_TX) {
+            return tx_model_forward((tx_model_t *)runner->bc_model, x);
+        }
+        if (runner->bc_family == MODEL_FAMILY_FLSTM) {
+            return flstm_model_forward((flstm_model_t *)runner->bc_model, x);
+        }
+        return lstm_model_forward((lstm_model_t *)runner->bc_model, x);
+    }
+    return runner->module->forward(x);
+}
+
 std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     std::vector<std::string> devices;
 
@@ -133,18 +146,28 @@ void init_runner(
         runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, batch_size);
     } else {
         if (core->model_config->tx != NULL) {
-            LOG_TRACE("%s", "loading tx model");
+            LOG_TRACE("%s", "loading tx model (procedural)");
             tx_stats_t *model_stats = init_tx_stats();
             model_stats->calib_stats = core->calib_stats;
             model_stats->quant_config = core->quant_config;
-            runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, core->opt.quant ? core->opt.quant : "", core->opt.num_thread);
+            runner->bc_model = load_tx_model_proc(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, core->opt.quant ? core->opt.quant : "", core->opt.num_thread);
+            runner->bc_family = MODEL_FAMILY_TX;
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
-        } else {
-            LOG_TRACE("%s", "loading lstm model");
+        } else if (core->model_config->lstm_inner_dim >= 0) {
+            LOG_TRACE("%s", "loading flstm model (procedural)");
             lstm_stats_t *model_stats = init_lstm_stats();
             model_stats->calib_stats = core->calib_stats;
             model_stats->quant_config = core->quant_config;
-            runner->module = load_lstm_model(*core->model_config, runner->tensor_opts, model_stats);
+            runner->bc_model = load_flstm_model_proc(*core->model_config, runner->tensor_opts, model_stats);
+            runner->bc_family = MODEL_FAMILY_FLSTM;
+            (*core->runner_stats)[runner_idx]->model_stats = model_stats;
+        } else {
+            LOG_TRACE("%s", "loading lstm model (procedural)");
+            lstm_stats_t *model_stats = init_lstm_stats();
+            model_stats->calib_stats = core->calib_stats;
+            model_stats->quant_config = core->quant_config;
+            runner->bc_model = load_lstm_model_proc(*core->model_config, runner->tensor_opts, model_stats);
+            runner->bc_family = MODEL_FAMILY_LSTM;
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         }
     }
@@ -169,7 +192,7 @@ void init_runner(
                     torch::InferenceMode no_grad;
                     auto trial = torch::zeros({n, 1, (int64_t)core->chunk_size},
                         torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
-                    auto out = runner->module->forward(trial.to(runner->tensor_opts.device()));
+                    auto out = model_forward(runner, trial.to(runner->tensor_opts.device()));
                     // Replicate call_chunks: transpose(0,1).contiguous() allocates a second
                     // N×T×C copy while the original scores tensor is still alive.
                     // Without this the trial misses half the output tensor cost.
@@ -378,6 +401,11 @@ void free_runners(core_t *core) {
             c10::DeviceGuard device_guard(runner->tensor_opts.device());
             openfish_gpubuf_free(runner->gpubuf);
 #endif
+        }
+        if (runner->bc_model) {
+            if (runner->bc_family == MODEL_FAMILY_TX) free_tx_model((tx_model_t *)runner->bc_model);
+            else if (runner->bc_family == MODEL_FAMILY_FLSTM) free_flstm_model((flstm_model_t *)runner->bc_model);
+            else free_lstm_model((lstm_model_t *)runner->bc_model);
         }
         delete runner;
 

@@ -124,14 +124,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         LOG_TRACE("%s", "modbase config loaded");
     }
 
-    CRFModelConfig model_config;
-    if (is_tx_model_config(model)) {
-        model_config = load_tx_model_config(model);
-    } else {
-        model_config = load_lstm_model_config(model);
-    }
-    model_config.model_path = std::string(model);
-    model_config.sample_type = get_sample_type_from_model_name(model_config.model_path);
+    model_config_t mcfg = load_model_config(model);
+    CRFModelConfig model_config = crf_config_from_model_config(mcfg);
 
     core->model_stride = static_cast<size_t>(model_config.stride);
 

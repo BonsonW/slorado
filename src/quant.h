@@ -5,12 +5,30 @@
 
 #include <torch/torch.h>
 
+#include "calib.h"
+
 // Quantization methods for a single linear layer.
 // Both fields are empty strings by default — fake_quant treats empty as fp16 pass-through.
 struct layer_quant_t {
     std::string weight;
     std::string act;
 };
+
+// A single quantised linear layer: bundles the weight/bias with its (optional) fake-quant methods
+// and (optional) calibration hook. `qlinear()` collapses the per-layer boilerplate — calibration
+// accumulate on the input, fake-quant of activation + weight, then at::linear — into one call.
+// Any of lq / calib_stats / calib_layer may be null (=> that step is skipped / fp16 pass-through).
+struct qlinear_t {
+    at::Tensor weight;                       // [out, in]
+    at::Tensor bias;                         // undefined tensor => no bias
+    const layer_quant_t *lq = nullptr;       // fake-quant methods; null => fp16
+    calib_stats_t *calib_stats = nullptr;    // null => calibration off
+    calib_layer_t *calib_layer = nullptr;
+};
+
+// output = at::linear(fake_quant(x, lq->act), fake_quant(weight, lq->weight), bias),
+// accumulating input calibration stats first when a calib hook is bound. Honors g_quant_active.
+at::Tensor qlinear(const qlinear_t &q, const at::Tensor &x);
 
 // Thread-local flag: set to false to bypass quant paths (used for the fp16 baseline pass
 // in sensitivity mode). True by default — quant layers run normally.

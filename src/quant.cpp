@@ -8,6 +8,13 @@
 
 thread_local bool g_quant_active = true;
 
+at::Tensor qlinear(const qlinear_t &q, const at::Tensor &x) {
+    if (q.calib_layer && q.calib_stats) q.calib_stats->accumulate(q.calib_layer, x);
+    static const layer_quant_t empty;
+    const layer_quant_t &lq = q.lq ? *q.lq : empty;
+    return at::linear(fake_quant(x, lq.act), fake_quant(q.weight, lq.weight), q.bias);
+}
+
 void build_quant_methods(std::unordered_map<std::string, layer_quant_t> &out,
                          const std::unordered_map<std::string, std::string> &cfg) {
     out.reserve(cfg.size());
