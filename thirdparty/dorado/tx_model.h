@@ -6,7 +6,7 @@
 #include "quant.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
-#include "fluke/fluke.h"
+#include "fluke_wrapper.h"
 
 #include <ATen/core/TensorBody.h>
 #include <c10/core/Device.h>

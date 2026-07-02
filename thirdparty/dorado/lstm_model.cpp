@@ -8,7 +8,7 @@
 #include "quant.h"
 
 #ifdef USE_GPU
-#include <openfish/openfish.h>
+#include <fluke/fluke.h>
 #endif
 
 using namespace torch::nn;
@@ -305,7 +305,7 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
         torch::addmm_out(scratch, L->up_b_hh, fake_quant(dn_hh_buf, lq_up_hh.act), up_w_hh_t);
 
 #ifdef USE_GPU
-        openfish_flstm_step_gpu(scratch.data_ptr(), ih[t].data_ptr(),
+        fluke_flstm_step_gpu(scratch.data_ptr(), ih[t].data_ptr(),
                                 c.data_ptr(), hh[t + 1].data_ptr(), N, C);
 #else
         auto gates = scratch.add(ih[t]).chunk(4, 1);

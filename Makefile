@@ -7,7 +7,8 @@ CPPFLAGS += -I slow5lib/include/ \
 			-I $(LIBTORCH_DIR)/include/torch/csrc/api/include \
 			-I $(LIBTORCH_DIR)/include -I thirdparty/ \
 			-I thirdparty/tomlc99/ \
-			-I openfish/include
+			-I openfish/include \
+			-I fluke/include
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2 -std=c++17
 DEPFLAGS = -MMD -MP -MF $(@:.o=.d)
@@ -61,7 +62,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/modbase_model.o \
 	  $(BUILD_DIR)/model_config.o \
 	  $(BUILD_DIR)/toml.o \
-	  $(BUILD_DIR)/fluke.o \
+	  $(BUILD_DIR)/fluke_wrapper.o \
 
 # add more objects here if needed
 
@@ -82,17 +83,9 @@ ifdef cuda
 	CUDA_LIB ?= $(CUDA_ROOT)/lib64
 	CUDA_INC ?= $(CUDA_ROOT)/include
 	CPPFLAGS += -I $(CUDA_INC)
-	# precompiled fused int8 kernels (cutedsl/CUTLASS) for the real quant inference path.
-	# They use the CUDA 12 library API (cudaLibrary_t / cudaLaunchKernelEx), so only link them on
-	# CUDA >= 12; fluke.cpp guards the same way, so older CUDA just falls back to fp16.
-	# The shipped objects reference underscore-prefixed CUDA symbols; objcopy rewrites them
-	# to the real ELF names (resolved from cudart_static + the driver stub libcuda).
-	# (fluke.o itself is always built — its CPU/old-CUDA body is just a null backend stub.)
-	CUDART_VER := $(shell grep -E 'define +CUDART_VERSION' $(CUDA_INC)/cuda_runtime_api.h 2>/dev/null | grep -oE '[0-9]+' | head -1)
-	ifeq ($(shell [ "$(CUDART_VER)" -ge 12000 ] 2>/dev/null && echo 1),1)
-	FLUKE_OBJ = $(BUILD_DIR)/gemm_i8_dual_silu_N2048_K512.o \
-	            $(BUILD_DIR)/gemm_i8_rotary_N1536_K512_H8D64R64S2048.o
-	endif
+	# The fused int8 kernels + their arch dispatch now live in the fluke library (libfluke.a,
+	# built below like libopenfish.a). fluke's own Makefile bundles the AOT kernel objects and
+	# does the CUDA-symbol objcopy + CUDA-12 gating internally, so nothing extra to link here.
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cuda.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_cuda.so"
 	LDFLAGS += -L$(CUDA_LIB) -lcudart_static -L$(CUDA_LIB)/stubs -lcuda -lrt -ldl
 else ifdef rocm
@@ -111,8 +104,8 @@ endif
 #include ""
 
 # slorado
-$(BINARY): $(OBJ) $(FLUKE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a
-	$(CXX) $(CFLAGS) $(OBJ) $(FLUKE_OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a $(LDFLAGS) -o $@
+$(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a fluke/lib/libfluke.a
+	$(CXX) $(CFLAGS) $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a fluke/lib/libfluke.a $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
@@ -169,23 +162,9 @@ $(BUILD_DIR)/lstm_model.o: thirdparty/dorado/lstm_model.cpp
 $(BUILD_DIR)/tx_model.o: thirdparty/dorado/tx_model.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
-# fluke — facade over the precompiled fused int8 kernels
-$(BUILD_DIR)/fluke.o: thirdparty/fluke/fluke.cpp
+# fluke_wrapper — thin ATen facade over the fluke library's fused-int8 C ABI (libfluke.a).
+$(BUILD_DIR)/fluke_wrapper.o: thirdparty/fluke_wrapper.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
-
-# Rewrite the underscore-prefixed CUDA symbol references in the precompiled kernel objects
-# to their real ELF names so they resolve against cudart_static / libcuda.
-$(BUILD_DIR)/%.o: thirdparty/fluke/sm80/%.o
-	objcopy \
-	  --redefine-sym _cudaDeviceGetAttribute=cudaDeviceGetAttribute \
-	  --redefine-sym _cudaFuncSetAttribute=cudaFuncSetAttribute \
-	  --redefine-sym _cudaGetDevice=cudaGetDevice \
-	  --redefine-sym _cudaKernelSetAttributeForDevice=cudaKernelSetAttributeForDevice \
-	  --redefine-sym _cudaLaunchKernelEx=cudaLaunchKernelExC \
-	  --redefine-sym _cudaLibraryGetKernel=cudaLibraryGetKernel \
-	  --redefine-sym _cudaLibraryLoadData=cudaLibraryLoadData \
-	  --redefine-sym _cuKernelGetAttribute=cuKernelGetAttribute \
-	  $< $@
 
 $(BUILD_DIR)/modbase_model.o: thirdparty/dorado/modbase_model.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
@@ -198,7 +177,10 @@ $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 openfish/lib/libopenfish.a:
-	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT=$(ROCM_ROOT) ROCM_ARCH=$(ROCM_ARCH) CUDA_ROOT=$(CUDA_ROOT) CUDA_ARCH=$(CUDA_ARCH) lib/libopenfish.a
+	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libopenfish.a
+
+fluke/lib/libfluke.a:
+	$(MAKE) -C fluke cuda=$(cuda) rocm=$(rocm) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libfluke.a
 
 slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a
@@ -207,6 +189,7 @@ clean:
 	rm -rf $(BINARY) $(BUILD_DIR)/*.o $(BUILD_DIR)/*.d
 	make -C slow5lib clean
 	make -C openfish clean
+	make -C fluke clean
 
 # Delete all gitignored files (but not directories)
 distclean: clean

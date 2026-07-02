@@ -4,3 +4,6 @@
 [submodule "openfish"]
 	path = openfish
 	url = https://github.com/warp9seq/openfish.git
+[submodule "fluke"]
+	path = fluke
+	url = git@github.com:BonsonW/fluke.git

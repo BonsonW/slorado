@@ -168,13 +168,13 @@ static at::Tensor tx_rotary(const tx_layer_t *L, at::Tensor qkv, tx_stats_t *sta
     auto ch = qkv.chunk(3, 2);
 #ifdef USE_GPU
     if (!qkv.device().is_cpu()) {
-        openfish_rotary_emb_gpu(ch[0].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh);
-        openfish_rotary_emb_gpu(ch[1].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh);
+        fluke_rotary_emb_gpu(ch[0].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh);
+        fluke_rotary_emb_gpu(ch[1].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh);
     } else
 #endif
     {
-        openfish_rotary_emb_cpu(ch[0].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh, stats->nthreads);
-        openfish_rotary_emb_cpu(ch[1].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh, stats->nthreads);
+        fluke_rotary_emb_cpu(ch[0].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh, stats->nthreads);
+        fluke_rotary_emb_cpu(ch[1].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh, stats->nthreads);
     }
     return qkv;
 }
@@ -295,7 +295,7 @@ static at::Tensor tx_gmlp_forward(const tx_layer_t *L, torch::Tensor x, tx_stats
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
     auto silu_o = torch::empty({t.size(0), t.size(1), K}, t.options());
-    openfish_silu_mul_gpu(t.data_ptr(), silu_o.data_ptr(), M, K);
+    fluke_silu_mul_gpu(t.data_ptr(), silu_o.data_ptr(), M, K);
     t = silu_o;
 #else
     const auto chunks = t.chunk(2, -1);
@@ -321,7 +321,7 @@ static void tx_encoder_forward(tx_model_t *m, const tx_layer_t *L, torch::Tensor
         auto MN = in.size(0) * in.size(1);
         auto out = torch::empty({in.size(0), in.size(1), in.size(2)}, in.options());
         auto K = in.size(2);
-        openfish_rmsnorm_gpu(in.contiguous().data_ptr(), x.contiguous().data_ptr(),
+        fluke_rmsnorm_gpu(in.contiguous().data_ptr(), x.contiguous().data_ptr(),
                              norm_w.contiguous().data_ptr(), out.data_ptr(), MN, K, alpha, eps);
         x = out;
 #else
@@ -372,7 +372,7 @@ static void tx_encoder_forward_quant(tx_model_t *m, const tx_layer_t *L, tensor_
     const int n_tokens = attn.size(0) * attn.size(1);
     const int K = attn.size(2);
     t0 = realtime();
-    openfish_rmsnorm_quant_int8_gpu(attn.data_ptr(), L->norm1_w.contiguous().data_ptr(),
+    fluke_rmsnorm_quant_int8_gpu(attn.data_ptr(), L->norm1_w.contiguous().data_ptr(),
                                     a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
     torch::cuda::synchronize(dev);
     t1 = realtime(); stats->time_norm1 += t1 - t0;
@@ -383,7 +383,7 @@ static void tx_encoder_forward_quant(tx_model_t *m, const tx_layer_t *L, tensor_
     t1 = realtime(); stats->time_ff += t1 - t0;
 
     t0 = realtime();
-    openfish_rmsnorm_quant_int8_gpu(f.data_ptr(), L->norm2_w.contiguous().data_ptr(),
+    fluke_rmsnorm_quant_int8_gpu(f.data_ptr(), L->norm2_w.contiguous().data_ptr(),
                                     a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
     torch::cuda::synchronize(dev);
     t1 = realtime(); stats->time_norm2 += t1 - t0;

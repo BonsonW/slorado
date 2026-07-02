@@ -51,7 +51,7 @@ void free_lstm_model(lstm_model_t *m);
 at::Tensor conv_stack_forward(const std::vector<conv_layer_t> &convs, at::Tensor x);
 
 // Procedural factored-LSTM (FLSTM) model — hac/fast v6. Down/up-projected LSTM with a per-timestep
-// recurrence (openfish_flstm_step_gpu on GPU), decomposed linear1 + tanh-scaled linear2 CRF, no
+// recurrence (fluke_flstm_step_gpu on GPU), decomposed linear1 + tanh-scaled linear2 CRF, no
 // clamp. Weights are fake-quantised inline; calib hooks are registered with the real loaded weights.
 typedef struct {
     at::Tensor dn_w_ih, dn_w_hh, up_w_ih, up_w_hh, up_b_ih, up_b_hh;
