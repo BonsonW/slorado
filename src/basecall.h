@@ -10,7 +10,6 @@
 #include "slorado.h"
 
 void basecall_db(core_t* core, db_t* db);
-void mod_basecall_db(core_t* core, db_t* db);
 
 // Run inference + decode on a packed batch of chunk pointers using the given runner.
 // Exposed for the streaming pipeline (basecall.cpp defines it).

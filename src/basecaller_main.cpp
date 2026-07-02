@@ -230,11 +230,6 @@ int basecaller_main(int argc, char* argv[]) {
 
     model = argv[optind++];
 
-    if ((opt.flag & SLORADO_STREAM) && opt.mod != NULL) {
-        ERROR("%s", "--mod is not yet supported on the streaming (--stream) path; run without --stream for modbase calling");
-        exit(EXIT_FAILURE);
-    }
-
     if (opt.mod != NULL && !is_modbase_supported(opt.mod)) {
         std::string error_msg = "unsupported modbase model \"" + std::string(opt.mod) + "\"curent supported modbase models are: ";
         for (const auto &s : supported) {

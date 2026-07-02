@@ -47,6 +47,12 @@ void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offs
 // Scale a single record's signal and split it into overlapping basecall chunks (rec->len_raw_signal > 0).
 void preprocess_signal(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::vector<basecall_chunk_t> &chunks);
 
+// Per-read modbase pre/postprocessing cores (rec->len_raw_signal > 0). Shared by the batch path
+// (preprocess_modbase_db / postprocess_modbase_db) and the streaming pipeline. `seq` is borrowed
+// and must outlive postprocess_modbase.
+void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, const char *seq, std::vector<uint8_t> &moves, std::vector<mod_chunk_t> &mod_chunks);
+void postprocess_modbase(core_t *core, read_dat_t *read_dat, std::string &mod_string, std::vector<uint8_t> &mod_prob);
+
 // Given a read with unstitched chunks, stitch the chunks (accounting for overlap) and assign basecalled read and qstring to Read
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
 

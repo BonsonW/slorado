@@ -529,8 +529,7 @@ echo ""
 echo "********************************************************************"
 
 # streaming (pipelined) path — exercise --stream on GPU at scale (validates accuracy and
-# surfaces host/GPU memory leaks or crashes on the streaming code path). --mod is not yet
-# supported on --stream, so the meth checks below stay on the batch path.
+# surfaces host/GPU memory leaks or crashes on the streaming code path).
 echo "GPU - FAST model (stream) - 20k reads"
 ex $SLORADO basecaller models/$FAST $SUBSUBSAMPLE --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $FAST_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_dna $FAST
@@ -570,6 +569,21 @@ echo "********************************************************************"
 
 echo "GPU - SUP meth model - chr22"
 ex $SLORADO basecaller models/$SUP $CHR22 --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.sam || die "Running the tool failed"
+check_corr_mod $SUP
+echo ""
+echo "********************************************************************"
+
+# modified basecalling on the streaming path. Exact SAM output is not bit-reproducible on GPU
+# (timing-dependent batch composition shifts a few ML probabilities by <=1 LSB), so validate via
+# the same methylation-frequency correlation used for the batch path.
+echo "GPU - HAC meth model (stream) - chr22"
+ex $SLORADO basecaller models/$HAC $CHR22 --mod $METH --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.sam || die "Running the tool failed"
+check_corr_mod $HAC
+echo ""
+echo "********************************************************************"
+
+echo "GPU - SUP meth model (stream) - chr22"
+ex $SLORADO basecaller models/$SUP $CHR22 --mod $METH --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.sam || die "Running the tool failed"
 check_corr_mod $SUP
 echo ""
 echo "********************************************************************"

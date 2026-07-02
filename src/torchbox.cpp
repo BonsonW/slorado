@@ -453,133 +453,99 @@ void preprocess_signal_db(core_t *core, db_t *db, int32_t i) {
     }
 }
 
-void preprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
-    slow5_rec_t *rec = db->slow5_rec[i];
-    uint64_t len_raw_signal = rec->len_raw_signal;
-    // double a, b;
+// Per-read modbase preprocessing core. Assumes rec->len_raw_signal > 0. Fills mod_chunks (and the
+// modbase state in read_dat). seq is a borrowed pointer that must outlive postprocess_modbase.
+// Shared by the batch path (preprocess_modbase_db) and the streaming pipeline.
+void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, const char *seq, std::vector<uint8_t> &moves, std::vector<mod_chunk_t> &mod_chunks) {
+    // read_dat is persistent across batches, clear per-base hit caches to avoid stale work.
+    for (auto& hits : read_dat->per_base_hits_seq) {
+        hits.clear();
+    }
+    for (auto& hits : read_dat->per_base_hits_sig) {
+        hits.clear();
+    }
 
-    (*db->mod_chunks)[i].clear();
-    if (len_raw_signal > 0) {
-        read_dat_t *read_dat = (*db->read_dats)[i];
+    char *seq_mut = const_cast<char*>(seq);
+    read_dat->seq = seq;
 
-        // read_dat is persistent across batches, clear per-base hit caches to avoid stale work.
-        for (auto& hits : read_dat->per_base_hits_seq) {
-            hits.clear();
+    LOG_TRACE("%s", "tensor_from_record");
+    read_dat->scaled_signal = tensor_from_record(rec);
+
+    LOG_TRACE("%s", "initialise_base_mod_probs");
+    initialise_base_mod_probs(core, read_dat, seq_mut);
+
+    // For RNA: Pad signal length to be evenly divisible by the canonical stride so that the
+    // sequence to signal mapping is always stride aligned and not offset by any remainder
+    // in the last move (which becomes the first move when reversed).
+    // const size_t signal_len =
+    //         m_is_rna_model ? utils::pad_to(signal.size(0), m_canonical_stride) : signal.size(0);
+    const size_t signal_len = read_dat->scaled_signal.size(0);
+
+    LOG_TRACE("%s", "populate_hits_seq");
+    if (!populate_hits_seq(core, read_dat, seq_mut)) {
+        // WARNING("%s", "coud not populate hits sequence, not an error");
+        return;
+    }
+
+    LOG_TRACE("%s", "get_seq_to_sig_map");
+    std::vector<uint64_t> seq_to_sig_map = get_seq_to_sig_map(moves, signal_len, strlen(seq) + 1, core->model_config->stride);
+
+    LOG_TRACE("%s", "sequence_to_ints");
+    std::vector<int> int_seq = sequence_to_ints(seq);
+
+    auto base_id = core->modbase_config->mods.base_id;
+
+    LOG_TRACE("%s", "populate_hits_sig");
+    populate_hits_sig(read_dat->per_base_hits_sig, read_dat->per_base_hits_seq, seq_to_sig_map, base_id);
+
+    LOG_TRACE("%s", "populate_signal");
+    populate_signal(core, read_dat->scaled_signal, seq_to_sig_map, int_seq);
+
+    if (signal_len != static_cast<size_t>(read_dat->scaled_signal.size(0))) {
+        ERROR("%s", "modbase signal length is incorrect for read");
+        exit(EXIT_FAILURE);
+    }
+
+    for (const auto& per_base_hits : read_dat->per_base_hits_seq) {
+        for (std::size_t hit : per_base_hits) {
+            read_dat->base_mod_simplex_motif_hits.at(hit) = true;
         }
-        for (auto& hits : read_dat->per_base_hits_sig) {
-            hits.clear();
-        }
+    }
 
-        const char *seq = (*db->sequence)[i].c_str();
-        char *seq_mut = const_cast<char*>(seq);
-        read_dat->seq = seq;
+    create_mod_chunks(mod_chunks, core, read_dat);
 
-        std::vector<uint8_t> &moves = (*db->moves)[i];
+    const auto base_skips = get_minimal_encoding_skips(core, mod_chunks, seq_to_sig_map, int_seq);
 
-        LOG_TRACE("%s", "tensor_from_record");
+    auto sequence_stride_ratio = core->modbase_config->general.stride_ratio();
+    auto kmer_len = core->modbase_config->context.bases_before + core->modbase_config->context.bases_after + 1;
 
-        // a = realtime();
-        read_dat->scaled_signal = tensor_from_record(rec);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_tens_from_rec += (b-a);
-        
-        LOG_TRACE("%s", "initialise_base_mod_probs");
+    populate_encoded_kmer(read_dat->encoded_kmers, read_dat->scaled_signal.size(0), int_seq, seq_to_sig_map, base_skips, kmer_len, sequence_stride_ratio);
 
-        // a = realtime();
-        initialise_base_mod_probs(core, read_dat, seq_mut);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_init_base_mod_probs += (b-a);
-
-        // For RNA: Pad signal length to be evenly divisible by the canonical stride so that the
-        // sequence to signal mapping is always stride aligned and not offset by any remainder
-        // in the last move (which becomes the first move when reversed).
-        // const size_t signal_len =
-        //         m_is_rna_model ? utils::pad_to(signal.size(0), m_canonical_stride) : signal.size(0);
-        const size_t signal_len = read_dat->scaled_signal.size(0);
-
-        LOG_TRACE("%s", "populate_hits_seq");
-
-        if (!populate_hits_seq(core, read_dat, seq_mut)) {
-            // WARNING("%s", "coud not populate hits sequence, not an error");
-            return;
-        }
-
-        LOG_TRACE("%s", "get_seq_to_sig_map");
-
-        // a = realtime();
-        std::vector<uint64_t> seq_to_sig_map = get_seq_to_sig_map(moves, signal_len, strlen(seq) + 1, core->model_config->stride);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_seq_to_sig_map += (b-a);
-
-        LOG_TRACE("%s", "sequence_to_ints");
-        // a = realtime();
-        std::vector<int> int_seq = sequence_to_ints(seq);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_seq_to_ints += (b-a);
-
-        auto base_id = core->modbase_config->mods.base_id;
-
-        LOG_TRACE("%s", "populate_hits_sig");
-
-        // a = realtime();
-        populate_hits_sig(read_dat->per_base_hits_sig, read_dat->per_base_hits_seq, seq_to_sig_map, base_id);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_populate_hits_sig += (b-a);
-
-        LOG_TRACE("%s", "populate_signal");
-
-        // a = realtime();
-        populate_signal(core, read_dat->scaled_signal, seq_to_sig_map, int_seq);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_populate_signal += (b-a);
-
-        if (signal_len != static_cast<size_t>(read_dat->scaled_signal.size(0))) {
-            ERROR("%s", "modbase signal length is incorrect for read");
-            exit(EXIT_FAILURE);
-        }
-
-        for (const auto& per_base_hits : read_dat->per_base_hits_seq) {
-            for (std::size_t hit : per_base_hits) {
-                read_dat->base_mod_simplex_motif_hits.at(hit) = true;
-            }
-        }
-
-        create_mod_chunks((*db->mod_chunks)[i], core, read_dat);
-
-        // a = realtime();
-        const auto base_skips = get_minimal_encoding_skips(core, (*db->mod_chunks)[i], seq_to_sig_map, int_seq);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_get_minimal_encoding_skips += (b-a);
-
-        auto sequence_stride_ratio = core->modbase_config->general.stride_ratio();
-        auto kmer_len = core->modbase_config->context.bases_before + core->modbase_config->context.bases_after + 1;
-
-        // a = realtime();
-        populate_encoded_kmer(read_dat->encoded_kmers, read_dat->scaled_signal.size(0), int_seq, seq_to_sig_map, base_skips, kmer_len, sequence_stride_ratio);
-        // b = realtime();
-        // if (core->opt.num_thread == 1) core->time_populate_encoded_kmer += (b-a);
-
-        const std::size_t enc_kmer_size = read_dat->encoded_kmers.size();
-        const std::size_t expected = (read_dat->scaled_signal.size(0) / sequence_stride_ratio) * kmer_len * NUM_BASES;
-        if (enc_kmer_size != expected) {
-            ERROR("%s", "Modbase kmer encoding failed");
-            exit(1);
-        }
+    const std::size_t enc_kmer_size = read_dat->encoded_kmers.size();
+    const std::size_t expected = (read_dat->scaled_signal.size(0) / sequence_stride_ratio) * kmer_len * NUM_BASES;
+    if (enc_kmer_size != expected) {
+        ERROR("%s", "Modbase kmer encoding failed");
+        exit(1);
     }
 }
 
-void postprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
+void preprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
     slow5_rec_t *rec = db->slow5_rec[i];
-    uint64_t len_raw_signal = rec->len_raw_signal;
 
-    if (len_raw_signal <= 0) { return; }
+    (*db->mod_chunks)[i].clear();
+    if (rec->len_raw_signal > 0) {
+        preprocess_modbase(core, rec, (*db->read_dats)[i], (*db->sequence)[i].c_str(), (*db->moves)[i], (*db->mod_chunks)[i]);
+    }
+}
 
+// Per-read modbase postprocessing core: turn read_dat->base_mod_probs into MM/ML output
+// (mod_string_out + mod_prob_out). Shared by the batch path and the streaming pipeline.
+void postprocess_modbase(core_t *core, read_dat_t *read_dat, std::string &mod_string_out, std::vector<uint8_t> &mod_prob_out) {
     const auto threshold_float = 0.05f;
     const auto threshold = static_cast<uint8_t>(std::min(threshold_float * 256.0f, 255.0f));
 
     const size_t num_channels = core->modbase_info->alphabet.size();
     const std::string cardinal_bases = "ACGT";
-    read_dat_t *read_dat = (*db->read_dats)[i];
     const char *seq = read_dat->seq;
     char *seq_mut = const_cast<char*>(seq);
     const auto seqlen = strlen(seq);
@@ -655,6 +621,11 @@ void postprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
         }
     }
 
-    (*db->mod_string)[i] = std::move(modbase_string);
-    (*db->mod_prob)[i] = std::move(modbase_prob);
+    mod_string_out = std::move(modbase_string);
+    mod_prob_out = std::move(modbase_prob);
+}
+
+void postprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
+    if (db->slow5_rec[i]->len_raw_signal <= 0) { return; }
+    postprocess_modbase(core, (*db->read_dats)[i], (*db->mod_string)[i], (*db->mod_prob)[i]);
 }

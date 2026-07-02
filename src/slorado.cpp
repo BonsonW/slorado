@@ -45,6 +45,7 @@ SOFTWARE.
 #include "sensitivity.h"
 
 #include "basecall.h"
+#include "modcall.h"
 #include "writer.h"
 
 #include <sys/wait.h>

@@ -151,7 +151,7 @@ at::Tensor fluke_gated_mlp_i8(const fluke_backend *b, const tensor_quant &x, con
 
 #else // no CUDA-12 kernel support — no backend, ops never called.
 
-fluke_backend *fluke_select_backend(int, enum fluke_format, struct fluke_dims) { return NULL; }
+fluke_backend *fluke_select_backend(int, enum fluke_format, fluke_dims) { return NULL; }
 
 at::Tensor fluke_qkv_rotary_i8(const fluke_backend *, const tensor_quant &, const tensor_quant &,
                                const at::Tensor &, const at::Tensor &) { return at::Tensor(); }

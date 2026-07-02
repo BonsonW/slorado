@@ -36,6 +36,12 @@ typedef struct {
     std::string qstring;
     std::vector<uint8_t> moves;
 
+    // modbase (only populated when --mod is set)
+    std::vector<mod_chunk_t> mod_chunks;
+    std::atomic<int> mod_chunks_remaining;   // multi-writer: mod runners decrement
+    std::string mod_string;                  // MM tag
+    std::vector<uint8_t> mod_prob;           // ML tag
+
     uint64_t seq_no;                 // load order (for optional ordered output)
 } read_state_t;
 
@@ -45,6 +51,12 @@ typedef struct {
     std::shared_ptr<read_state_t> read;
     int chunk_idx;
 } chunk_item_t;
+
+// One modbase chunk of a read queued for the mod runner stage.
+typedef struct {
+    std::shared_ptr<read_state_t> read;
+    int chunk_idx;
+} mod_chunk_item_t;
 
 // Thread-safe bounded blocking queue (MPMC). push() blocks while full; pop()
 // blocks while empty and returns false once the queue is drained AND closed.
