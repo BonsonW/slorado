@@ -96,6 +96,9 @@ modbase_model_t *load_modbase_model_proc(const modbase_model_config_t &config, c
     m->linear_w = to_dev(t[20]);
     m->linear_b = to_dev(t[21]);
 
+    flatten_lstm_weights(m->lstm1, p.size, p.size, /*batch_first=*/false);
+    flatten_lstm_weights(m->lstm2, p.size, p.size, /*batch_first=*/false);
+
     return m;
 }
 

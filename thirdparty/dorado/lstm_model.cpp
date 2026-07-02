@@ -13,6 +13,25 @@
 
 using namespace torch::nn;
 
+void flatten_lstm_weights(lstm_layer_t &l, int input_size, int hidden, bool batch_first) {
+#if defined(USE_GPU)
+    // ATen op; dispatches to cuDNN on CUDA and MIOpen on ROCm (both need flattened RNN weights).
+    if (l.w_ih.device().is_cpu()) return;
+    l.w_ih = l.w_ih.contiguous();
+    l.w_hh = l.w_hh.contiguous();
+    l.b_ih = l.b_ih.contiguous();
+    l.b_hh = l.b_hh.contiguous();
+    std::vector<at::Tensor> ws = {l.w_ih, l.w_hh, l.b_ih, l.b_hh};
+    // Packs ws (in place, via set_) into one contiguous buffer laid out for cuDNN; the returned
+    // tensor owns the storage the w_* now view, so keep it alive on the layer.
+    l.flat = at::_cudnn_rnn_flatten_weight(ws, /*weight_stride0=*/4, input_size,
+                                           /*mode=CUDNN_LSTM*/ 2, hidden, /*proj_size=*/0,
+                                           /*num_layers=*/1, batch_first, /*bidirectional=*/false);
+#else
+    (void)l; (void)input_size; (void)hidden; (void)batch_first;
+#endif
+}
+
 // --- procedural model shared helpers ------------------------------------------------------------
 
 // conv stack: [N, C_in, T] -> [N, T, C_out] (no timing/sync; caller wraps).
@@ -105,6 +124,7 @@ lstm_model_t *load_lstm_model_proc(const model_config_t &config, const torch::Te
         l.w_hh = to_dev(tensors[idx++]);
         l.b_ih = to_dev(tensors[idx++]);
         l.b_hh = to_dev(tensors[idx++]);
+        flatten_lstm_weights(l, config.lstm_size, config.lstm_size, /*batch_first=*/true);
         m->lstms.push_back(l);
     }
     m->linear_w = to_dev(tensors[idx++]);

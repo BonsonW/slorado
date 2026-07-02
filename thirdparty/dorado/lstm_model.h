@@ -23,8 +23,14 @@ typedef struct {
 } conv_layer_t;
 
 typedef struct {
-    at::Tensor w_ih, w_hh, b_ih, b_hh;   // single-layer batch_first LSTM params
+    at::Tensor w_ih, w_hh, b_ih, b_hh;   // single-layer LSTM params
+    at::Tensor flat;                      // cuDNN-flattened weight buffer (keeps w_* views alive)
 } lstm_layer_t;
+
+// Pack a layer's {w_ih, w_hh, b_ih, b_hh} into one contiguous cuDNN/MIOpen weight buffer so
+// torch::lstm doesn't recompact (and warn) on every call. No-op on CPU (device or CPU-only build).
+// input_size == hidden for all our LSTMs.
+void flatten_lstm_weights(lstm_layer_t &l, int input_size, int hidden, bool batch_first);
 
 typedef struct {
     std::vector<conv_layer_t> convs;
