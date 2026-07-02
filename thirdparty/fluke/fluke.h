@@ -17,7 +17,7 @@ enum fluke_format { FLUKE_FORMAT_NONE, FLUKE_FORMAT_INT8, FLUKE_FORMAT_FP8, FLUK
 
 // Model dimensions a backend must match. The kernels are dimension-specialized, so the backend
 // verifies these against what it was compiled for and bows out on mismatch.
-struct fluke_dims { int d_model, dim_feedforward, nhead, head_dim, max_seq; };
+typedef struct { int d_model, dim_feedforward, nhead, head_dim, max_seq; } fluke_dims;
 
 // Opaque, process-lifetime backend handle. Callers keep the pointer but do NOT own/free it.
 typedef struct fluke_backend fluke_backend;
@@ -30,7 +30,7 @@ enum fluke_format fluke_parse_format(const std::string &method);
 // match both the arch and `dims` for `desired`; otherwise NULL (caller keeps the fp16 path). The
 // returned handle is shared across all callers and lives for the process; do not free it. The cubin
 // modules are loaded only once.
-fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired, struct fluke_dims dims);
+fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired, fluke_dims dims);
 
 // Fused int8 wqkv GEMM + rotary. x: int8 [N,T,d_model] (+per-token scale). wqkv: int8
 // [3*d_model, d_model] (+per-out-channel scale). sin/cos: fp32 row-major [seq, head_dim/2]

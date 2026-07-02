@@ -44,7 +44,7 @@ static void fill_desc(int32_t shapes[3], int64_t strides[2], const at::Tensor &t
     for (int i = 0; i < 2; ++i) strides[i] = i < nd ? (int64_t)t.stride(i) : 0;
 }
 
-fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired, struct fluke_dims dims) {
+fluke_backend *fluke_select_backend(int device_index, enum fluke_format desired, fluke_dims dims) {
     if (desired != FLUKE_FORMAT_INT8) return NULL; // only int8 kernels exist today
 
     int major = 0, minor = 0;

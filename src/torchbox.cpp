@@ -416,10 +416,31 @@ size_t create_basecall_chunks(std::vector<basecall_chunk_t> &chunks, size_t num_
     return chunks.size();
 }
 
-void preprocess_signal(core_t *core, db_t *db, int32_t i) {
+// Scale the raw signal of a single record into read_dat->scaled_signal and split it into
+// overlapping basecall chunks. Shared by the batch path (preprocess_signal) and the
+// streaming pipeline (preprocess worker). Assumes rec->len_raw_signal > 0.
+void preprocess_signal(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::vector<basecall_chunk_t> &chunks) {
+    opt_t opt = core->opt;
+    auto signal_norm_params = core->model_config->signal_norm_params;
+
+    // if we are doing modbase calling, we need to keep the original signal for the modbase preproc,
+    // so clone the tensor here to avoid in-place scaling modifying the original tensor.
+    // if not doing modbase calling, we can save memory by not cloning and just using the same tensor for scaling and basecalling.
+    if (opt.mod != NULL) {
+        read_dat->scaled_signal = tensor_from_record(rec).clone();
+    } else {
+        read_dat->scaled_signal = tensor_from_record(rec);
+    }
+
+    scale_signal(core, read_dat->scaled_signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
+    LOG_TRACE("%s", "scaled signal");
+
+    create_basecall_chunks(chunks, read_dat->scaled_signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
+}
+
+void preprocess_signal_db(core_t *core, db_t *db, int32_t i) {
     slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
-    opt_t opt = core->opt;
 
     (*db->basecall_chunks)[i].clear();
     if (len_raw_signal > 0) {
@@ -428,25 +449,11 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
             read_dat = new read_dat_t;
             (*db->read_dats)[i] = read_dat;
         }
-        auto signal_norm_params = core->model_config->signal_norm_params;
-
-        // if we are doing modbase calling, we need to keep the original signal for the modbase preproc,
-        // so clone the tensor here to avoid in-place scaling modifying the original tensor.
-        // if not doing modbase calling, we can save memory by not cloning and just using the same tensor for scaling and basecalling.
-        if (opt.mod != NULL) {
-            read_dat->scaled_signal = tensor_from_record(rec).clone();
-        } else {
-            read_dat->scaled_signal = tensor_from_record(rec);
-        }
-
-        scale_signal(core, read_dat->scaled_signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
-        LOG_TRACE("%s", "scaled signal");
-
-        create_basecall_chunks((*db->basecall_chunks)[i], read_dat->scaled_signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
+        preprocess_signal(core, rec, read_dat, (*db->basecall_chunks)[i]);
     }
 }
 
-void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
+void preprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
     slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
     // double a, b;
@@ -561,7 +568,7 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
     }
 }
 
-void postprocess_modbase(core_t *core, db_t *db, int32_t i) {
+void postprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
     slow5_rec_t *rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 

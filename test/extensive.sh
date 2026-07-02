@@ -452,6 +452,16 @@ if [ "$SLORADO_MODE" = "build" ]; then
     echo "Memory Check - CPU - FAST model - incomplete batch 3 thread"
     ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K6 -t3 > test/tmp.fastq  || die "Running the tool failed"
 
+    # streaming (pipelined) path — same ASAN leak check on the --stream code path
+    echo "Memory Check - CPU - FAST model - stream - 1 thread"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ --stream=yes -xcpu -c200 -t1 > test/tmp.fastq  || die "Running the tool failed"
+
+    echo "Memory Check - CPU - FAST model - stream - 2 thread"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ --stream=yes -xcpu -c200 -t2 > test/tmp.fastq  || die "Running the tool failed"
+
+    echo "Memory Check - CPU - FAST model - stream - 4 thread"
+    ex $SLORADO basecaller models/$FAST $SINGLE_READ --stream=yes -xcpu -c200 -t4 > test/tmp.fastq  || die "Running the tool failed"
+
     # modcalling, todo: currently reuiqres f16 output from CPU, need to fix this to run the test
     # echo "Memory Check - CPU - HAC model - $MOD - 1 5khz reads"
     # ex $SLORADO basecaller models/$HAC $SINGLE_READ --mod $METH -xcpu -c200 -K10 > test/tmp.fastq  || die "Running the tool failed"
@@ -514,6 +524,39 @@ echo "********************************************************************"
 
 echo "GPU - SUP RNA v6.0.0 model - 20k reads"
 ex $SLORADO basecaller models/$SUP_RNA_V6 $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_rna $SUP_RNA_V6
+echo ""
+echo "********************************************************************"
+
+# streaming (pipelined) path — exercise --stream on GPU at scale (validates accuracy and
+# surfaces host/GPU memory leaks or crashes on the streaming code path). --mod is not yet
+# supported on --stream, so the meth checks below stay on the batch path.
+echo "GPU - FAST model (stream) - 20k reads"
+ex $SLORADO basecaller models/$FAST $SUBSUBSAMPLE --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $FAST_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_dna $FAST
+echo ""
+echo "********************************************************************"
+
+echo "GPU - HAC model (stream) - 20k reads"
+ex $SLORADO basecaller models/$HAC $SUBSUBSAMPLE --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_dna $HAC
+echo ""
+echo "********************************************************************"
+
+echo "GPU - SUP model (stream) - 20k reads"
+ex $SLORADO basecaller models/$SUP $SUBSUBSAMPLE --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_dna $SUP
+echo ""
+echo "********************************************************************"
+
+echo "GPU - FAST RNA v6.0.0 model (stream) - 20k reads"
+ex $SLORADO basecaller models/$FAST_RNA_V6 $SUBSUBSAMPLE_RNA --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $FAST_BATCH_ARG > tmp.fastq || die "Running the tool failed"
+check_acc_rna $FAST_RNA_V6
+echo ""
+echo "********************************************************************"
+
+echo "GPU - SUP RNA v6.0.0 model (stream) - 20k reads"
+ex $SLORADO basecaller models/$SUP_RNA_V6 $SUBSUBSAMPLE_RNA --stream=yes -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG > tmp.fastq || die "Running the tool failed"
 check_acc_rna $SUP_RNA_V6
 echo ""
 echo "********************************************************************"

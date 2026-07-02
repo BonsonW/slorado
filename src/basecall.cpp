@@ -402,7 +402,7 @@ static void mod_call_chunks(
 //     int nthreads = core->opt.num_thread / core->runners->size();
 }
 
-static void basecall_chunks(
+void basecall_chunks(
     const core_t* core,
     const int runner_idx,
     const std::vector<basecall_chunk_t *> &chunks

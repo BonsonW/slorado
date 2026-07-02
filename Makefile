@@ -44,6 +44,7 @@ OBJ = $(BUILD_DIR)/main.o \
       $(BUILD_DIR)/basecaller_main.o \
       $(BUILD_DIR)/slorado.o \
       $(BUILD_DIR)/thread.o \
+	  $(BUILD_DIR)/pipeline.o \
 	  $(BUILD_DIR)/misc.o \
 	  $(BUILD_DIR)/error.o \
 	  $(BUILD_DIR)/writer.o \
@@ -122,6 +123,9 @@ $(BUILD_DIR)/slorado.o: src/slorado.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/thread.o: src/thread.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
+
+$(BUILD_DIR)/pipeline.o: src/pipeline.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/misc.o: src/misc.cpp

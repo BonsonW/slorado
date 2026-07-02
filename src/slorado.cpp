@@ -55,11 +55,11 @@ SOFTWARE.
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
-void preprocess_signal(core_t* core, db_t* db, int32_t i);
+void preprocess_signal_db(core_t* core, db_t* db, int32_t i);
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
 void free_read_dat(read_dat_t *read_dat);
-void preprocess_modbase(core_t *core, db_t *db, int32_t i);
-void postprocess_modbase(core_t *core, db_t *db, int32_t i);
+void preprocess_modbase_db(core_t *core, db_t *db, int32_t i);
+void postprocess_modbase_db(core_t *core, db_t *db, int32_t i);
 
 static size_t estimate_bytes_per_read(const char *slow5file) {
     slow5_file_t *sp = slow5_open(slow5file, "r");
@@ -291,7 +291,7 @@ ret_status_t load_db(core_t* core, db_t* db) {
     return status;
 }
 
-void parse_single(core_t* core,db_t* db, int32_t i) {
+void parse_signal_db(core_t* core, db_t* db, int32_t i) {
     assert(db->mem_bytes[i] > 0);
     assert(db->mem_records[i] != NULL);
 
@@ -302,7 +302,7 @@ void parse_single(core_t* core,db_t* db, int32_t i) {
     }
 }
 
-void postprocess_signal(core_t* core, db_t* db, int32_t i) {
+void postprocess_signal_db(core_t* core, db_t* db, int32_t i) {
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 
@@ -330,13 +330,13 @@ void process_db(core_t* core, db_t* db) {
     double a, b;
 
     a = realtime();
-    work_db(core, db, parse_single);
+    work_db(core, db, parse_signal_db);
     b = realtime();
     core->time_parse += (b - a);
     LOG_DEBUG("%s", "parsed reads");
 
     a = realtime();
-    work_db(core, db, preprocess_signal);
+    work_db(core, db, preprocess_signal_db);
     b = realtime();
     core->time_preproc += (b-a);
     LOG_DEBUG("%s", "preprocessed reads");
@@ -348,14 +348,14 @@ void process_db(core_t* core, db_t* db) {
     LOG_DEBUG("%s", "basecalled reads");
 
     a = realtime();
-    work_db(core, db, postprocess_signal);
+    work_db(core, db, postprocess_signal_db);
     b = realtime();
     core->time_postproc += (b-a);
     LOG_DEBUG("%s", "postprocessed reads");
 
     if (core->opt.mod != NULL) {
         a = realtime();
-        work_db(core, db, preprocess_modbase);
+        work_db(core, db, preprocess_modbase_db);
         b = realtime();
         core->time_preproc_mod += (b-a);
         LOG_DEBUG("%s", "mod preprocessed reads");
@@ -367,7 +367,7 @@ void process_db(core_t* core, db_t* db) {
         LOG_DEBUG("%s", "mod basecalled reads");
 
         a = realtime();
-        work_db(core, db, postprocess_modbase);
+        work_db(core, db, postprocess_modbase_db);
         b = realtime();
         core->time_postproc_mod += (b-a);
         LOG_DEBUG("%s", "mod postprocessed reads");

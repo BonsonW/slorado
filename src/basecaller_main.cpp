@@ -43,6 +43,7 @@ SOFTWARE.
 #include "slorado.h"
 #include "misc.h"
 #include "error.h"
+#include "pipeline.h"
 
 // add supported modbase models here
 static const std::unordered_set<std::string> supported = std::unordered_set<std::string>({
@@ -76,6 +77,7 @@ static struct option long_options[] = {
     {"quant-config", required_argument, 0, 0},      //19 per-layer quant config JSON
     {"sensitivity", required_argument, 0, 0},       //20 output sensitivity KL JSON
     {"quant", required_argument, 0, 0},             //21 quantized inference mode (e.g. int8) if a backend is available
+    {"stream", required_argument, 0, 0},            //22 use the streaming (pipelined) basecalling path
     {0, 0, 0, 0}};
 
 
@@ -95,6 +97,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
+    fprintf(fp_help, "  --stream=yes|no             use the streaming (pipelined) basecalling path [%s]\n", (opt.flag & SLORADO_STREAM) ? "yes" : "no");
     fprintf(fp_help, "  --mod STR                   detect modified bases (5mCG_5hmCG@v3) [%s]\n", opt.mod ? opt.mod : "NULL");
     fprintf(fp_help, "  --calibrate FILE            write per-layer quantization calibration stats to FILE\n");
     fprintf(fp_help, "  --quant-config FILE         load per-layer quantization config from JSON FILE\n");
@@ -199,6 +202,8 @@ int basecaller_main(int argc, char* argv[]) {
             opt.sensitivity_out = optarg;
         } else if (c == 0 && longindex == 21) { // quantized inference mode
             opt.quant = optarg;
+        } else if (c == 0 && longindex == 22) { // streaming pipeline
+            yes_or_no(&opt.flag, SLORADO_STREAM, long_options[longindex].name, optarg, 1);
         }
     }
 
@@ -224,6 +229,11 @@ int basecaller_main(int argc, char* argv[]) {
     }
 
     model = argv[optind++];
+
+    if ((opt.flag & SLORADO_STREAM) && opt.mod != NULL) {
+        ERROR("%s", "--mod is not yet supported on the streaming (--stream) path; run without --stream for modbase calling");
+        exit(EXIT_FAILURE);
+    }
 
     if (opt.mod != NULL && !is_modbase_supported(opt.mod)) {
         std::string error_msg = "unsupported modbase model \"" + std::string(opt.mod) + "\"curent supported modbase models are: ";
@@ -279,47 +289,54 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr,"overlap:            %d\n", core->opt.overlap);
     fprintf(stderr, "\n");
 
-    int32_t counter = 0;
+    if (opt.flag & SLORADO_STREAM) {
+        // streaming (pipelined) path: overlaps I/O, preprocessing, inference and output.
+        core->time_process_db -= realtime();
+        run_pipeline(core);
+        core->time_process_db += realtime();
+    } else {
+        int32_t counter = 0;
 
-    // initialise a databatch
-    db_t* db = init_db(core);
+        // initialise a databatch
+        db_t* db = init_db(core);
 
-    ret_status_t status = {core->opt.batch_size, core->opt.batch_size_bytes};
-    while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
-        // load a databatch
-        status = load_db(core, db);
+        ret_status_t status = {core->opt.batch_size, core->opt.batch_size_bytes};
+        while (status.num_reads >= core->opt.batch_size || status.num_bytes>=core->opt.batch_size_bytes) {
+            // load a databatch
+            status = load_db(core, db);
 
-        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
-                realtime() - realtime0, cputime() / (realtime() - realtime0),
-                status.num_reads,status.num_bytes/(1000.0*1000.0));
+            fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) loaded\n", __func__,
+                    realtime() - realtime0, cputime() / (realtime() - realtime0),
+                    status.num_reads,status.num_bytes/(1000.0*1000.0));
 
-        // process a databatch
-        process_db(core, db);
+            // process a databatch
+            process_db(core, db);
 
-        fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) processed\n", __func__,
-                realtime() - realtime0, cputime() / (realtime() - realtime0),
-                status.num_reads,status.num_bytes/(1000.0*1000.0));
+            fprintf(stderr, "[%s::%.3f*%.2f] %d Entries (%.1fM bytes) processed\n", __func__,
+                    realtime() - realtime0, cputime() / (realtime() - realtime0),
+                    status.num_reads,status.num_bytes/(1000.0*1000.0));
 
-        // output print
-        output_db(core, db);
+            // output print
+            output_db(core, db);
 
-        // free temporary
+            // free temporary
+            a = realtime();
+            free_db_tmp(db);
+            b = realtime();
+            core->time_free_db += b-a;
+
+            if (opt.debug_break == counter) {
+                break;
+            }
+            counter++;
+        }
+
+        // free the databatch
         a = realtime();
-        free_db_tmp(db);
+        free_db(db);
         b = realtime();
         core->time_free_db += b-a;
-
-        if (opt.debug_break == counter) {
-            break;
-        }
-        counter++;
     }
-
-    // free the databatch
-    a = realtime();
-    free_db(db);
-    b = realtime();
-    core->time_free_db += b-a;
 
     fprintf(stderr, "[%s] total entries: %ld", __func__, (long)core->total_reads);
     fprintf(stderr, "\n[%s] total bytes: %.1f M", __func__, core->sum_bytes/(float)(1000*1000));
