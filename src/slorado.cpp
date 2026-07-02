@@ -124,8 +124,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
         LOG_TRACE("%s", "modbase config loaded");
     }
 
-    model_config_t mcfg = load_model_config(model);
-    CRFModelConfig model_config = crf_config_from_model_config(mcfg);
+    model_config_t model_config = load_model_config(model);
 
     core->model_stride = static_cast<size_t>(model_config.stride);
 
@@ -147,7 +146,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->decoder_opts.q_shift = model_config.qbias;
     core->decoder_opts.q_scale = model_config.qscale;
 
-    core->model_config = new CRFModelConfig(model_config);
+    core->model_config = new model_config_t(model_config);
     LOG_TRACE("%s", "model config loaded");
 
     if (opt.calibrate_out != NULL) {

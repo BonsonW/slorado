@@ -221,7 +221,7 @@ typedef struct {
     // options
     opt_t opt;
     openfish_opt_t decoder_opts;
-    CRFModelConfig *model_config;
+    model_config_t *model_config;
     ModBaseModelConfig *modbase_config = NULL;
     ModBaseInfo *modbase_info = NULL;
     size_t model_stride;

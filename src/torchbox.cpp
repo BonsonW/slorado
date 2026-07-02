@@ -145,7 +145,7 @@ void init_runner(
         LOG_TRACE("%s", "loading modbase model");
         runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, batch_size);
     } else {
-        if (core->model_config->tx != NULL) {
+        if (core->model_config->family == MODEL_FAMILY_TX) {
             LOG_TRACE("%s", "loading tx model (procedural)");
             tx_stats_t *model_stats = init_tx_stats();
             model_stats->calib_stats = core->calib_stats;
@@ -153,7 +153,7 @@ void init_runner(
             runner->bc_model = load_tx_model_proc(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, core->opt.quant ? core->opt.quant : "", core->opt.num_thread);
             runner->bc_family = MODEL_FAMILY_TX;
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
-        } else if (core->model_config->lstm_inner_dim >= 0) {
+        } else if (core->model_config->family == MODEL_FAMILY_FLSTM) {
             LOG_TRACE("%s", "loading flstm model (procedural)");
             lstm_stats_t *model_stats = init_lstm_stats();
             model_stats->calib_stats = core->calib_stats;
