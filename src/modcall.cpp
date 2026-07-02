@@ -169,7 +169,7 @@ static void* pthread_single_mod_basecall(void* voidargs) {
         for (size_t chunk_idx = 0; chunk_idx < chunks.size(); ++chunk_idx) {
             results.push_back(&chunks[chunk_idx]);
 
-            if (results.size() == (size_t)opt.gpu_batch_size) {
+            if (results.size() == (size_t)opt.mod_gpu_batch_size) {
                 mod_basecall_chunks(core, runner_idx, results);
                 results.clear();
             }

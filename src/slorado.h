@@ -70,6 +70,7 @@ struct sensitivity_stats_t;
 #define DEFAULT_OVERLAP (500)
 #define DEFAULT_BATCH_SIZE (4096)
 #define DEFAULT_GPU_BATCH_SIZE (512)
+#define MAX_AUTO_GPU_BATCH_SIZE (2048) // upper bound for auto batch-size search
 #define BATCH_SIZE_SAMPLE_READS (256)
 
 /* user specified options */
@@ -77,6 +78,7 @@ typedef struct {
     uint64_t flag;              // flags
     int32_t batch_size;         // max reads loaded at once: K
     int32_t gpu_batch_size;     // max chunks loaded at once: C
+    int32_t mod_gpu_batch_size; // max modbase chunks per forward pass (auto-estimated separately)
     int64_t batch_size_bytes;   // max bytes loaded at once: B
 
     int32_t num_thread;         // number of threads used: t

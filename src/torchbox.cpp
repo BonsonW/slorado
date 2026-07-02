@@ -76,6 +76,61 @@ at::Tensor model_forward(runner_t *runner, const at::Tensor &x) {
     return runner->module->forward(x);
 }
 
+#ifdef USE_GPU
+// Cross-platform free/total device memory query.
+static void gpu_mem_get_info(size_t *free_b, size_t *total_b) {
+    size_t f = 0, t = 0;
+#ifdef HAVE_CUDA
+    cudaMemGetInfo(&f, &t);
+#elif defined(HAVE_ROCM)
+    hipMemGetInfo(&f, &t);
+#endif
+    *free_b = f;
+    *total_b = t;
+}
+
+// Probe whether a forward pass at batch size n fits in GPU memory.  Runs the real model forward
+// (plus the transpose/contiguous copy call_chunks keeps live) and, in a catchable way, reserves
+// reserve_bytes to stand in for memory the trial does not itself allocate: the openfish decode
+// buffer (raw cudaMalloc, whose own OOM is not catchable) plus a fragmentation/other-process
+// headroom.  A CUDA OOM surfaces as a catchable c10::Error, so this works identically on CUDA and
+// ROCm without relying on allocator peak stats.  emptyCache() before/after keeps trials isolated.
+static bool trial_fits(runner_t *runner, core_t *core, int est_chunk_size, int n,
+                       size_t reserve_bytes, bool modbase) {
+    const auto device_idx = (c10::DeviceIndex)runner->device_idx;
+    bool ok = true;
+    CACHING_ALLOCATOR_NS::emptyCache();
+    try {
+        torch::InferenceMode no_grad;
+        at::Tensor reserve;
+        if (reserve_bytes > 0) {
+            reserve = torch::empty({(int64_t)reserve_bytes},
+                torch::TensorOptions().dtype(torch::kUInt8).device(runner->tensor_opts.device()));
+        }
+        if (modbase) {
+            const int channels = NUM_BASES * core->modbase_config->general.kmer_len;
+            auto sigs = torch::zeros({n, 1, (int64_t)est_chunk_size},
+                torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
+            auto seqs = torch::zeros({n, (int64_t)est_chunk_size, channels},
+                torch::TensorOptions().dtype(torch::kInt8).device(torch::kCPU));
+            auto out = modbase_model_forward((modbase_model_t *)runner->bc_model,
+                sigs.to(runner->tensor_opts.device()), seqs.to(runner->tensor_opts.device()));
+            out.contiguous();
+        } else {
+            auto in = torch::zeros({n, 1, (int64_t)est_chunk_size},
+                torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
+            auto out = model_forward(runner, in.to(runner->tensor_opts.device()));
+            out.transpose(0, 1).contiguous();
+        }
+        torch::cuda::synchronize(device_idx);
+    } catch (const c10::Error &) {
+        ok = false;
+    }
+    CACHING_ALLOCATOR_NS::emptyCache();
+    return ok;
+}
+#endif
+
 std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     std::vector<std::string> devices;
 
@@ -174,136 +229,78 @@ void init_runner(
 
     LOG_TRACE("%s", "model populated");
 
-    // Auto GPU batch size: run a dry N=1 forward pass and measure the actual peak activation
-    // memory via PyTorch's allocator stats, then scale to fit available GPU memory.
-    // This is more robust than hand-counting each model's layer activations.
+    // Auto GPU batch size: try powers of two descending from MAX_AUTO_GPU_BATCH_SIZE and stop at
+    // the first that fits -- since sizes only decrease, the first success is the largest that fits.
+    // Each candidate runs the actual model forward and, in a catchable way, reserves the openfish
+    // decode buffer plus a fragmentation headroom (see trial_fits).  A CUDA OOM surfaces as a
+    // catchable c10::Error, so this works identically on CUDA and ROCm without relying on allocator
+    // peak stats, and it measures true capacity directly rather than extrapolating a per-chunk cost.
     if (device != "cpu" && batch_size == 0) {
 #ifdef USE_GPU
-        if (!modbase) {
-            c10::DeviceGuard device_guard(runner->tensor_opts.device());
-            const auto device_idx = (c10::DeviceIndex)runner->device_idx;
+        c10::DeviceGuard device_guard(runner->tensor_opts.device());
+        const int est_chunk_size = modbase
+            ? (int)core->modbase_config->context.chunk_size
+            : (int)core->chunk_size;
+        const int T = est_chunk_size / (modbase ? 1 : (int)core->model_stride);
 
-            // Two dry forward passes (N=1 then N=2) to isolate the truly linear-in-N activation
-            // cost via marginal difference. Fixed overhead (MIOpen workspace, first-call algorithm
-            // search, per-layer buffers) cancels out: per_chunk = peak_N2 - peak_N1.
-            auto run_trial = [&](int n) -> size_t {
-                CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
-                {
-                    torch::InferenceMode no_grad;
-                    auto trial = torch::zeros({n, 1, (int64_t)core->chunk_size},
-                        torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
-                    auto out = model_forward(runner, trial.to(runner->tensor_opts.device()));
-                    // Replicate call_chunks: transpose(0,1).contiguous() allocates a second
-                    // N×T×C copy while the original scores tensor is still alive.
-                    // Without this the trial misses half the output tensor cost.
-                    out.transpose(0, 1).contiguous();
-                    torch::cuda::synchronize(device_idx);
-                }
-                return (size_t)CACHING_ALLOCATOR_NS::getDeviceStats(device_idx)
-                                   .allocated_bytes[0].peak;
-            };
-
-            size_t peak_n1 = 0, peak_n2 = 0;
-            bool trial_ok = true;
-            try {
-                peak_n1 = run_trial(1);
-                peak_n2 = run_trial(2);
-            } catch (const c10::Error &e) {
-                WARNING("auto GPU batch size: trial forward pass OOM on %s (%s), falling back to %d",
-                        device.c_str(), e.what(), DEFAULT_GPU_BATCH_SIZE);
-                trial_ok = false;
-            }
-
-            // Sanity check: if peak stats return 0, tracking is not working on this platform.
-            if (trial_ok && peak_n1 == 0 && peak_n2 == 0) {
-                WARNING("auto GPU batch size: allocator peak stats returned 0 on %s "
-                        "(HIP peak tracking may be unavailable), falling back to %d",
-                        device.c_str(), DEFAULT_GPU_BATCH_SIZE);
-                trial_ok = false;
-            }
-
-            if (trial_ok) {
-                CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
-                size_t free_mem, total_mem;
-#ifdef HAVE_CUDA
-                cudaMemGetInfo(&free_mem, &total_mem);
-#elif defined(HAVE_ROCM)
-                hipMemGetInfo(&free_mem, &total_mem);
-#endif
-                // On multi-GCD ROCm setups (e.g. MI250X in unified partition mode),
-                // hipMemGetInfo reports the combined HBM pool across both GCDs.  Each GCD
-                // can only access half of that pool at local bandwidth; cap free_mem at
-                // total_mem/2 so we budget for one GCD's share.  On CUDA, free <= total
-                // by definition so the guard is just a sanity check.
-#ifdef HAVE_ROCM
-                if (free_mem > total_mem / 2) free_mem = total_mem / 2;
-#else
-                if (free_mem > total_mem) free_mem = total_mem;
-#endif
-
-                // Marginal cost: the truly linear-in-N component only.
-                // Guard against measurement noise flipping the sign.
-                const size_t per_n_pytorch = (peak_n2 > peak_n1) ? (peak_n2 - peak_n1) : peak_n1;
-
-                // After the trials, activations are freed back to PyTorch's cache.
-                // Available = truly free CUDA memory + the cached (reusable) PyTorch memory.
-                auto stats_final = CACHING_ALLOCATOR_NS::getDeviceStats(device_idx);
-                const size_t pytorch_cache = (size_t)stats_final.reserved_bytes[0].current
-                                           - (size_t)stats_final.allocated_bytes[0].current;
-                const size_t available = free_mem + pytorch_cache;
-
-                // openfish gpubuf uses raw CUDA malloc, invisible to the PyTorch allocator
-                const int T = (int)(core->chunk_size / core->model_stride);
-                const size_t per_n_openfish = openfish_gpubuf_size(T, 1, core->model_config->state_len);
-                const size_t per_n_total = per_n_pytorch + per_n_openfish;
-
-                // peak_n1 = fixed overhead (algorithm search, per-layer buffers) regardless of N.
-                const size_t budget = (available > peak_n1) ? (size_t)((available - peak_n1) * 0.45) : 0;
-                batch_size = (per_n_total > 0) ? (int)(budget / per_n_total) : 1;
-
-                if (batch_size < 1) batch_size = 1;
-
-                const size_t max_input_len = 10000ULL * 6000ULL;
-                const int max_batch = (int)(max_input_len / core->chunk_size);
-                if (batch_size > max_batch) batch_size = max_batch;
-
-                // Guard against MIOpen/cuDNN RNN int32 overflow.  MIOpen computes
-                // sequence descriptor lengths as T × N × hidden_size using 32-bit
-                // integers.  When this product exceeds INT_MAX the value wraps negative
-                // and miopenRNN* throws "Lengths must be > 0".
-                // e.g. DNA fast v5.0 (T=2499, hidden=256): max safe N = INT_MAX/(2499×256) = 3356 → 2048
-                {
-                    const int lstm_sz = core->model_config->lstm_size;
-                    if (lstm_sz > 0 && T > 0) {
-                        const int max_rnn = (int)(2147483647LL / ((int64_t)T * lstm_sz));
-                        if (batch_size > max_rnn) batch_size = max_rnn;
-                    }
-                }
-
-                // Round down to nearest power of 2
-                if (batch_size > 1) {
-                    int p = 1;
-                    while (p * 2 <= batch_size) p *= 2;
-                    batch_size = p;
-                }
-
-                fprintf(stderr, "[%s] %.1f MB free + %.1f MB pytorch cache = %.1f MB available "
-                        "(%.1f MB fixed overhead) on %s, "
-                        "%zu bytes/chunk (pytorch:%zu openfish:%zu), auto GPU batch size: %d\n",
-                        __func__, free_mem / 1e6, pytorch_cache / 1e6, available / 1e6,
-                        peak_n1 / 1e6, device.c_str(),
-                        per_n_total, per_n_pytorch, per_n_openfish, batch_size);
+        // Upper bound on the search: the 2048 cap, the input-tensor length limit, and the
+        // MIOpen/cuDNN RNN int32 limit (T × N × hidden must stay below INT_MAX; applies to the
+        // basecall LSTM/FLSTM and to the modbase conv-LSTM).
+        int hi = MAX_AUTO_GPU_BATCH_SIZE;
+        const size_t max_input_len = 10000ULL * 6000ULL;
+        const int max_batch = (int)(max_input_len / est_chunk_size);
+        if (hi > max_batch) hi = max_batch;
+        {
+            int lstm_sz, Tb;
+            if (modbase) {
+                const int mstride = core->modbase_config->general.stride > 0 ? core->modbase_config->general.stride : 1;
+                lstm_sz = core->modbase_config->general.size;
+                Tb = (int)(core->modbase_config->context.chunk_size / mstride);
             } else {
-                batch_size = DEFAULT_GPU_BATCH_SIZE;
+                lstm_sz = core->model_config->lstm_size;
+                Tb = (int)(core->chunk_size / core->model_stride);
             }
-        } else {
-            batch_size = DEFAULT_GPU_BATCH_SIZE;
+            if (lstm_sz > 0 && Tb > 0) {
+                const int max_rnn = (int)(2147483647LL / ((int64_t)Tb * lstm_sz));
+                if (hi > max_rnn) hi = max_rnn;
+            }
         }
+        if (hi < 1) hi = 1;
+        // round hi down to a power of two
+        { int p = 1; while (p * 2 <= hi) p *= 2; hi = p; }
+
+        // Leave ~10% of total memory free for runtime fragmentation and other processes; reserve
+        // the (raw-cudaMalloc, uncatchable) openfish decode buffer as an equivalent torch tensor.
+        size_t free_mem = 0, total_mem = 0;
+        gpu_mem_get_info(&free_mem, &total_mem);
+        const size_t headroom = total_mem / 10;
+
+        int chosen = 0;
+        for (int n = hi; n >= 1; n /= 2) {
+            const size_t gpubuf_bytes = modbase ? 0
+                : openfish_gpubuf_size(T, n, core->model_config->state_len);
+            if (trial_fits(runner, core, est_chunk_size, n, gpubuf_bytes + headroom, modbase)) {
+                chosen = n;
+                break;
+            }
+        }
+        if (chosen < 1) {
+            WARNING("auto GPU batch size: no batch size fit on %s, falling back to %d",
+                    device.c_str(), DEFAULT_GPU_BATCH_SIZE);
+            batch_size = DEFAULT_GPU_BATCH_SIZE;
+        } else {
+            batch_size = chosen;
+        }
+
+        fprintf(stderr, "[%s] %.1f MB free / %.1f MB total on %s, auto GPU batch size: %d%s\n",
+                __func__, free_mem / 1e6, total_mem / 1e6, device.c_str(),
+                batch_size, modbase ? " [modbase]" : "");
 #endif
     }
 
-    // Allocate openfish GPU buffer and input tensor with the resolved batch size
-    if (device != "cpu") {
+    // Allocate the openfish CRF decode buffer (basecall only; modbase does not decode with
+    // openfish) and the input tensor with the resolved batch size.
+    if (device != "cpu" && !modbase) {
 #ifdef USE_GPU
         c10::DeviceGuard device_guard(runner->tensor_opts.device());
         runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
@@ -336,6 +333,9 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
         if (opt->gpu_batch_size == 0) {
             opt->gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
         }
+        if (opt->mod_gpu_batch_size == 0) {
+            opt->mod_gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
+        }
 
         std::string device = opt->device;
         core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
@@ -347,7 +347,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
         if (core->modbase_config != NULL) {
             LOG_DEBUG("adding mod_base runner for device %s", device.c_str());
             core->mod_runners->push_back(new runner_t());
-            init_runner(core, (*core->mod_runners).back(), model, device, opt->gpu_batch_size, torch::kF32, 0, true);
+            init_runner(core, (*core->mod_runners).back(), model, device, opt->mod_gpu_batch_size, torch::kF32, 0, true);
         }
     } else {
 #ifdef USE_GPU
@@ -372,7 +372,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
             if (core->modbase_config != NULL) {
                 LOG_DEBUG("adding mod_base runner for device %s", device.c_str());
                 core->mod_runners->push_back(new runner_t());
-                init_runner(core, (*core->mod_runners).back(), model, device, opt->gpu_batch_size, torch::kF16, mod_runner_idx++, true);
+                init_runner(core, (*core->mod_runners).back(), model, device, opt->mod_gpu_batch_size, torch::kF16, mod_runner_idx++, true);
             }
         }
 #else

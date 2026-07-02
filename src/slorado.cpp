@@ -170,6 +170,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
     core->opt.gpu_batch_size = opt.gpu_batch_size; // sync auto-detected value back to core
+    core->opt.mod_gpu_batch_size = opt.mod_gpu_batch_size; // sync auto-detected modbase value back
     core->time_init_runners += realtime();
     LOG_DEBUG("%s", "successfully initialized runners");
 
@@ -430,6 +431,7 @@ void free_db(db_t* db) {
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
     opt->gpu_batch_size = 0; // 0 = auto
+    opt->mod_gpu_batch_size = 0; // 0 = auto
     opt->batch_size_bytes = 512*1000*1000;
     opt->num_thread = 8;
 

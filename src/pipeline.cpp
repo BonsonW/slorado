@@ -203,10 +203,10 @@ static void mod_preprocess_stage(pipeline_ctx_t *ctx) {
     }
 }
 
-// Stage 4c (mod): pack mod chunks to gpu_batch_size across reads and run the modbase model.
+// Stage 4c (mod): pack mod chunks to mod_gpu_batch_size across reads and run the modbase model.
 static void mod_runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
-    const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
+    const size_t gpu_batch = (size_t)core->opt.mod_gpu_batch_size;
 
     std::vector<mod_chunk_item_t> buf;
     buf.reserve(gpu_batch);

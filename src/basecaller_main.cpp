@@ -148,6 +148,7 @@ int basecaller_main(int argc, char* argv[]) {
                 ERROR("Batch size should larger than 0. You entered %d",opt.gpu_batch_size);
                 exit(EXIT_FAILURE);
             }
+            opt.mod_gpu_batch_size = opt.gpu_batch_size; // explicit -C applies to modbase too
         } else if (c == 't') {
             opt.num_thread = atoi(optarg);
             if (opt.num_thread < 1) {
