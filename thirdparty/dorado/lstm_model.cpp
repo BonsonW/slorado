@@ -9,6 +9,7 @@
 
 #ifdef USE_GPU
 #include <fluke/fluke.h>
+#include <vector>
 #endif
 
 using namespace torch::nn;
@@ -193,7 +194,43 @@ void free_lstm_model(lstm_model_t *m) {
 
 // --- procedural FLSTM model (hac/fast v6) -------------------------------------------------------
 
-flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::TensorOptions &options, lstm_stats_t *model_stats) {
+#ifdef USE_GPU
+// Persistent per-(N,T) int8 recurrence buffers, shared across all FLSTM layers (layers run
+// sequentially, so one set is reused; x_down/boundary are refreshed per layer before each run).
+// This removes per-step/per-layer allocation and is the graph-ready buffer set (a future CUDA
+// graph captures the loop over these fixed addresses). H = hidden C, K = inner rank (K_hh == R).
+typedef struct {
+    int N, T;
+    at::Tensor hh_all;     // [T+1, N, C] int8 ring (scale 1/127); boundary slot holds the zero state
+    at::Tensor x_down;     // [T, N, K]  fp16 (ih down-projection, precomputed for the whole sequence)
+    at::Tensor a_scratch;  // [N, 2K]    fp16 (per-step [hh_down | x_down_t], reused every step)
+    at::Tensor hh_down;    // [N, K]     fp16 (per-step hh down-projection, reused every step)
+    at::Tensor cell;       // [N, C]     fp32 (cell state, updated in place)
+    at::Tensor hh_scale;   // [N]        fp32 (const 1/127, per-token scale for the recurrent input)
+    at::Tensor x_scale;    // [T*N]      fp32 (const 1/127, for an int8-input layer's ih precompute)
+} flstm_bufs_t;
+
+struct flstm_qctx {
+    std::vector<flstm_bufs_t> pool;  // keyed by (N,T); N varies only for a trailing partial batch
+};
+
+static flstm_bufs_t &get_flstm_bufs(flstm_qctx *qc, int N, int T, int C, int K, const at::TensorOptions &o) {
+    for (auto &bf : qc->pool) if (bf.N == N && bf.T == T) return bf;
+    flstm_bufs_t bf;
+    bf.N = N; bf.T = T;
+    bf.hh_all    = torch::empty({T + 1, N, C}, o.dtype(at::kChar));
+    bf.x_down    = torch::empty({T, N, K},     o.dtype(at::kHalf));
+    bf.a_scratch = torch::empty({N, 2 * K},    o.dtype(at::kHalf));
+    bf.hh_down   = torch::empty({N, K},        o.dtype(at::kHalf));
+    bf.cell      = torch::empty({N, C},        o.dtype(at::kFloat));
+    bf.hh_scale  = torch::full({N},     1.0f / 127.0f, o.dtype(at::kFloat));
+    bf.x_scale   = torch::full({T * N}, 1.0f / 127.0f, o.dtype(at::kFloat));
+    qc->pool.push_back(bf);
+    return qc->pool.back();
+}
+#endif
+
+flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::TensorOptions &options, lstm_stats_t *model_stats, const std::string &quant_mode) {
     if (model_stats && model_stats->quant_config) {
         build_quant_methods(model_stats->quant_methods, *model_stats->quant_config);
     }
@@ -245,6 +282,47 @@ flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::
     });
     m->linear1_w = to_dev(lin[0]);
     m->linear2_w = to_dev(lin[1]);
+
+    // int8 kernel path: pre-quantize down weights, fuse the up-projection into per-gate weights.
+    enum fluke_format_t quant_format = fluke_parse_format(quant_mode);
+#ifdef USE_GPU
+    if (quant_format != FLUKE_FORMAT_NONE && !dev.is_cpu()) {
+        const int dev_idx = dev.index();
+        const int H = m->C;      // hidden size
+        const int R = m->K;      // input down-proj rank      (dn_w_ih: [R, H])
+        const int K_hh = m->K;   // recurrent down-proj rank  (dn_w_hh: [K_hh, H])
+        bool all_ok = true;
+        for (auto &L : m->flstms) {
+            L.backend = fluke_select_flstm(dev_idx, quant_format, H, K_hh, R);
+            if (!L.backend) { all_ok = false; continue; }
+            L.qw_dn_ih = quantize_tensor(L.dn_w_ih, 1);   // [R, H]    per-out-channel (R)
+            L.qw_dn_hh = quantize_tensor(L.dn_w_hh, 1);   // [K_hh, H] per-out-channel (K_hh)
+            // Fuse per gate g: gate_w[g] = [up_hh_g | up_ih_g] ([H, K_hh+R] fp16); the concat order
+            // matches a_f16 = [hh_down | x_down]. gate_b[g] = up_b_ih_g + up_b_hh_g ([H] fp32).
+            // Gate order i,f,g,o (matches the fp16 path's chunk(4)).
+            for (int g = 0; g < 4; ++g) {
+                auto hh_g = L.up_w_hh.slice(0, g * H, (g + 1) * H).contiguous();  // [H, K_hh]
+                auto ih_g = L.up_w_ih.slice(0, g * H, (g + 1) * H).contiguous();  // [H, R]
+                L.gate_w[g] = torch::cat({hh_g, ih_g}, 1).contiguous();          // [H, K_hh+R] fp16
+                auto bias_g = L.up_b_ih.slice(0, g * H, (g + 1) * H)
+                            + L.up_b_hh.slice(0, g * H, (g + 1) * H);
+                L.gate_b[g] = bias_g.to(torch::kFloat32).contiguous();          // [H] fp32
+            }
+        }
+        // All-or-nothing: if any layer lacks a kernel, fall back to fp16 for the whole stack (the
+        // flip-free ring path assumes every layer is quantized).
+        if (all_ok) {
+            m->quant_ctx = new flstm_qctx();
+        } else {
+            for (auto &L : m->flstms) L.backend = nullptr;
+        }
+        INFO("quant '%s' FLSTM kernel path %s", quant_mode.c_str(), all_ok ? "enabled" : "unavailable (using fp16)");
+    } else if (!quant_mode.empty() && quant_format == FLUKE_FORMAT_NONE) {
+        WARNING("unknown quant mode '%s' — using fp16", quant_mode.c_str());
+    }
+#else
+    if (quant_format != FLUKE_FORMAT_NONE) WARNING("quant mode '%s' requires a GPU build — using fp16", quant_mode.c_str());
+#endif
 
     return m;
 }
@@ -331,6 +409,66 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
     return hh.index({Slice(1, None)}).transpose(0, 1).contiguous();  // [N, T, C]
 }
 
+#ifdef USE_GPU
+// int8 FLSTM layer over the persistent ring buffers. input x [N, T, C] in NATURAL time order:
+// fp16 for the first layer (quantized here per-token), else the previous layer's int8 hidden view
+// (scale 1/127) — down-projected directly. No physical flips: even layers scan time in reverse via
+// the ring indexing (matches the flip-based path's alternating direction). Output [N, T, C]:
+// int8 view into the ring for intermediate layers (chained), fp16 for the last layer (fused dequant).
+static at::Tensor flstm_layer_forward_quant(const flstm_model_t *m, const flstm_layer_t *L, int layer_idx, at::Tensor x, bool last) {
+    lstm_stats_t *stats = m->stats;
+    const int C = m->C, K = m->K;
+    const int N = x.size(0), T = x.size(1);
+    const int dev = x.device().index();
+    const bool reverse = (layer_idx % 2 == 0);
+    flstm_qctx *qc = (flstm_qctx *)m->quant_ctx;
+    flstm_bufs_t &bufs = get_flstm_bufs(qc, N, T, C, K, x.options());
+    double a, b;
+
+    // ih precompute over the whole sequence, into the persistent x_down buffer.
+    a = realtime();
+    auto x_tnc = x.transpose(0, 1).contiguous();     // [T, N, C] natural (snapshots the input view)
+    auto x_flat = x_tnc.view({T * N, C});
+    auto x_down_flat = bufs.x_down.view({T * N, K});
+    if (x.scalar_type() == at::kChar) {
+        fluke_flstm_down_proj_i8_into(L->backend, x_down_flat, x_flat, bufs.x_scale, L->qw_dn_ih);
+    } else {
+        tensor_quant_t xq = quantize_tensor(x_flat, -1);                      // int8 [T*N, C] + per-token scale
+        fluke_flstm_down_proj_i8_into(L->backend, x_down_flat, xq.tensor, xq.scale, L->qw_dn_ih);
+    }
+    if (!x.device().is_cpu()) torch::cuda::synchronize(dev);
+    b = realtime();
+    stats->time_flstm_precompute += b - a;
+
+    // Recurrence over the ring (direction by layer parity). Runs on the default stream: the fluke int8
+    // kernels are not stream-clean (they do per-call descriptor setup on the default stream), so running
+    // the recurrence on a non-default stream needs a per-step barrier — which also blocks CUDA-graph
+    // capture. Once the kernels launch entirely on the passed stream, the per-step loop below becomes
+    // graph-capturable (persistent fixed-address buffers, allocation-free) for a single-replay recurrence.
+    bufs.hh_all[reverse ? T : 0].zero_();   // boundary hidden = 0
+    bufs.cell.zero_();                        // cell = 0
+    a = realtime();
+    for (int i = 0; i < T; ++i) {
+        const int t    = reverse ? (T - 1 - i) : i;   // natural time index for this step
+        const int prev = reverse ? (t + 1) : t;       // ring slot of the previous hidden
+        const int out  = reverse ? t : (t + 1);       // ring slot for this step's hidden
+        auto hh_prev = bufs.hh_all[prev];                                                  // [N, C] int8
+        fluke_flstm_down_proj_i8_into(L->backend, bufs.hh_down, hh_prev, bufs.hh_scale, L->qw_dn_hh);
+        at::cat_out(bufs.a_scratch, {bufs.hh_down, bufs.x_down[t]}, 1);                     // [N, 2K]
+        auto h_out = bufs.hh_all[out];                                                      // [N, C] int8
+        fluke_flstm_step_i8(L->backend, h_out, bufs.cell, bufs.a_scratch, L->gate_w, L->gate_b);
+    }
+    if (!x.device().is_cpu()) torch::cuda::synchronize(dev);
+    b = realtime();
+    stats->time_flstm_recurrence += b - a;
+
+    // Natural-order hidden slice [T, N, C]. Chain int8 to the next layer; fused-dequant on the last.
+    auto out_slice = reverse ? bufs.hh_all.slice(0, 0, T) : bufs.hh_all.slice(0, 1, T + 1);
+    if (last) return fluke_dequant_int8_transpose(out_slice, 1.0f / 127.0f);  // [N, T, C] fp16
+    return out_slice.permute({1, 0, 2});                                       // [N, T, C] int8 view
+}
+#endif
+
 at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
     const bool on_gpu = !x.device().is_cpu();
     const auto dev_idx = x.device().index();
@@ -344,12 +482,23 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
     b = realtime();
     m->stats->time_conv_stack += b - a;
 
-    // bidirectional-alternating FLSTM stack (flip time per layer, final flip if odd)
+    // bidirectional-alternating FLSTM stack. The int8 path is all-or-nothing (the loader either
+    // engages every layer or none) and runs flip-free over a persistent ring (direction by parity);
+    // the fp16 path flips per layer with a final flip if odd.
     a = realtime();
-    for (const auto &L : m->flstms) {
-        x = flstm_layer_forward(&L, x.flip(1), m->stats, m->C, m->K);
+    const bool quant = !m->flstms.empty() && m->flstms[0].backend != nullptr;
+#ifdef USE_GPU
+    if (quant) {
+        for (size_t i = 0; i < m->flstms.size(); ++i)
+            x = flstm_layer_forward_quant(m, &m->flstms[i], (int)i, x, (i + 1 == m->flstms.size()));
+    } else
+#endif
+    {
+        for (size_t i = 0; i < m->flstms.size(); ++i) {
+            x = flstm_layer_forward(&m->flstms[i], x.flip(1), m->stats, m->C, m->K);
+        }
+        if (m->flstms.size() & 1) x = x.flip(1);
     }
-    if (m->flstms.size() & 1) x = x.flip(1);
 #ifdef USE_GPU
     if (on_gpu) torch::cuda::synchronize(dev_idx);
 #endif
@@ -378,5 +527,8 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
 }
 
 void free_flstm_model(flstm_model_t *m) {
+#ifdef USE_GPU
+    delete (flstm_qctx *)m->quant_ctx;
+#endif
     delete m;
 }

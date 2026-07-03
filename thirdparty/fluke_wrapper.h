@@ -40,3 +40,33 @@ at::Tensor fluke_qkv_rotary_i8(const fluke_backend_t *b, const tensor_quant_t &x
 // [dim_feedforward, d_model] (+per-out-channel scale). Returns fp16 silu(gate)*up [N,T,dim_feedforward].
 at::Tensor fluke_gated_mlp_i8(const fluke_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &gate,
                               const tensor_quant_t &up);
+
+// ── factored-LSTM (v6 hac) int8 path ────────────────────────────────────────────────────────────
+// Opaque, process-lifetime FLSTM backend handle (wraps fluke_flstm_backend_t). Do NOT free.
+typedef struct fluke_flstm_wrap fluke_flstm_wrap_t;
+
+// Return an FLSTM backend when `desired` is int8 and fluke has a precompiled kernel matching this
+// device's arch and shape (H hidden, K_hh recurrent rank, R input rank); otherwise NULL (caller
+// keeps the fp16 path). The handle is shared for the process and must not be freed.
+fluke_flstm_wrap_t *fluke_select_flstm(int device_index, enum fluke_format_t desired, int H, int K_hh, int R);
+
+// int8 down-projection: returns fp16 [M, R] = (a_i8[M,H] * scale_a[M]) @ (w.tensor[R,H] * w.scale[R])^T.
+// Used for both the ih precompute (M = T*N) and the per-step hh projection (M = N).
+at::Tensor fluke_flstm_down_proj_i8(const fluke_flstm_wrap_t *b, const at::Tensor &a_i8,
+                                    const at::Tensor &scale_a, const tensor_quant_t &w);
+
+// Same as fluke_flstm_down_proj_i8 but writes into the caller-provided fp16 `out` [M, R] instead of
+// allocating — lets the recurrence reuse persistent buffers (no per-step allocation). out and a_i8
+// give M; w gives R.
+void fluke_flstm_down_proj_i8_into(const fluke_flstm_wrap_t *b, at::Tensor &out, const at::Tensor &a_i8,
+                                   const at::Tensor &scale_a, const tensor_quant_t &w);
+
+// Fused dequantize + transpose: in int8 [T, N, C] (scale) -> out fp16 [N, T, C], out[n,t,c] =
+// in[t,n,c] * scale. Used to convert the last FLSTM layer's int8 hidden ring to fp16 in one pass.
+at::Tensor fluke_dequant_int8_transpose(const at::Tensor &in_tnc, float scale);
+
+// Fused int8 FLSTM step. Writes h_i8 [B,H] int8 (fixed scale 1/127) and updates c_f32 [B,H] fp32
+// in place. a_f16 [B, K_hh+R] fp16 = concat(hh_down | x_down_t). gate_w[g] [H, K_hh+R] fp16,
+// gate_b[g] [H] fp32, gate order i,f,g,o.
+void fluke_flstm_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tensor &c_f32,
+                         const at::Tensor &a_f16, const at::Tensor gate_w[4], const at::Tensor gate_b[4]);

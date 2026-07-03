@@ -213,7 +213,7 @@ void init_runner(
             lstm_stats_t *model_stats = init_lstm_stats();
             model_stats->calib_stats = core->calib_stats;
             model_stats->quant_config = core->quant_config;
-            runner->bc_model = load_flstm_model_proc(*core->model_config, runner->tensor_opts, model_stats);
+            runner->bc_model = load_flstm_model_proc(*core->model_config, runner->tensor_opts, model_stats, core->opt.quant ? core->opt.quant : "");
             runner->bc_family = MODEL_FAMILY_FLSTM;
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         } else {
