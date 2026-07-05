@@ -68,6 +68,7 @@ typedef struct {
     tensor_quant_t qw_dn_ih, qw_dn_hh;         // int8 down weights [R,H] / [K_hh,H]
     at::Tensor gate_w[4];                       // Bi,Bf,Bg,Bo  [H, K_hh+R] fp16
     at::Tensor gate_b[4];                       // bias_i..o     [H] fp32
+    at::Tensor hh_comb_scale;                   // [K_hh] f32 = qw_dn_hh.scale * (1/127), for fused step
 } flstm_layer_t;
 
 typedef struct {

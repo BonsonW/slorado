@@ -208,7 +208,17 @@ typedef struct {
     at::Tensor cell;       // [N, C]     fp32 (cell state, updated in place)
     at::Tensor hh_scale;   // [N]        fp32 (const 1/127, per-token scale for the recurrent input)
     at::Tensor x_scale;    // [T*N]      fp32 (const 1/127, for an int8-input layer's ih precompute)
+    // Fused single-launch step scratch (used when N <= FLSTM_FUSED_MAX_N):
+    at::Tensor hh_stage;   // [N, K]     fp16  (producer-written hh_down; no init needed)
+    at::Tensor flags;      // [ceil(N/64)*4] int32 (zeroed once; self-cleaning across steps)
+    bool use_fused;        // N within the fused kernel's grid-residency bound
 } flstm_bufs_t;
+
+// Fused step spins on same-grid producers, so the whole grid must be co-resident. At the baked
+// tile config (bM=64, bN=32, H=1024 -> 32 CTAs/row-group, 3 CTAs/SM on A100) N up to 512 is
+// safe; above that the caller keeps the two-kernel down_proj + step path.
+#define FLSTM_FUSED_MAX_N 512
+#define FLSTM_FUSED_BM 64
 
 struct flstm_qctx {
     std::vector<flstm_bufs_t> pool;  // keyed by (N,T); N varies only for a trailing partial batch
@@ -225,6 +235,12 @@ static flstm_bufs_t &get_flstm_bufs(flstm_qctx *qc, int N, int T, int C, int K, 
     bf.cell      = torch::empty({N, C},        o.dtype(at::kFloat));
     bf.hh_scale  = torch::full({N},     1.0f / 127.0f, o.dtype(at::kFloat));
     bf.x_scale   = torch::full({T * N}, 1.0f / 127.0f, o.dtype(at::kFloat));
+    bf.use_fused = (N <= FLSTM_FUSED_MAX_N);
+    if (bf.use_fused) {
+        const int grid_m = (N + FLSTM_FUSED_BM - 1) / FLSTM_FUSED_BM;
+        bf.hh_stage = torch::empty({N, K},         o.dtype(at::kHalf));
+        bf.flags    = torch::zeros({grid_m * 4},   o.dtype(at::kInt));   // zeroed once; self-cleaning
+    }
     qc->pool.push_back(bf);
     return qc->pool.back();
 }
@@ -297,6 +313,9 @@ flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::
             if (!L.backend) { all_ok = false; continue; }
             L.qw_dn_ih = quantize_tensor(L.dn_w_ih, 1);   // [R, H]    per-out-channel (R)
             L.qw_dn_hh = quantize_tensor(L.dn_w_hh, 1);   // [K_hh, H] per-out-channel (K_hh)
+            // Fused step folds the fixed 1/127 activation dequant into the per-channel weight
+            // scale so the kernel applies a single [K_hh] multiplier (host side, once per layer).
+            L.hh_comb_scale = (L.qw_dn_hh.scale * (1.0f / 127.0f)).contiguous();  // [K_hh] f32
             // Fuse per gate g: gate_w[g] = [up_hh_g | up_ih_g] ([H, K_hh+R] fp16); the concat order
             // matches a_f16 = [hh_down | x_down]. gate_b[g] = up_b_ih_g + up_b_hh_g ([H] fp32).
             // Gate order i,f,g,o (matches the fp16 path's chunk(4)).
@@ -431,10 +450,12 @@ static at::Tensor flstm_layer_forward_quant(const flstm_model_t *m, const flstm_
     auto x_flat = x_tnc.view({T * N, C});
     auto x_down_flat = bufs.x_down.view({T * N, K});
     if (x.scalar_type() == at::kChar) {
+        // int8 input (chained hidden from the previous layer): int8 down-projection.
         fluke_flstm_down_proj_i8_into(L->backend, x_down_flat, x_flat, bufs.x_scale, L->qw_dn_ih);
     } else {
-        tensor_quant_t xq = quantize_tensor(x_flat, -1);                      // int8 [T*N, C] + per-token scale
-        fluke_flstm_down_proj_i8_into(L->backend, x_down_flat, xq.tensor, xq.scale, L->qw_dn_ih);
+        // fp16 input (first layer = conv output): plain fp16 GEMM. A/B tested vs fluke-quant + int8
+        // GEMM — speed-neutral but fp16 avoids input quant error, so it wins. (Matches fp8 ref L0.)
+        at::mm_out(x_down_flat, x_flat, L->dn_w_ih.t());
     }
     if (!x.device().is_cpu()) torch::cuda::synchronize(dev);
     b = realtime();
@@ -453,10 +474,17 @@ static at::Tensor flstm_layer_forward_quant(const flstm_model_t *m, const flstm_
         const int prev = reverse ? (t + 1) : t;       // ring slot of the previous hidden
         const int out  = reverse ? t : (t + 1);       // ring slot for this step's hidden
         auto hh_prev = bufs.hh_all[prev];                                                  // [N, C] int8
-        fluke_flstm_down_proj_i8_into(L->backend, bufs.hh_down, hh_prev, bufs.hh_scale, L->qw_dn_hh);
-        at::cat_out(bufs.a_scratch, {bufs.hh_down, bufs.x_down[t]}, 1);                     // [N, 2K]
         auto h_out = bufs.hh_all[out];                                                      // [N, C] int8
-        fluke_flstm_step_i8(L->backend, h_out, bufs.cell, bufs.a_scratch, L->gate_w, L->gate_b);
+        if (bufs.use_fused) {
+            // Single launch: recurrent hh down-proj + gate step (no hh_down/a_scratch round-trip).
+            fluke_flstm_fused_step_i8(L->backend, h_out, bufs.cell, hh_prev, L->qw_dn_hh.tensor,
+                                      L->hh_comb_scale, bufs.x_down[t], L->gate_w, L->gate_b,
+                                      bufs.hh_stage, bufs.flags);
+        } else {
+            fluke_flstm_down_proj_i8_into(L->backend, bufs.hh_down, hh_prev, bufs.hh_scale, L->qw_dn_hh);
+            at::cat_out(bufs.a_scratch, {bufs.hh_down, bufs.x_down[t]}, 1);                 // [N, 2K]
+            fluke_flstm_step_i8(L->backend, h_out, bufs.cell, bufs.a_scratch, L->gate_w, L->gate_b);
+        }
     }
     if (!x.device().is_cpu()) torch::cuda::synchronize(dev);
     b = realtime();
@@ -464,6 +492,7 @@ static at::Tensor flstm_layer_forward_quant(const flstm_model_t *m, const flstm_
 
     // Natural-order hidden slice [T, N, C]. Chain int8 to the next layer; fused-dequant on the last.
     auto out_slice = reverse ? bufs.hh_all.slice(0, 0, T) : bufs.hh_all.slice(0, 1, T + 1);
+    // Last layer: fused int8->fp16 dequant + transpose. A/B tested ~2% faster than manual ATen dequant.
     if (last) return fluke_dequant_int8_transpose(out_slice, 1.0f / 127.0f);  // [N, T, C] fp16
     return out_slice.permute({1, 0, 2});                                       // [N, T, C] int8 view
 }

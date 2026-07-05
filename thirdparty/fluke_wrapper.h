@@ -65,8 +65,25 @@ void fluke_flstm_down_proj_i8_into(const fluke_flstm_wrap_t *b, at::Tensor &out,
 // in[t,n,c] * scale. Used to convert the last FLSTM layer's int8 hidden ring to fp16 in one pass.
 at::Tensor fluke_dequant_int8_transpose(const at::Tensor &in_tnc, float scale);
 
+// Standalone per-token int8 quantize (GPU analogue of quantize_tensor(x, -1)): fp16 [M, C] ->
+// {int8 [M, C], f32 scale [M]} with scale = amax/128 (dequant multiplier). C must be even and <= 2048.
+tensor_quant_t fluke_quant_int8(const at::Tensor &x);
+
 // Fused int8 FLSTM step. Writes h_i8 [B,H] int8 (fixed scale 1/127) and updates c_f32 [B,H] fp32
 // in place. a_f16 [B, K_hh+R] fp16 = concat(hh_down | x_down_t). gate_w[g] [H, K_hh+R] fp16,
 // gate_b[g] [H] fp32, gate order i,f,g,o.
 void fluke_flstm_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tensor &c_f32,
                          const at::Tensor &a_f16, const at::Tensor gate_w[4], const at::Tensor gate_b[4]);
+
+// Single-launch fused step: does the recurrent hh int8 down-projection AND the gate step in one
+// kernel (no hh_down/a_scratch round-trip). Writes h_i8 [B,H] int8 (1/127) and updates c_f32 [B,H]
+// in place. h_prev_i8 [B,H] int8 (previous hidden, 1/127); w_dn [K_hh,H] int8 recurrent down-weight;
+// comb_scale [K_hh] f32 = w_dn per-channel scale * 1/127 (host-folded); x_f16 [B,R] this step's
+// x_down; gate_w[g] [H,K_hh+R] fp16, gate_b[g] [H] fp32 (order i,f,g,o); hh_stage f16 [B,K_hh]
+// scratch (producer-written); flags int32 [ceil(B/64)*4] zeroed at allocation (self-cleaning).
+// Valid only for B <= 512 (grid co-residency); caller must fall back to the two-kernel path above.
+void fluke_flstm_fused_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tensor &c_f32,
+                               const at::Tensor &h_prev_i8, const at::Tensor &w_dn,
+                               const at::Tensor &comb_scale, const at::Tensor &x_f16,
+                               const at::Tensor gate_w[4], const at::Tensor gate_b[4],
+                               at::Tensor &hh_stage, at::Tensor &flags);

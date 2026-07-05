@@ -110,6 +110,15 @@ at::Tensor fluke_dequant_int8_transpose(const at::Tensor &in_tnc, float scale) {
     return out;
 }
 
+tensor_quant_t fluke_quant_int8(const at::Tensor &x) {
+    const int64_t M = x.size(0), C = x.size(1);
+    auto in = x.contiguous();
+    auto out   = torch::empty({M, C}, in.options().dtype(at::kChar));
+    auto scale = torch::empty({M},    in.options().dtype(at::kFloat));
+    fluke_quant_int8_gpu(in.data_ptr(), out.data_ptr(), scale.data_ptr(), (int)M, (int)C);
+    return tensor_quant_t{out, scale};
+}
+
 void fluke_flstm_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tensor &c_f32,
                          const at::Tensor &a_f16, const at::Tensor gate_w[4], const at::Tensor gate_b[4]) {
     const int64_t B = a_f16.size(0);
@@ -118,6 +127,20 @@ void fluke_flstm_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tens
         gate_w[0].data_ptr(), gate_w[1].data_ptr(), gate_w[2].data_ptr(), gate_w[3].data_ptr(),
         gate_b[0].data_ptr(), gate_b[1].data_ptr(), gate_b[2].data_ptr(), gate_b[3].data_ptr(),
         c_f32.data_ptr(), (int)B, fluke_current_stream());
+}
+
+void fluke_flstm_fused_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tensor &c_f32,
+                               const at::Tensor &h_prev_i8, const at::Tensor &w_dn,
+                               const at::Tensor &comb_scale, const at::Tensor &x_f16,
+                               const at::Tensor gate_w[4], const at::Tensor gate_b[4],
+                               at::Tensor &hh_stage, at::Tensor &flags) {
+    const int64_t B = h_prev_i8.size(0);
+    fluke_flstm_fused_step_i8_gpu(
+        b->h, h_i8.data_ptr(),
+        h_prev_i8.data_ptr(), w_dn.data_ptr(), comb_scale.data_ptr(), x_f16.data_ptr(),
+        gate_w[0].data_ptr(), gate_w[1].data_ptr(), gate_w[2].data_ptr(), gate_w[3].data_ptr(),
+        gate_b[0].data_ptr(), gate_b[1].data_ptr(), gate_b[2].data_ptr(), gate_b[3].data_ptr(),
+        c_f32.data_ptr(), hh_stage.data_ptr(), flags.data_ptr(), (int)B, fluke_current_stream());
 }
 
 #else // no GPU backend — ops never selected, so these are stubs.
@@ -140,7 +163,14 @@ void fluke_flstm_down_proj_i8_into(const fluke_flstm_wrap_t *, at::Tensor &, con
 
 at::Tensor fluke_dequant_int8_transpose(const at::Tensor &, float) { return at::Tensor(); }
 
+tensor_quant_t fluke_quant_int8(const at::Tensor &) { return tensor_quant_t{}; }
+
 void fluke_flstm_step_i8(const fluke_flstm_wrap_t *, at::Tensor &, at::Tensor &, const at::Tensor &,
                          const at::Tensor[4], const at::Tensor[4]) {}
+
+void fluke_flstm_fused_step_i8(const fluke_flstm_wrap_t *, at::Tensor &, at::Tensor &,
+                               const at::Tensor &, const at::Tensor &, const at::Tensor &,
+                               const at::Tensor &, const at::Tensor[4], const at::Tensor[4],
+                               at::Tensor &, at::Tensor &) {}
 
 #endif // HAVE_CUDA || HAVE_ROCM
