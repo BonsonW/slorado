@@ -64,7 +64,7 @@ typedef struct {
     // Down weights are pre-quantized to int8 (per-out-channel); the up-projection is fused into
     // the step with per-gate weights gate_w[g] = [up_hh_g | up_ih_g] (fp16, [H, K_hh+R]) and
     // f32 biases gate_b[g] = up_b_ih_g + up_b_hh_g ([H]). Gate order: i, f, g(cell), o.
-    fluke_flstm_wrap_t *backend = nullptr;
+    fluke_flstm_backend_t *backend = nullptr;
     tensor_quant_t qw_dn_ih, qw_dn_hh;         // int8 down weights [R,H] / [K_hh,H]
     at::Tensor gate_w[4];                       // Bi,Bf,Bg,Bo  [H, K_hh+R] fp16
     at::Tensor gate_b[4];                       // bias_i..o     [H] fp32

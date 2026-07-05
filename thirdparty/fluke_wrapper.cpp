@@ -23,82 +23,54 @@ static inline void *fluke_current_stream() {
     return (void *)at::cuda::getCurrentCUDAStream().stream();
 }
 
-// slorado-side backend: the dims we selected for + fluke's opaque kernel handle. Process-lifetime.
-struct fluke_backend {
-    fluke_dims_t dims;
-    const fluke_int8_backend_t *h;
-};
-
-fluke_backend_t *fluke_select_backend(int device_index, enum fluke_format_t desired, fluke_dims_t dims) {
-    if (desired != FLUKE_FORMAT_INT8) return nullptr;  // only int8 kernels exist today
-    const fluke_int8_backend_t *h = fluke_int8_select(device_index, dims);  // NULL if arch/dims mismatch
-    if (!h) return nullptr;
-    static fluke_backend b;  // process-lifetime; all layers share it
-    b.dims = dims;
-    b.h = h;
-    return &b;
+fluke_int8_backend_t *fluke_select_backend(int device_index, enum fluke_format_t desired, fluke_dims_t dims) {
+    if (desired != FLUKE_FORMAT_INT8) return nullptr;      // only int8 kernels exist today
+    return fluke_int8_select(device_index, dims);          // fluke's own handle; NULL on arch/dims mismatch
 }
 
-at::Tensor fluke_qkv_rotary_i8(const fluke_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &wqkv,
+at::Tensor fluke_qkv_rotary_i8(const fluke_int8_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &wqkv,
                                const at::Tensor &sin, const at::Tensor &cos) {
+    const fluke_dims_t d = fluke_int8_dims(b);
     const int64_t N = x.tensor.size(0);
     const int64_t T = x.tensor.size(1);
     const int64_t M = N * T;
-    auto a2d = x.tensor.reshape({M, b->dims.d_model});
-    auto out = torch::empty({M, 3 * b->dims.d_model}, x.tensor.options().dtype(at::kHalf));
+    auto a2d = x.tensor.reshape({M, d.d_model});
+    auto out = torch::empty({M, 3 * d.d_model}, x.tensor.options().dtype(at::kHalf));
 
     // Runtime seqlen = T (rotary indexes seq = row % seqlen). All memrefs are contiguous.
     fluke_qkv_rotary_i8_gpu(
-        b->h, out.data_ptr(), a2d.data_ptr(), wqkv.tensor.data_ptr(),
+        b, out.data_ptr(), a2d.data_ptr(), wqkv.tensor.data_ptr(),
         x.scale.data_ptr(), wqkv.scale.data_ptr(), (const void *)sin.data_ptr(), (const void *)cos.data_ptr(),
         (int)M, (int)T);
 
-    return out.view({N, T, 3, b->dims.nhead, b->dims.head_dim});
+    return out.view({N, T, 3, d.nhead, d.head_dim});
 }
 
-at::Tensor fluke_gated_mlp_i8(const fluke_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &gate,
+at::Tensor fluke_gated_mlp_i8(const fluke_int8_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &gate,
                               const tensor_quant_t &up) {
+    const fluke_dims_t d = fluke_int8_dims(b);
     const int64_t N = x.tensor.size(0);
     const int64_t T = x.tensor.size(1);
     const int64_t M = N * T;
-    auto a2d = x.tensor.reshape({M, b->dims.d_model});
-    auto out = torch::empty({M, b->dims.dim_feedforward}, x.tensor.options().dtype(at::kHalf));
+    auto a2d = x.tensor.reshape({M, d.d_model});
+    auto out = torch::empty({M, d.dim_feedforward}, x.tensor.options().dtype(at::kHalf));
 
     fluke_gated_mlp_i8_gpu(
-        b->h, out.data_ptr(), a2d.data_ptr(), gate.tensor.data_ptr(), up.tensor.data_ptr(),
+        b, out.data_ptr(), a2d.data_ptr(), gate.tensor.data_ptr(), up.tensor.data_ptr(),
         x.scale.data_ptr(), gate.scale.data_ptr(), up.scale.data_ptr(), (int)M);
 
-    return out.view({N, T, b->dims.dim_feedforward});
+    return out.view({N, T, d.dim_feedforward});
 }
 
-// slorado-side FLSTM backend: fluke's opaque kernel handle. Process-lifetime.
-struct fluke_flstm_wrap {
-    fluke_flstm_backend_t *h;
-};
-
-fluke_flstm_wrap_t *fluke_select_flstm(int device_index, enum fluke_format_t desired, int H, int K_hh, int R) {
-    if (desired != FLUKE_FORMAT_INT8) return nullptr;  // only int8 kernels exist today
-    fluke_flstm_backend_t *h = fluke_flstm_select(device_index, H, K_hh, R);  // NULL if arch/shape mismatch
-    if (!h) return nullptr;
-    static fluke_flstm_wrap b;  // process-lifetime; all layers share it (same shape)
-    b.h = h;
-    return &b;
+fluke_flstm_backend_t *fluke_select_flstm(int device_index, enum fluke_format_t desired, int H, int K_hh, int R) {
+    if (desired != FLUKE_FORMAT_INT8) return nullptr;      // only int8 kernels exist today
+    return fluke_flstm_select(device_index, H, K_hh, R);   // fluke's own handle; NULL on arch/shape mismatch
 }
 
-at::Tensor fluke_flstm_down_proj_i8(const fluke_flstm_wrap_t *b, const at::Tensor &a_i8,
-                                    const at::Tensor &scale_a, const tensor_quant_t &w) {
-    const int64_t M = a_i8.size(0);
-    const int64_t R = w.tensor.size(0);
-    auto out = torch::empty({M, R}, a_i8.options().dtype(at::kHalf));
-    fluke_down_proj_i8_gpu(b->h, out.data_ptr(), a_i8.data_ptr(), w.tensor.data_ptr(),
-                           scale_a.data_ptr(), w.scale.data_ptr(), (int)M, fluke_current_stream());
-    return out;
-}
-
-void fluke_flstm_down_proj_i8_into(const fluke_flstm_wrap_t *b, at::Tensor &out, const at::Tensor &a_i8,
+void fluke_flstm_down_proj_i8_into(const fluke_flstm_backend_t *b, at::Tensor &out, const at::Tensor &a_i8,
                                    const at::Tensor &scale_a, const tensor_quant_t &w) {
     const int64_t M = a_i8.size(0);
-    fluke_down_proj_i8_gpu(b->h, out.data_ptr(), a_i8.data_ptr(), w.tensor.data_ptr(),
+    fluke_down_proj_i8_gpu(b, out.data_ptr(), a_i8.data_ptr(), w.tensor.data_ptr(),
                            scale_a.data_ptr(), w.scale.data_ptr(), (int)M, fluke_current_stream());
 }
 
@@ -110,67 +82,38 @@ at::Tensor fluke_dequant_int8_transpose(const at::Tensor &in_tnc, float scale) {
     return out;
 }
 
-tensor_quant_t fluke_quant_int8(const at::Tensor &x) {
-    const int64_t M = x.size(0), C = x.size(1);
-    auto in = x.contiguous();
-    auto out   = torch::empty({M, C}, in.options().dtype(at::kChar));
-    auto scale = torch::empty({M},    in.options().dtype(at::kFloat));
-    fluke_quant_int8_gpu(in.data_ptr(), out.data_ptr(), scale.data_ptr(), (int)M, (int)C);
-    return tensor_quant_t{out, scale};
-}
-
-void fluke_flstm_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tensor &c_f32,
-                         const at::Tensor &a_f16, const at::Tensor gate_w[4], const at::Tensor gate_b[4]) {
-    const int64_t B = a_f16.size(0);
-    fluke_flstm_step_i8_gpu(
-        b->h, h_i8.data_ptr(), a_f16.data_ptr(),
+// Only the run needs a bridge (at::Tensors -> ptrs); create/free are fluke's C ABI, called directly.
+void fluke_flstm_run_recurrence(fluke_flstm_rec_t *rec, int layer_idx,
+                                at::Tensor &hh_all, at::Tensor &cell, const at::Tensor &x_down,
+                                const at::Tensor &w_dn, const at::Tensor &comb_scale,
+                                const at::Tensor gate_w[4], const at::Tensor gate_b[4], bool reverse) {
+    fluke_flstm_recurrence(rec, layer_idx,
+        hh_all.data_ptr(), cell.data_ptr(), x_down.data_ptr(),
+        w_dn.data_ptr(), comb_scale.data_ptr(),
         gate_w[0].data_ptr(), gate_w[1].data_ptr(), gate_w[2].data_ptr(), gate_w[3].data_ptr(),
         gate_b[0].data_ptr(), gate_b[1].data_ptr(), gate_b[2].data_ptr(), gate_b[3].data_ptr(),
-        c_f32.data_ptr(), (int)B, fluke_current_stream());
-}
-
-void fluke_flstm_fused_step_i8(const fluke_flstm_wrap_t *b, at::Tensor &h_i8, at::Tensor &c_f32,
-                               const at::Tensor &h_prev_i8, const at::Tensor &w_dn,
-                               const at::Tensor &comb_scale, const at::Tensor &x_f16,
-                               const at::Tensor gate_w[4], const at::Tensor gate_b[4],
-                               at::Tensor &hh_stage, at::Tensor &flags) {
-    const int64_t B = h_prev_i8.size(0);
-    fluke_flstm_fused_step_i8_gpu(
-        b->h, h_i8.data_ptr(),
-        h_prev_i8.data_ptr(), w_dn.data_ptr(), comb_scale.data_ptr(), x_f16.data_ptr(),
-        gate_w[0].data_ptr(), gate_w[1].data_ptr(), gate_w[2].data_ptr(), gate_w[3].data_ptr(),
-        gate_b[0].data_ptr(), gate_b[1].data_ptr(), gate_b[2].data_ptr(), gate_b[3].data_ptr(),
-        c_f32.data_ptr(), hh_stage.data_ptr(), flags.data_ptr(), (int)B, fluke_current_stream());
+        reverse ? 1 : 0, fluke_current_stream());
 }
 
 #else // no GPU backend — ops never selected, so these are stubs.
 
-fluke_backend_t *fluke_select_backend(int, enum fluke_format_t, fluke_dims_t) { return nullptr; }
+fluke_int8_backend_t *fluke_select_backend(int, enum fluke_format_t, fluke_dims_t) { return nullptr; }
 
-at::Tensor fluke_qkv_rotary_i8(const fluke_backend_t *, const tensor_quant_t &, const tensor_quant_t &,
+at::Tensor fluke_qkv_rotary_i8(const fluke_int8_backend_t *, const tensor_quant_t &, const tensor_quant_t &,
                                const at::Tensor &, const at::Tensor &) { return at::Tensor(); }
 
-at::Tensor fluke_gated_mlp_i8(const fluke_backend_t *, const tensor_quant_t &, const tensor_quant_t &,
+at::Tensor fluke_gated_mlp_i8(const fluke_int8_backend_t *, const tensor_quant_t &, const tensor_quant_t &,
                               const tensor_quant_t &) { return at::Tensor(); }
 
-fluke_flstm_wrap_t *fluke_select_flstm(int, enum fluke_format_t, int, int, int) { return nullptr; }
+fluke_flstm_backend_t *fluke_select_flstm(int, enum fluke_format_t, int, int, int) { return nullptr; }
 
-at::Tensor fluke_flstm_down_proj_i8(const fluke_flstm_wrap_t *, const at::Tensor &, const at::Tensor &,
-                                    const tensor_quant_t &) { return at::Tensor(); }
-
-void fluke_flstm_down_proj_i8_into(const fluke_flstm_wrap_t *, at::Tensor &, const at::Tensor &,
+void fluke_flstm_down_proj_i8_into(const fluke_flstm_backend_t *, at::Tensor &, const at::Tensor &,
                                    const at::Tensor &, const tensor_quant_t &) {}
 
 at::Tensor fluke_dequant_int8_transpose(const at::Tensor &, float) { return at::Tensor(); }
 
-tensor_quant_t fluke_quant_int8(const at::Tensor &) { return tensor_quant_t{}; }
-
-void fluke_flstm_step_i8(const fluke_flstm_wrap_t *, at::Tensor &, at::Tensor &, const at::Tensor &,
-                         const at::Tensor[4], const at::Tensor[4]) {}
-
-void fluke_flstm_fused_step_i8(const fluke_flstm_wrap_t *, at::Tensor &, at::Tensor &,
-                               const at::Tensor &, const at::Tensor &, const at::Tensor &,
-                               const at::Tensor &, const at::Tensor[4], const at::Tensor[4],
-                               at::Tensor &, at::Tensor &) {}
+void fluke_flstm_run_recurrence(fluke_flstm_rec_t *, int, at::Tensor &, at::Tensor &,
+                                const at::Tensor &, const at::Tensor &, const at::Tensor &,
+                                const at::Tensor[4], const at::Tensor[4], bool) {}
 
 #endif // HAVE_CUDA || HAVE_ROCM

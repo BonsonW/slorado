@@ -195,30 +195,20 @@ void free_lstm_model(lstm_model_t *m) {
 // --- procedural FLSTM model (hac/fast v6) -------------------------------------------------------
 
 #ifdef USE_GPU
-// Persistent per-(N,T) int8 recurrence buffers, shared across all FLSTM layers (layers run
-// sequentially, so one set is reused; x_down/boundary are refreshed per layer before each run).
-// This removes per-step/per-layer allocation and is the graph-ready buffer set (a future CUDA
-// graph captures the loop over these fixed addresses). H = hidden C, K = inner rank (K_hh == R).
+// Persistent per-(N,T) recurrence buffers, shared across all FLSTM layers. The recurrence itself —
+// the T-step loop, the fused-vs-two-kernel choice, the hh|x concat, all per-step scratch, and
+// CUDA-graph capture/replay — lives entirely in fluke (fluke_flstm_run_recurrence), so slorado holds
+// only the model state: the int8 ring, the precomputed ih projection, and the cell. This keeps the
+// layer device-agnostic (a HIP backend implements the same recurrence over hipGraph). H = hidden C,
+// K = inner rank (K_hh == R).
 typedef struct {
     int N, T;
     at::Tensor hh_all;     // [T+1, N, C] int8 ring (scale 1/127); boundary slot holds the zero state
     at::Tensor x_down;     // [T, N, K]  fp16 (ih down-projection, precomputed for the whole sequence)
-    at::Tensor a_scratch;  // [N, 2K]    fp16 (per-step [hh_down | x_down_t], reused every step)
-    at::Tensor hh_down;    // [N, K]     fp16 (per-step hh down-projection, reused every step)
-    at::Tensor cell;       // [N, C]     fp32 (cell state, updated in place)
-    at::Tensor hh_scale;   // [N]        fp32 (const 1/127, per-token scale for the recurrent input)
+    at::Tensor cell;       // [N, C]     fp32 (cell state, updated in place by the recurrence)
     at::Tensor x_scale;    // [T*N]      fp32 (const 1/127, for an int8-input layer's ih precompute)
-    // Fused single-launch step scratch (used when N <= FLSTM_FUSED_MAX_N):
-    at::Tensor hh_stage;   // [N, K]     fp16  (producer-written hh_down; no init needed)
-    at::Tensor flags;      // [ceil(N/64)*4] int32 (zeroed once; self-cleaning across steps)
-    bool use_fused;        // N within the fused kernel's grid-residency bound
+    fluke_flstm_rec_t *rec;  // fluke-owned recurrence state (loop + graph + scratch); lazily created
 } flstm_bufs_t;
-
-// Fused step spins on same-grid producers, so the whole grid must be co-resident. At the baked
-// tile config (bM=64, bN=32, H=1024 -> 32 CTAs/row-group, 3 CTAs/SM on A100) N up to 512 is
-// safe; above that the caller keeps the two-kernel down_proj + step path.
-#define FLSTM_FUSED_MAX_N 512
-#define FLSTM_FUSED_BM 64
 
 struct flstm_qctx {
     std::vector<flstm_bufs_t> pool;  // keyed by (N,T); N varies only for a trailing partial batch
@@ -228,19 +218,11 @@ static flstm_bufs_t &get_flstm_bufs(flstm_qctx *qc, int N, int T, int C, int K, 
     for (auto &bf : qc->pool) if (bf.N == N && bf.T == T) return bf;
     flstm_bufs_t bf;
     bf.N = N; bf.T = T;
-    bf.hh_all    = torch::empty({T + 1, N, C}, o.dtype(at::kChar));
-    bf.x_down    = torch::empty({T, N, K},     o.dtype(at::kHalf));
-    bf.a_scratch = torch::empty({N, 2 * K},    o.dtype(at::kHalf));
-    bf.hh_down   = torch::empty({N, K},        o.dtype(at::kHalf));
-    bf.cell      = torch::empty({N, C},        o.dtype(at::kFloat));
-    bf.hh_scale  = torch::full({N},     1.0f / 127.0f, o.dtype(at::kFloat));
-    bf.x_scale   = torch::full({T * N}, 1.0f / 127.0f, o.dtype(at::kFloat));
-    bf.use_fused = (N <= FLSTM_FUSED_MAX_N);
-    if (bf.use_fused) {
-        const int grid_m = (N + FLSTM_FUSED_BM - 1) / FLSTM_FUSED_BM;
-        bf.hh_stage = torch::empty({N, K},         o.dtype(at::kHalf));
-        bf.flags    = torch::zeros({grid_m * 4},   o.dtype(at::kInt));   // zeroed once; self-cleaning
-    }
+    bf.hh_all  = torch::empty({T + 1, N, C}, o.dtype(at::kChar));
+    bf.x_down  = torch::empty({T, N, K},     o.dtype(at::kHalf));
+    bf.cell    = torch::empty({N, C},        o.dtype(at::kFloat));
+    bf.x_scale = torch::full({T * N}, 1.0f / 127.0f, o.dtype(at::kFloat));
+    bf.rec     = nullptr;   // created on first use (needs the backend handle + layer count)
     qc->pool.push_back(bf);
     return qc->pool.back();
 }
@@ -461,31 +443,15 @@ static at::Tensor flstm_layer_forward_quant(const flstm_model_t *m, const flstm_
     b = realtime();
     stats->time_flstm_precompute += b - a;
 
-    // Recurrence over the ring (direction by layer parity). Runs on the default stream: the fluke int8
-    // kernels are not stream-clean (they do per-call descriptor setup on the default stream), so running
-    // the recurrence on a non-default stream needs a per-step barrier — which also blocks CUDA-graph
-    // capture. Once the kernels launch entirely on the passed stream, the per-step loop below becomes
-    // graph-capturable (persistent fixed-address buffers, allocation-free) for a single-replay recurrence.
-    bufs.hh_all[reverse ? T : 0].zero_();   // boundary hidden = 0
-    bufs.cell.zero_();                        // cell = 0
+    // Recurrence over the ring (direction by layer parity). Fully delegated to fluke: it runs the
+    // T-step loop, picks fused vs two-kernel per device/N, does the hh|x concat, and captures/replays
+    // a CUDA graph — all device-agnostic behind one call. Created lazily (needs the backend + layer
+    // count); reused across batches (per-layer graph cache keyed inside the rec handle).
     a = realtime();
-    for (int i = 0; i < T; ++i) {
-        const int t    = reverse ? (T - 1 - i) : i;   // natural time index for this step
-        const int prev = reverse ? (t + 1) : t;       // ring slot of the previous hidden
-        const int out  = reverse ? t : (t + 1);       // ring slot for this step's hidden
-        auto hh_prev = bufs.hh_all[prev];                                                  // [N, C] int8
-        auto h_out = bufs.hh_all[out];                                                      // [N, C] int8
-        if (bufs.use_fused) {
-            // Single launch: recurrent hh down-proj + gate step (no hh_down/a_scratch round-trip).
-            fluke_flstm_fused_step_i8(L->backend, h_out, bufs.cell, hh_prev, L->qw_dn_hh.tensor,
-                                      L->hh_comb_scale, bufs.x_down[t], L->gate_w, L->gate_b,
-                                      bufs.hh_stage, bufs.flags);
-        } else {
-            fluke_flstm_down_proj_i8_into(L->backend, bufs.hh_down, hh_prev, bufs.hh_scale, L->qw_dn_hh);
-            at::cat_out(bufs.a_scratch, {bufs.hh_down, bufs.x_down[t]}, 1);                 // [N, 2K]
-            fluke_flstm_step_i8(L->backend, h_out, bufs.cell, bufs.a_scratch, L->gate_w, L->gate_b);
-        }
-    }
+    if (bufs.rec == nullptr)
+        bufs.rec = fluke_flstm_rec_create(L->backend, N, T, (int)m->flstms.size());
+    fluke_flstm_run_recurrence(bufs.rec, layer_idx, bufs.hh_all, bufs.cell, bufs.x_down,
+                               L->qw_dn_hh.tensor, L->hh_comb_scale, L->gate_w, L->gate_b, reverse);
     if (!x.device().is_cpu()) torch::cuda::synchronize(dev);
     b = realtime();
     stats->time_flstm_recurrence += b - a;
@@ -557,7 +523,11 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
 
 void free_flstm_model(flstm_model_t *m) {
 #ifdef USE_GPU
-    delete (flstm_qctx *)m->quant_ctx;
+    if (m->quant_ctx) {
+        flstm_qctx *qc = (flstm_qctx *)m->quant_ctx;
+        for (auto &bf : qc->pool) if (bf.rec) fluke_flstm_rec_free(bf.rec);
+        delete qc;
+    }
 #endif
     delete m;
 }

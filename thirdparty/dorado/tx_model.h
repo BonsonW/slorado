@@ -44,14 +44,14 @@ typedef struct {
     at::Tensor out_proj_w, out_proj_b; // out_proj (+ bias)
     std::string attn_prefix;
     calib_layer_t *cl_wqkv = nullptr, *cl_out_proj = nullptr;
-    fluke_backend_t *attn_backend = nullptr;
+    fluke_int8_backend_t *attn_backend = nullptr;
     tensor_quant_t qw_wqkv;
     // gated MLP
     int hidden_features;
     at::Tensor fc1_w, fc2_w;
     std::string ff_prefix;
     calib_layer_t *cl_fc1 = nullptr, *cl_fc2 = nullptr;
-    fluke_backend_t *ff_backend = nullptr;
+    fluke_int8_backend_t *ff_backend = nullptr;
     tensor_quant_t qw_gate, qw_up;
     // norms
     at::Tensor norm1_w, norm2_w;
