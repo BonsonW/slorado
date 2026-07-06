@@ -74,11 +74,15 @@ static void accept_chunk(const int num_chunks, const basecall_chunk_t *chunk, ru
     runner->input_tensor.index_put_({num_chunks, 0}, {input_slice});
 }
 
-static void call_chunks(
+// Inference half of a batch: run the model and return scores in [T, N, C] layout on the
+// runner's device. Split out from decode so the streaming pipeline can overlap decode of
+// batch i with inference of batch i+1 (see basecall_infer / basecall_decode).
+static at::Tensor infer_chunks(
     const core_t* core,
     const std::vector<basecall_chunk_t *> &chunks,
     const int runner_idx
 ) {
+    (void)chunks;
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
 
@@ -110,6 +114,24 @@ static void call_chunks(
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
     scores_TNC = scores_TNC.transpose(0, 1).contiguous();
     STAGE_SYNC(runner->device != "cpu", runner->device_idx);
+    return scores_TNC;
+}
+
+// Decode half of a batch: given scores in [T, N, C] layout, run the decoder and write
+// moves/seq/qstring back into the chunks. Runs on its own thread in the streaming pipeline.
+static void decode_chunks(
+    const core_t* core,
+    at::Tensor scores_TNC,
+    const std::vector<basecall_chunk_t *> &chunks,
+    const int runner_idx
+) {
+    runner_t* runner = (*core->runners)[runner_idx];
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+
+#ifdef USE_GPU
+    c10::DeviceGuard device_guard(runner->tensor_opts.device());
+#endif
+    torch::InferenceMode guard;
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
@@ -178,6 +200,50 @@ static void call_chunks(
     free(moves);
     free(sequence);
     free(qstring);
+}
+
+// Batch (non-streaming) path: inference + decode back-to-back.
+static void call_chunks(
+    const core_t* core,
+    const std::vector<basecall_chunk_t *> &chunks,
+    const int runner_idx
+) {
+    auto scores_TNC = infer_chunks(core, chunks, runner_idx);
+    decode_chunks(core, scores_TNC, chunks, runner_idx);
+}
+
+// Streaming pipeline: accept a packed batch and run inference only, returning scores in
+// [T, N, C] layout on the runner's device. The caller hands the scores to basecall_decode
+// (on a separate thread) so decode overlaps the next batch's inference.
+at::Tensor basecall_infer(
+    const core_t* core,
+    const int runner_idx,
+    const std::vector<basecall_chunk_t *> &chunks
+) {
+    runner_t* runner = (*core->runners)[runner_idx];
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    auto chunk_size = core->chunk_size;
+
+    ts->time_accept -= realtime();
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        accept_chunk(i, chunks[i], runner, chunk_size);
+    }
+    ts->time_accept += realtime();
+
+    ts->time_basecall -= realtime();
+    auto scores_TNC = infer_chunks(core, chunks, runner_idx);
+    ts->time_basecall += realtime();
+    return scores_TNC;
+}
+
+// Streaming pipeline: decode a batch's scores and write results back into the chunks.
+void basecall_decode(
+    const core_t* core,
+    const int runner_idx,
+    at::Tensor scores_TNC,
+    const std::vector<basecall_chunk_t *> &chunks
+) {
+    decode_chunks(core, scores_TNC, chunks, runner_idx);
 }
 
 void basecall_chunks(
