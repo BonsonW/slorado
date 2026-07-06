@@ -47,6 +47,9 @@ SOFTWARE.
 
 // Per-stage timing syncs on by default; init_core sets this false for the streaming path.
 bool g_stage_sync = true;
+// int8 CRF scores: set by init_core from whether --quant is enabled (dorado-style; halves the
+// scores tensor + int8 decode). Default false = fp16 scores for unquantized runs.
+bool g_scores_i8 = false;
 
 double realtime(void) {
     struct timeval tp;

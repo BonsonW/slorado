@@ -159,11 +159,16 @@ static void decode_chunks(
         uint8_t *moves;
         char *sequence;
         char *qstring;
+        // Score dtype is carried by the tensor: int8 CRF output (round(tanh*127) / clamp±5·127/5)
+        // dequants by 5/127; fp16 output uses 1.0. Runtime dispatch works for any model/mode.
+        const bool i8 = sub_NTC.scalar_type() == at::kChar;
+        const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F16;
+        const float sscale = i8 ? SCORES_I8_SCALE : 1.0f;
         if (runner->device == "cpu") {
-            openfish_decode_cpu(T, nt, C, nthreads, sub_NTC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
+            openfish_decode_cpu(T, nt, C, nthreads, sub_NTC.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, &moves, &sequence, &qstring);
         } else {
 #ifdef USE_GPU
-            openfish_decode_gpu(T, nt, C, sub_NTC.data_ptr(), state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+            openfish_decode_gpu(T, nt, C, sub_NTC.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else
             ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
             exit(EXIT_FAILURE);

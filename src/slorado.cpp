@@ -93,6 +93,10 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     // performant setting and skips them (correctness holds via CUDA stream ordering).
     g_stage_sync = (opt.flag & SLORADO_STREAM) == 0;
 
+    // int8 CRF scores (dorado-style, halves the scores tensor + int8 decode) whenever any quant mode
+    // is enabled; unquantized runs keep fp16 scores. Only the flstm CRF honors it (tx stays fp16).
+    g_scores_i8 = (opt.quant != NULL && opt.quant[0] != '\0');
+
     if (opt.batch_size == 0) {
         size_t avg_bytes = estimate_bytes_per_read(slow5file);
         core->opt.batch_size = avg_bytes > 0

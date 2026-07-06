@@ -121,7 +121,9 @@ static void preprocess_stage(pipeline_ctx_t *ctx) {
 }
 
 // Stage 3: pack chunks to gpu_batch_size across reads and run inference+decode. Decode subtiles
-// internally (see basecall.cpp) so the decode scratch/transpose stay bounded at large batch.
+// internally (see basecall.cpp) so its scratch/decode-buffer stay bounded at large batch. (Decode
+// is inline, not a separate stage: at the batch sizes we run the GPU is saturated by inference, so
+// a decode thread can't overlap it -- it just adds an extra resident scores tensor.)
 static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;

@@ -502,7 +502,15 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
 
     a = realtime();
     auto scores = at::linear(x, m->linear2_w);
-    x = torch::tanh(scores) * 5;
+    if (g_scores_i8) {
+        // int8 CRF emission scores (matches dorado): tanh is in [-1,1], so tanh*127 lands exactly in
+        // the int8 range [-127,127] -- no clamp/calibration needed. Decoder rescales by 5/127.
+        // In-place tanh_/mul_/round_ so only one fp16 buffer + the int8 output exist (a chained
+        // tanh()*127.round().to() would materialize ~4 full fp16 score tensors and OOM at large N).
+        x = scores.tanh_().mul_(127.0f).round_().to(torch::kChar);
+    } else {
+        x = torch::tanh(scores) * 5;
+    }
     STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_crf_2 += b - a;
