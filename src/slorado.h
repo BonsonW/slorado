@@ -70,7 +70,7 @@ struct sensitivity_stats_t;
 #define DEFAULT_OVERLAP (500)
 #define DEFAULT_BATCH_SIZE (4096)
 #define DEFAULT_GPU_BATCH_SIZE (512)
-#define MAX_AUTO_GPU_BATCH_SIZE (2048) // upper bound for auto batch-size search
+#define MAX_AUTO_GPU_BATCH_SIZE (4096) // upper bound for auto batch-size search
 #define BATCH_SIZE_SAMPLE_READS (256)
 
 /* user specified options */

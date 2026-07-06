@@ -120,11 +120,20 @@ static bool trial_fits(runner_t *runner, core_t *core, int est_chunk_size, int n
             auto in = torch::zeros({n, 1, (int64_t)est_chunk_size},
                 torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
             auto out = model_forward(runner, in.to(runner->tensor_opts.device()));
-            out.transpose(0, 1).contiguous();
+            // Model the decode peak: the full-N scores [n,T,C] stays alive (out) while decode
+            // consumes it in row-subtiles. openfish decodes natively from [N,T,C], so there is no
+            // transpose scratch; the decode buffer is reserved separately (gpubuf, see caller).
+            out.contiguous();
         }
         torch::cuda::synchronize(device_idx);
     } catch (const c10::Error &) {
         ok = false;
+    }
+    // The FLSTM recurrence caches per-(N,T) buffers (hh_all etc, GBs) that survive emptyCache;
+    // release them so this trial's buffers don't starve the next (smaller-N) trial. The real run
+    // repopulates lazily. Runs on success and failure (an OOM mid-forward still leaves the entry).
+    if (!modbase && runner->bc_family == MODEL_FAMILY_FLSTM) {
+        free_flstm_bufs_pool((flstm_model_t *)runner->bc_model);
     }
     CACHING_ALLOCATOR_NS::emptyCache();
     return ok;
@@ -243,14 +252,17 @@ void init_runner(
             : (int)core->chunk_size;
         const int T = est_chunk_size / (modbase ? 1 : (int)core->model_stride);
 
-        // Upper bound on the search: the 2048 cap, the input-tensor length limit, and the
-        // MIOpen/cuDNN RNN int32 limit (T × N × hidden must stay below INT_MAX; applies to the
-        // basecall LSTM/FLSTM and to the modbase conv-LSTM).
+        // Upper bound on the search: the cap, the input-tensor length limit, and the MIOpen/cuDNN
+        // RNN int32 limit (T × N × hidden must stay below INT_MAX). That RNN limit applies ONLY to
+        // the plain-LSTM (torch::lstm) basecall path and the modbase conv-LSTM -- the fluke FLSTM
+        // and TX paths index with int64, so they are NOT capped by it (that is what lets them run
+        // the large batches needed to fill the GPU).
         int hi = MAX_AUTO_GPU_BATCH_SIZE;
         const size_t max_input_len = 10000ULL * 6000ULL;
         const int max_batch = (int)(max_input_len / est_chunk_size);
         if (hi > max_batch) hi = max_batch;
-        {
+        const bool cudnn_rnn = modbase || core->model_config->family == MODEL_FAMILY_LSTM;
+        if (cudnn_rnn) {
             int lstm_sz, Tb;
             if (modbase) {
                 const int mstride = core->modbase_config->general.stride > 0 ? core->modbase_config->general.stride : 1;
@@ -277,8 +289,10 @@ void init_runner(
 
         int chosen = 0;
         for (int n = hi; n >= 1; n /= 2) {
+            // decode is subtiled: the gpubuf is sized for the decode tile, not the full batch
+            const int decode_tile = std::min(n, DEFAULT_GPU_BATCH_SIZE);
             const size_t gpubuf_bytes = modbase ? 0
-                : openfish_gpubuf_size(T, n, core->model_config->state_len);
+                : openfish_gpubuf_size(T, decode_tile, core->model_config->state_len);
             if (trial_fits(runner, core, est_chunk_size, n, gpubuf_bytes + headroom, modbase)) {
                 chosen = n;
                 break;
@@ -303,7 +317,11 @@ void init_runner(
     if (device != "cpu" && !modbase) {
 #ifdef USE_GPU
         c10::DeviceGuard device_guard(runner->tensor_opts.device());
-        runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
+        // Decode in row-subtiles so the CRF decode buffer (fwd/bwd/posterior NTC, ~4.5MB/row) and
+        // the [T,N,C] transpose scratch stay bounded regardless of the forward batch -- this is what
+        // lets the forward run at a large batch. The gpubuf is sized for the tile, not batch_size.
+        runner->decode_tile = std::min(batch_size, DEFAULT_GPU_BATCH_SIZE);
+        runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, runner->decode_tile, core->model_config->state_len);
 #endif
     }
 

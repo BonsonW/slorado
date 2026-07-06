@@ -33,6 +33,7 @@ struct runner {
 #ifdef USE_GPU
     int64_t device_idx;
     openfish_gpubuf_t *gpubuf;
+    int decode_tile;   // rows decoded per openfish call (bounds decode scratch; <= gpu batch)
 #endif
 
     // modbase stuff

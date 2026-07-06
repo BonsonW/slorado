@@ -510,6 +510,20 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
     return x;
 }
 
+// Release the per-(N,T) recurrence buffer pool (hh_all/x_down/cell + the fluke rec/graph).
+// The pool is otherwise keep-forever, so it must be cleared between auto-batch trials -- each
+// trial forwards at a different N and would otherwise leave that N's hh_all (GBs) resident,
+// starving subsequent trials. The real run repopulates the pool lazily on first forward.
+void free_flstm_bufs_pool(flstm_model_t *m) {
+#ifdef USE_GPU
+    if (m && m->quant_ctx) {
+        flstm_qctx *qc = (flstm_qctx *)m->quant_ctx;
+        for (auto &bf : qc->pool) if (bf.rec) fluke_flstm_rec_free(bf.rec);
+        qc->pool.clear();
+    }
+#endif
+}
+
 void free_flstm_model(flstm_model_t *m) {
 #ifdef USE_GPU
     if (m->quant_ctx) {

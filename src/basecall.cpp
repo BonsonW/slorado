@@ -28,6 +28,7 @@ SOFTWARE.
 
 ******************************************************************************/
 
+#include <algorithm>
 #include <cstdint>
 #include <stdlib.h>
 #include <vector>
@@ -74,9 +75,10 @@ static void accept_chunk(const int num_chunks, const basecall_chunk_t *chunk, ru
     runner->input_tensor.index_put_({num_chunks, 0}, {input_slice});
 }
 
-// Inference half of a batch: run the model and return scores in [T, N, C] layout on the
-// runner's device. Split out from decode so the streaming pipeline can overlap decode of
-// batch i with inference of batch i+1 (see basecall_infer / basecall_decode).
+// Inference half of a batch: run the model and return scores in the model's native [N, T, C]
+// layout on the runner's device. Split out from decode so decode can subtile independently of
+// the forward batch size (the transpose to [T,N,C] and the decode buffer scale with the decode
+// subtile, not the full N) -- letting the forward run at a large batch to fill the GPU.
 static at::Tensor infer_chunks(
     const core_t* core,
     const std::vector<basecall_chunk_t *> &chunks,
@@ -110,18 +112,17 @@ static at::Tensor infer_chunks(
         core->sensitivity_stats->accumulate(fp16_scores, scores);
     }
 
-    auto scores_TNC = scores;
-    // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
-    scores_TNC = scores_TNC.transpose(0, 1).contiguous();
     STAGE_SYNC(runner->device != "cpu", runner->device_idx);
-    return scores_TNC;
+    return scores;   // [N, T, C]
 }
 
-// Decode half of a batch: given scores in [T, N, C] layout, run the decoder and write
-// moves/seq/qstring back into the chunks. Runs on its own thread in the streaming pipeline.
+// Decode half of a batch: given scores in the model's native [N, T, C] layout, run the decoder
+// and write moves/seq/qstring back into the chunks. Decodes in row-subtiles of runner->decode_tile
+// so the [T,N,C] transpose scratch and the openfish decode buffer stay bounded (= decode_tile),
+// independent of the (possibly large) forward batch N.
 static void decode_chunks(
     const core_t* core,
-    at::Tensor scores_TNC,
+    at::Tensor scores_NTC,
     const std::vector<basecall_chunk_t *> &chunks,
     const int runner_idx
 ) {
@@ -133,117 +134,93 @@ static void decode_chunks(
 #endif
     torch::InferenceMode guard;
 
-    const int T = scores_TNC.size(0);
-    const int N = scores_TNC.size(1);
-    const int C = scores_TNC.size(2);
+    // scores_NTC may have padding rows beyond the valid chunks (the forward runs on the full
+    // batch-sized input tensor); decode only the valid reads.
+    const int N = (int)chunks.size();
+    const int T = scores_NTC.size(1);
+    const int C = scores_NTC.size(2);
     const int state_len = core->model_config->state_len;
     int nthreads = core->opt.num_thread / core->runners->size();
 
-    uint8_t *moves;
-    char *sequence;
-    char *qstring;
+    int tile = runner->decode_tile > 0 ? runner->decode_tile : N;
+    if (tile > N || tile <= 0) tile = N;
 
     LOG_DEBUG("%s", "decoding scores");
 
     ts->time_decode -= realtime();
-    if (runner->device == "cpu") {
-        openfish_decode_cpu(T, N, C, nthreads, scores_TNC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
-    } else {
+    for (int n0 = 0; n0 < N; n0 += tile) {
+        const int nt = std::min(tile, N - n0);
+
+        // openfish decodes natively from [N,T,C], so the row-slice [nt,T,C] is passed directly --
+        // .contiguous() is a no-op when scores_NTC is contiguous (the common case), so no copy.
+        // Subtiling still bounds the openfish decode buffer (gpubuf) to the tile, not the full N.
+        auto sub_NTC = scores_NTC.narrow(0, n0, nt).contiguous();
+
+        uint8_t *moves;
+        char *sequence;
+        char *qstring;
+        if (runner->device == "cpu") {
+            openfish_decode_cpu(T, nt, C, nthreads, sub_NTC.data_ptr(), state_len, &core->decoder_opts, &moves, &sequence, &qstring);
+        } else {
 #ifdef USE_GPU
-        openfish_decode_gpu(T, N, C, scores_TNC.data_ptr(), state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+            openfish_decode_gpu(T, nt, C, sub_NTC.data_ptr(), state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else
-        ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
-        exit(EXIT_FAILURE);
+            ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());
+            exit(EXIT_FAILURE);
 #endif
-    }
-
-    LOG_DEBUG("%s", "writing to chunks");
-
-    for (size_t chunk = 0; chunk < chunks.size(); ++chunk) {
-        size_t idx = chunk * T;
-        chunks[chunk]->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
-        size_t num_bases = 0;
-        for (auto move: chunks[chunk]->moves) {
-            num_bases += move;
-        }
-        if (num_bases > (size_t)T) {
-            ERROR("num bases %zu greater than number of timesteps %d", num_bases, T);
-            exit(EXIT_FAILURE);
-        }
-        chunks[chunk]->seq = std::string(sequence + idx, num_bases);
-        chunks[chunk]->qstring = std::string(qstring + idx, num_bases);
-
-        size_t seq_size = strlen(chunks[chunk]->seq.c_str());
-        size_t qstr_size = strlen(chunks[chunk]->qstring.c_str());
-
-        if (seq_size == 0) {
-            ERROR("%s", "empty sequence returned by decoder");
-            exit(EXIT_FAILURE);
         }
 
-        if (qstr_size == 0) {
-            ERROR("%s", "empty qstring returned by decoder");
-            exit(EXIT_FAILURE);
+        for (int j = 0; j < nt; ++j) {
+            basecall_chunk_t *ck = chunks[n0 + j];
+            size_t idx = (size_t)j * T;
+            ck->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
+            size_t num_bases = 0;
+            for (auto move: ck->moves) {
+                num_bases += move;
+            }
+            if (num_bases > (size_t)T) {
+                ERROR("num bases %zu greater than number of timesteps %d", num_bases, T);
+                exit(EXIT_FAILURE);
+            }
+            ck->seq = std::string(sequence + idx, num_bases);
+            ck->qstring = std::string(qstring + idx, num_bases);
+
+            size_t seq_size = strlen(ck->seq.c_str());
+            size_t qstr_size = strlen(ck->qstring.c_str());
+
+            if (seq_size == 0) {
+                ERROR("%s", "empty sequence returned by decoder");
+                exit(EXIT_FAILURE);
+            }
+            if (qstr_size == 0) {
+                ERROR("%s", "empty qstring returned by decoder");
+                exit(EXIT_FAILURE);
+            }
+            if (seq_size != qstr_size) {
+                ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
+                ERROR("seq: %s", ck->seq.c_str());
+                ERROR("qstring: %s", ck->qstring.c_str());
+                exit(EXIT_FAILURE);
+            }
         }
 
-        if (seq_size != qstr_size) {
-            ERROR("mismatch sequence size of %zu with qstring size of %zu", seq_size, qstr_size);
-            ERROR("seq: %s", chunks[chunk]->seq.c_str());
-            ERROR("qstring: %s", chunks[chunk]->qstring.c_str());
-            exit(EXIT_FAILURE);
-        }
+        free(moves);
+        free(sequence);
+        free(qstring);
     }
     ts->time_decode += realtime();
 
     LOG_DEBUG("%s", "done writing to chunks");
-
-    free(moves);
-    free(sequence);
-    free(qstring);
 }
 
-// Batch (non-streaming) path: inference + decode back-to-back.
+// Inference + decode back-to-back on a packed batch (decode subtiles internally).
 static void call_chunks(
     const core_t* core,
     const std::vector<basecall_chunk_t *> &chunks,
     const int runner_idx
 ) {
-    auto scores_TNC = infer_chunks(core, chunks, runner_idx);
-    decode_chunks(core, scores_TNC, chunks, runner_idx);
-}
-
-// Streaming pipeline: accept a packed batch and run inference only, returning scores in
-// [T, N, C] layout on the runner's device. The caller hands the scores to basecall_decode
-// (on a separate thread) so decode overlaps the next batch's inference.
-at::Tensor basecall_infer(
-    const core_t* core,
-    const int runner_idx,
-    const std::vector<basecall_chunk_t *> &chunks
-) {
-    runner_t* runner = (*core->runners)[runner_idx];
-    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
-    auto chunk_size = core->chunk_size;
-
-    ts->time_accept -= realtime();
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        accept_chunk(i, chunks[i], runner, chunk_size);
-    }
-    ts->time_accept += realtime();
-
-    ts->time_basecall -= realtime();
-    auto scores_TNC = infer_chunks(core, chunks, runner_idx);
-    ts->time_basecall += realtime();
-    return scores_TNC;
-}
-
-// Streaming pipeline: decode a batch's scores and write results back into the chunks.
-void basecall_decode(
-    const core_t* core,
-    const int runner_idx,
-    at::Tensor scores_TNC,
-    const std::vector<basecall_chunk_t *> &chunks
-) {
-    decode_chunks(core, scores_TNC, chunks, runner_idx);
+    auto scores_NTC = infer_chunks(core, chunks, runner_idx);
+    decode_chunks(core, scores_NTC, chunks, runner_idx);
 }
 
 void basecall_chunks(

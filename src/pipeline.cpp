@@ -40,20 +40,11 @@ void free_read_dat(read_dat_t *read_dat);
 // are owned as locals by run_pipeline(). total_bytes has a single writer (loader) and
 // total_reads a single writer (writer stage), so plain integers are safe (the joins in
 // run_pipeline establish the happens-before before they are read).
-// A batch that has finished inference and is waiting to be decoded. Carries the scores tensor
-// ([T,N,C] on device) and the chunk buffer (keeps the reads alive; chunk pointers are rebuilt in
-// the decode stage). Moving both here hands ownership from the runner thread to the decode thread.
-struct decode_item_t {
-    at::Tensor scores;
-    std::vector<chunk_item_t> buf;
-};
-
 typedef struct {
     core_t *core;
     bool mod;                        // modbase calling enabled (--mod)
     BoundedQueue<std::shared_ptr<read_state_t>> *read_q;
     BoundedQueue<chunk_item_t> *chunk_q;
-    BoundedQueue<decode_item_t> *decode_q;
     BoundedQueue<std::shared_ptr<read_state_t>> *stitch_q;
     // modbase stages (only used when mod)
     BoundedQueue<std::shared_ptr<read_state_t>> *mod_pre_q;
@@ -129,8 +120,8 @@ static void preprocess_stage(pipeline_ctx_t *ctx) {
     }
 }
 
-// Stage 3: pack chunks to gpu_batch_size across reads and run inference. The decoded scores are
-// handed to the decode stage so decode of this batch overlaps inference of the next.
+// Stage 3: pack chunks to gpu_batch_size across reads and run inference+decode. Decode subtiles
+// internally (see basecall.cpp) so the decode scratch/transpose stay bounded at large batch.
 static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
@@ -144,13 +135,15 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
         ptrs.reserve(buf.size());
         for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->chunks[buf[i].chunk_idx]);
 
-        decode_item_t di;
-        di.scores = basecall_infer(core, runner_idx, ptrs);
-        di.buf = std::move(buf);
-        ctx->decode_q->push(std::move(di));
+        basecall_chunks(core, runner_idx, ptrs);
 
-        buf.clear();               // buf was moved-from; restore for the next batch
-        buf.reserve(gpu_batch);
+        for (size_t i = 0; i < buf.size(); ++i) {
+            // last chunk of this read done -> hand off to stitching
+            if (buf[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                ctx->stitch_q->push(buf[i].read);
+            }
+        }
+        buf.clear();
     };
 
     chunk_item_t item;
@@ -159,29 +152,6 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
         if (buf.size() == gpu_batch) flush();
     }
     flush();
-}
-
-// Stage 3b: decode the scores of a finished-inference batch and route completed reads to
-// stitching. Runs on its own thread (one per runner) so it overlaps the runner's next inference.
-// One thread per runner_idx keeps the runner's decode scratch (gpubuf) single-consumer.
-static void decode_stage(pipeline_ctx_t *ctx, int runner_idx) {
-    core_t *core = ctx->core;
-
-    decode_item_t di;
-    while (ctx->decode_q->pop(di)) {
-        std::vector<basecall_chunk_t *> ptrs;
-        ptrs.reserve(di.buf.size());
-        for (size_t i = 0; i < di.buf.size(); ++i) ptrs.push_back(&di.buf[i].read->chunks[di.buf[i].chunk_idx]);
-
-        basecall_decode(core, runner_idx, di.scores, ptrs);
-
-        for (size_t i = 0; i < di.buf.size(); ++i) {
-            // last chunk of this read done -> hand off to stitching
-            if (di.buf[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                ctx->stitch_q->push(di.buf[i].read);
-            }
-        }
-    }
 }
 
 // Stage 4: stitch a read's chunks back into a single sequence (+ RNA reversal). Routes valid reads
@@ -327,16 +297,12 @@ void run_pipeline(core_t *core) {
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
     const size_t chunk_cap = std::max<size_t>(gpu_batch * 4 * n_runners, gpu_batch * 4);
     const size_t read_cap = std::max<size_t>(64, (size_t)n_pre * 4);
-    // Small: bounds how many batches' scores tensors are held on the GPU at once (queued +
-    // in-decode + runner building the next). 2 per runner is enough for full inference/decode overlap.
-    const size_t decode_cap = std::max<size_t>(2, (size_t)n_runners * 2);
     const size_t stitch_cap = 256;
     const size_t out_cap = 256;
 
     // Queues and counters are owned here; the context just points at them.
     BoundedQueue<std::shared_ptr<read_state_t>> read_q(read_cap);
     BoundedQueue<chunk_item_t> chunk_q(chunk_cap);
-    BoundedQueue<decode_item_t> decode_q(decode_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> stitch_q(stitch_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> mod_pre_q(stitch_cap);
     BoundedQueue<mod_chunk_item_t> mod_chunk_q(chunk_cap);
@@ -348,7 +314,6 @@ void run_pipeline(core_t *core) {
     ctx.mod = mod;
     ctx.read_q = &read_q;
     ctx.chunk_q = &chunk_q;
-    ctx.decode_q = &decode_q;
     ctx.stitch_q = &stitch_q;
     ctx.mod_pre_q = &mod_pre_q;
     ctx.mod_chunk_q = &mod_chunk_q;
@@ -362,8 +327,8 @@ void run_pipeline(core_t *core) {
                 "%d mod-preprocess, %d mod-runner, %d mod-postprocess threads\n",
                 __func__, n_pre, n_runners, n_stitch, n_pre, n_mod_runners, n_stitch);
     } else {
-        fprintf(stderr, "[%s] streaming pipeline: %d preprocess, %d runner, %d decode, %d stitch threads\n",
-                __func__, n_pre, n_runners, n_runners, n_stitch);
+        fprintf(stderr, "[%s] streaming pipeline: %d preprocess, %d runner, %d stitch threads\n",
+                __func__, n_pre, n_runners, n_stitch);
     }
 
     // Start downstream stages first so they are ready to consume.
@@ -379,9 +344,6 @@ void run_pipeline(core_t *core) {
     std::vector<std::thread> stitch;
     for (int i = 0; i < n_stitch; ++i) stitch.emplace_back(stitch_stage, &ctx);
 
-    std::vector<std::thread> decode;
-    for (int i = 0; i < n_runners; ++i) decode.emplace_back(decode_stage, &ctx, i);
-
     std::vector<std::thread> runners;
     for (int i = 0; i < n_runners; ++i) runners.emplace_back(runner_stage, &ctx, i);
 
@@ -396,8 +358,6 @@ void run_pipeline(core_t *core) {
     for (auto &t : preproc) t.join();
     chunk_q.close();
     for (auto &t : runners) t.join();
-    decode_q.close();
-    for (auto &t : decode) t.join();
     stitch_q.close();
     for (auto &t : stitch) t.join();
     if (mod) {

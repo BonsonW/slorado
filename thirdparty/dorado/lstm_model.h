@@ -86,5 +86,8 @@ typedef struct {
 flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::TensorOptions &options, lstm_stats_t *model_stats, const std::string &quant_mode);
 at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x);
 void free_flstm_model(flstm_model_t *m);
+// Free the cached per-(N,T) recurrence buffer pool without destroying the model (used by the
+// auto-batch trials so a large-N trial's buffers don't leak into the next trial).
+void free_flstm_bufs_pool(flstm_model_t *m);
 
 #endif
