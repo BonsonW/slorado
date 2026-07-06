@@ -366,6 +366,8 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                             - out_proj: %.3f sec", __func__, model_stats->time_out_proj);
             fprintf(stderr, "\n[%s]                         - norm1: %.3f sec", __func__, model_stats->time_norm1);
             fprintf(stderr, "\n[%s]                         - ff: %.3f sec", __func__, model_stats->time_ff);
+            fprintf(stderr, "\n[%s]                             - gate_up+silu: %.3f sec", __func__, model_stats->time_ff_gmlp);
+            fprintf(stderr, "\n[%s]                             - down_proj: %.3f sec", __func__, model_stats->time_ff_down);
             fprintf(stderr, "\n[%s]                         - norm2: %.3f sec", __func__, model_stats->time_norm2);
             fprintf(stderr, "\n[%s]                     - tx_decoder: %.3f sec", __func__, model_stats->time_tx_decoder);
             fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);

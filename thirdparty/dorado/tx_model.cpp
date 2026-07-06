@@ -1,4 +1,5 @@
 #include "tx_model.h"
+#include "misc.h"
 #include "quant.h"
 
 #include <ATen/Functions.h>
@@ -237,13 +238,13 @@ static at::Tensor tx_attn_tail(tx_model_t *m, const tx_layer_t *L, torch::Tensor
             attn_output.slice(-2, qb, qe) = torch::scaled_dot_product_attention(q, k, v, opt_mask);
         }
     }
-    if (on_gpu) torch::cuda::synchronize(qkv.device().index());
+    STAGE_SYNC(on_gpu, qkv.device().index());
     b = realtime();
     stats->time_sdp_attn += b - a;
 
     a = realtime();
     auto out = qlinear({L->out_proj_w, L->out_proj_b, lq_op, stats->calib_stats, L->cl_out_proj}, attn_output_ntc);
-    if (on_gpu) torch::cuda::synchronize(qkv.device().index());
+    STAGE_SYNC(on_gpu, qkv.device().index());
     b = realtime();
     stats->time_out_proj += b - a;
     return out;
@@ -261,13 +262,13 @@ static at::Tensor tx_mha_forward(tx_model_t *m, const tx_layer_t *L, torch::Tens
     a = realtime();
     auto qkv = qlinear({L->wqkv_w, at::Tensor(), lq_wqkv, stats->calib_stats, L->cl_wqkv}, x)
                    .view({N, T, 3, L->nhead, L->head_dim});
-    if (on_gpu) torch::cuda::synchronize(x.device().index());
+    STAGE_SYNC(on_gpu, x.device().index());
     b = realtime();
     stats->time_mm += b - a;
 
     a = realtime();
     qkv = tx_rotary(L, qkv, stats);
-    if (on_gpu) torch::cuda::synchronize(x.device().index());
+    STAGE_SYNC(on_gpu, x.device().index());
     b = realtime();
     stats->time_rotary_emb += b - a;
 
@@ -280,7 +281,7 @@ static at::Tensor tx_mha_forward_quant(tx_model_t *m, const tx_layer_t *L, const
     const bool on_gpu = !x.tensor.device().is_cpu();
     double a = realtime();
     auto qkv = fluke_qkv_rotary_i8(L->attn_backend, x, L->qw_wqkv, L->rot_sin, L->rot_cos);
-    if (on_gpu) torch::cuda::synchronize(x.tensor.device().index());
+    STAGE_SYNC(on_gpu, x.tensor.device().index());
     stats->time_mm += realtime() - a;
     return tx_attn_tail(m, L, qkv, lq_op);
 }
@@ -290,6 +291,9 @@ static at::Tensor tx_gmlp_forward(const tx_layer_t *L, torch::Tensor x, tx_stats
     const layer_quant_t *lq_fc2 = lq_lookup(stats, L->ff_prefix, ".fc2");
     calib_stats_t *cs = stats ? stats->calib_stats : nullptr;
 
+    const bool on_gpu = !x.device().is_cpu();
+    const int dev = x.device().index();
+    double t0 = realtime();
     torch::Tensor t = qlinear({L->fc1_w, at::Tensor(), lq_fc1, cs, L->cl_fc1}, x);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
@@ -301,13 +305,29 @@ static at::Tensor tx_gmlp_forward(const tx_layer_t *L, torch::Tensor x, tx_stats
     const auto chunks = t.chunk(2, -1);
     t = functional::silu(chunks[1]).mul_(chunks[0]);
 #endif
-    return qlinear({L->fc2_w, at::Tensor(), lq_fc2, cs, L->cl_fc2}, t);
+    STAGE_SYNC(on_gpu, dev);
+    if (stats) stats->time_ff_gmlp += realtime() - t0;
+
+    t0 = realtime();
+    auto out = qlinear({L->fc2_w, at::Tensor(), lq_fc2, cs, L->cl_fc2}, t);
+    STAGE_SYNC(on_gpu, dev);
+    if (stats) stats->time_ff_down += realtime() - t0;
+    return out;
 }
 
 static at::Tensor tx_gmlp_forward_quant(const tx_layer_t *L, const tensor_quant_t &x, tx_stats_t *stats) {
+    const int dev = x.tensor.device().index();
+    double t0 = realtime();
     auto g = fluke_gated_mlp_i8(L->ff_backend, x, L->qw_gate, L->qw_up);
+    STAGE_SYNC(true, dev);
+    if (stats) stats->time_ff_gmlp += realtime() - t0;
+
     const layer_quant_t *lq_fc2 = lq_lookup(stats, L->ff_prefix, ".fc2");
-    return qlinear({L->fc2_w, at::Tensor(), lq_fc2, nullptr, nullptr}, g);
+    t0 = realtime();
+    auto out = qlinear({L->fc2_w, at::Tensor(), lq_fc2, nullptr, nullptr}, g);
+    STAGE_SYNC(true, dev);
+    if (stats) stats->time_ff_down += realtime() - t0;
+    return out;
 }
 
 static void tx_encoder_forward(tx_model_t *m, const tx_layer_t *L, torch::Tensor &x) {
@@ -333,25 +353,25 @@ static void tx_encoder_forward(tx_model_t *m, const tx_layer_t *L, torch::Tensor
 
     a = realtime();
     auto attn = tx_mha_forward(m, L, x);
-    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    STAGE_SYNC(!x.device().is_cpu(), x.device().index());
     b = realtime();
     stats->time_self_attn += b - a;
 
     a = realtime();
     run_norm(L->norm1_w, attn);
-    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    STAGE_SYNC(!x.device().is_cpu(), x.device().index());
     b = realtime();
     stats->time_norm1 += b - a;
 
     a = realtime();
     auto f = tx_gmlp_forward(L, x, stats);
-    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    STAGE_SYNC(!x.device().is_cpu(), x.device().index());
     b = realtime();
     stats->time_ff += b - a;
 
     a = realtime();
     run_norm(L->norm2_w, f);
-    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    STAGE_SYNC(!x.device().is_cpu(), x.device().index());
     b = realtime();
     stats->time_norm2 += b - a;
 }
@@ -366,7 +386,7 @@ static void tx_encoder_forward_quant(tx_model_t *m, const tx_layer_t *L, tensor_
 
     t0 = realtime();
     auto attn = tx_mha_forward_quant(m, L, a).contiguous();
-    torch::cuda::synchronize(dev);
+    STAGE_SYNC(true, dev);
     t1 = realtime(); stats->time_self_attn += t1 - t0;
 
     const int n_tokens = attn.size(0) * attn.size(1);
@@ -374,18 +394,18 @@ static void tx_encoder_forward_quant(tx_model_t *m, const tx_layer_t *L, tensor_
     t0 = realtime();
     fluke_rmsnorm_quant_int8_gpu(attn.data_ptr(), L->norm1_w.contiguous().data_ptr(),
                                     a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
-    torch::cuda::synchronize(dev);
+    STAGE_SYNC(true, dev);
     t1 = realtime(); stats->time_norm1 += t1 - t0;
 
     t0 = realtime();
     auto f = tx_gmlp_forward_quant(L, a, stats).contiguous();
-    torch::cuda::synchronize(dev);
+    STAGE_SYNC(true, dev);
     t1 = realtime(); stats->time_ff += t1 - t0;
 
     t0 = realtime();
     fluke_rmsnorm_quant_int8_gpu(f.data_ptr(), L->norm2_w.contiguous().data_ptr(),
                                     a.tensor.data_ptr(), a.scale.data_ptr(), n_tokens, K, alpha, eps);
-    torch::cuda::synchronize(dev);
+    STAGE_SYNC(true, dev);
     t1 = realtime(); stats->time_norm2 += t1 - t0;
 }
 #endif
@@ -398,7 +418,7 @@ at::Tensor tx_model_forward(tx_model_t *m, at::Tensor x) {
 
     a = realtime();
     at::Tensor h = conv_stack_forward(m->convs, x);
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     stats->time_conv_stack += b - a;
 
@@ -413,7 +433,7 @@ at::Tensor tx_model_forward(tx_model_t *m, at::Tensor x) {
     {
         for (auto &L : m->layers) tx_encoder_forward(m, &L, h);
     }
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     stats->time_tx_encoder += b - a;
 
@@ -424,14 +444,14 @@ at::Tensor tx_model_forward(tx_model_t *m, at::Tensor x) {
         const int64_t N = h.size(0), T = h.size(1), C = h.size(2);
         h = (h.matmul(m->up_w.t()) + m->up_b).reshape({N, m->scale_factor * T, C});
     }
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     stats->time_tx_decoder += b - a;
 
     // CRF (weight pre-scaled at load; matmul to match torch::nn::Linear, bias-free)
     a = realtime();
     h = h.matmul(m->crf_w.t());
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     stats->time_crf += b - a;
 

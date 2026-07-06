@@ -89,6 +89,10 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     MALLOC_CHK(core);
     core->opt = opt;
 
+    // Per-stage timing syncs only in the non-streaming (profiling) path; the streaming path is the
+    // performant setting and skips them (correctness holds via CUDA stream ordering).
+    g_stage_sync = (opt.flag & SLORADO_STREAM) == 0;
+
     if (opt.batch_size == 0) {
         size_t avg_bytes = estimate_bytes_per_read(slow5file);
         core->opt.batch_size = avg_bytes > 0

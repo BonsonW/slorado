@@ -45,6 +45,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+// Per-stage timing syncs on by default; init_core sets this false for the streaming path.
+bool g_stage_sync = true;
+
 double realtime(void) {
     struct timeval tp;
     gettimeofday(&tp, NULL);

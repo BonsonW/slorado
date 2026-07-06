@@ -99,9 +99,7 @@ static void call_chunks(
         g_quant_active = true;
     }
     auto scores = model_forward(runner, input);
-#ifdef USE_GPU
-    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
-#endif
+    STAGE_SYNC(runner->device != "cpu", runner->device_idx);
     ts->time_infer += realtime();
 
     if (core->sensitivity_stats) {
@@ -111,9 +109,7 @@ static void call_chunks(
     auto scores_TNC = scores;
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
     scores_TNC = scores_TNC.transpose(0, 1).contiguous();
-#ifdef USE_GPU
-    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
-#endif
+    STAGE_SYNC(runner->device != "cpu", runner->device_idx);
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);

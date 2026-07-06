@@ -142,9 +142,7 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
     // conv stack: [N, C_in, T] -> [N, T, C_out]
     a = realtime();
     x = conv_stack_forward(m->convs, x);
-#ifdef USE_GPU
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_conv_stack += b - a;
 
@@ -160,27 +158,21 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
                                     /*train*/ false, /*bidirectional*/ false, /*batch_first*/ true));
     }
     if (m->lstms.size() & 1) x = x.flip(1);
-#ifdef USE_GPU
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_rnns += b - a;
 
     // CRF linear
     a = realtime();
     x = at::linear(x, m->linear_w, m->linear_b);
-#ifdef USE_GPU
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_crf_1 += b - a;
 
     if (m->clamp) {
         a = realtime();
         x.clamp_(m->clamp_min, m->clamp_max);
-#ifdef USE_GPU
-        if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+        STAGE_SYNC(on_gpu, dev_idx);
         b = realtime();
         m->stats->time_clamp += b - a;
     }
@@ -365,7 +357,7 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
     if (L->cl_up_ih) cs->accumulate(L->cl_up_ih, dn_ih.view({T, N, K}).transpose(0, 1).contiguous());
 
     auto ih = at::linear(fake_quant(dn_ih, lq_up_ih.act), up_w_ih, L->up_b_ih).view({T, N, 4 * C});
-    if (on_gpu) torch::cuda::synchronize(x.device().index());
+    STAGE_SYNC(on_gpu, x.device().index());
     b = realtime();
     stats->time_flstm_precompute += b - a;
 
@@ -426,20 +418,25 @@ static at::Tensor flstm_layer_forward_quant(const flstm_model_t *m, const flstm_
     flstm_bufs_t &bufs = get_flstm_bufs(qc, N, T, C, K, x.options());
     double a, b;
 
-    // ih precompute over the whole sequence, into the persistent x_down buffer.
+    // ih precompute over the whole sequence, into the persistent x_down [T, N, K] buffer.
     a = realtime();
-    auto x_tnc = x.transpose(0, 1).contiguous();     // [T, N, C] natural (snapshots the input view)
-    auto x_flat = x_tnc.view({T * N, C});
-    auto x_down_flat = bufs.x_down.view({T * N, K});
     if (x.scalar_type() == at::kChar) {
-        // int8 input (chained hidden from the previous layer): int8 down-projection.
+        // int8 input (chained hidden from the previous layer). The previous layer's output is a
+        // [N,T,C] view over the ring's contiguous [T,N,C]; transpose(0,1) recovers that native
+        // layout, so .contiguous() is a no-op (no copy). Then the int8 down-projection.
+        auto x_flat = x.transpose(0, 1).contiguous().view({T * N, C});
+        auto x_down_flat = bufs.x_down.view({T * N, K});
         fluke_flstm_down_proj_i8_into(L->backend, x_down_flat, x_flat, bufs.x_scale, L->qw_dn_ih);
     } else {
-        // fp16 input (first layer = conv output): plain fp16 GEMM. A/B tested vs fluke-quant + int8
-        // GEMM — speed-neutral but fp16 avoids input quant error, so it wins. (Matches fp8 ref L0.)
-        at::mm_out(x_down_flat, x_flat, L->dn_w_ih.t());
+        // fp16 input (first layer = conv output, physically [N,C,T]). The old path did
+        // x.transpose(0,1).contiguous() -> [T,N,C], but with C innermost at stride T that copy is
+        // fully uncoalesced (~85ms/batch, ~90% of the whole precompute). Instead contract C on the
+        // NATIVE [N,C,T] layout with a batched matmul (coalesced), then only the 8x-smaller [N,K,T]
+        // output is reshaped to the recurrence's [T,N,K].
+        auto x_down_nkt = at::matmul(L->dn_w_ih, x.transpose(1, 2));   // [K,C] x [N,C,T] -> [N,K,T]
+        bufs.x_down.copy_(x_down_nkt.permute({2, 0, 1}));             // -> [T,N,K]
     }
-    if (!x.device().is_cpu()) torch::cuda::synchronize(dev);
+    STAGE_SYNC(!x.device().is_cpu(), dev);
     b = realtime();
     stats->time_flstm_precompute += b - a;
 
@@ -452,7 +449,7 @@ static at::Tensor flstm_layer_forward_quant(const flstm_model_t *m, const flstm_
         bufs.rec = fluke_flstm_rec_create(L->backend, N, T, (int)m->flstms.size());
     fluke_flstm_run_recurrence(bufs.rec, layer_idx, bufs.hh_all, bufs.cell, bufs.x_down,
                                L->qw_dn_hh.tensor, L->hh_comb_scale, L->gate_w, L->gate_b, reverse);
-    if (!x.device().is_cpu()) torch::cuda::synchronize(dev);
+    STAGE_SYNC(!x.device().is_cpu(), dev);
     b = realtime();
     stats->time_flstm_recurrence += b - a;
 
@@ -471,9 +468,7 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
 
     a = realtime();
     x = conv_stack_forward(m->convs, x);
-#ifdef USE_GPU
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_conv_stack += b - a;
 
@@ -494,27 +489,21 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
         }
         if (m->flstms.size() & 1) x = x.flip(1);
     }
-#ifdef USE_GPU
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_rnns += b - a;
 
     // decomposed CRF: linear1 then tanh-scaled linear2 (scale = LinearCRFImpl::scale = 5)
     a = realtime();
     x = at::linear(x, m->linear1_w, m->linear1_b);
-#ifdef USE_GPU
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_crf_1 += b - a;
 
     a = realtime();
     auto scores = at::linear(x, m->linear2_w);
     x = torch::tanh(scores) * 5;
-#ifdef USE_GPU
-    if (on_gpu) torch::cuda::synchronize(dev_idx);
-#endif
+    STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_crf_2 += b - a;
 

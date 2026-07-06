@@ -186,6 +186,8 @@ typedef struct {
     double time_self_attn;
     double time_norm1;
     double time_ff;
+    double time_ff_gmlp;   // ff sub: gate+up GEMM + SiLU (fluke dual-gemm-silu / torch fc1+silu)
+    double time_ff_down;   // ff sub: fc2 down projection
     double time_norm2;
 
     double time_mm;
