@@ -21,18 +21,47 @@ using Slice = torch::indexing::Slice;
 
 // =============================== procedural transformer model ===================================
 
-tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, const std::string &quant_mode, int nthreads) {
-    if (model_stats) {
-        model_stats->use_flash = use_flash;
-        model_stats->nthreads = nthreads;
-        if (model_stats->quant_config) build_quant_methods(model_stats->quant_methods, *model_stats->quant_config);
+// Probe whether flash attention actually runs on this device/dtype/head_dim by executing a tiny
+// forward pass and catching failures. Returns false on CPU, unsupported builds, or any throw.
+static bool flash_attn_supported(int head_dim, const torch::TensorOptions &options) {
+#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
+    if (options.device().is_cpu()) return false;
+    try {
+        auto probe_opts = options.dtype(torch::kHalf);
+        auto q = torch::zeros({1, 8, 1, head_dim}, probe_opts);
+        auto k = torch::zeros({1, 8, 1, head_dim}, probe_opts);
+        auto v = torch::zeros({1, 8, 1, head_dim}, probe_opts);
+        float softmax_scale = 1.0 / std::sqrt((double)head_dim);
+        auto res = at::_flash_attention_forward(
+            q, k, v, std::nullopt, std::nullopt, 8, 8,
+            0.0, false, false, softmax_scale, -1, -1, std::nullopt, std::nullopt);
+        std::get<0>(res).sum().item(); // force execution so lazy/async errors surface here
+        return true;
+    } catch (const std::exception &e) {
+        INFO("flash attention probe failed, falling back to SDPA: %s", e.what());
+        return false;
     }
+#else
+    (void)head_dim; (void)options;
+    return false;
+#endif
+}
 
+tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, const std::string &quant_mode, int nthreads) {
     tx_model_t *m = new tx_model_t();
     m->stats = model_stats;
     const auto &txp = config.tx.tx;
     const int depth = txp.depth;
     const int d_model = txp.d_model, nhead = txp.nhead, head_dim = d_model / nhead;
+
+    // flash requested (default on) is validated by a one-shot probe against this device/dtype/head_dim.
+    if (use_flash) use_flash = flash_attn_supported(head_dim, options);
+
+    if (model_stats) {
+        model_stats->use_flash = use_flash;
+        model_stats->nthreads = nthreads;
+        if (model_stats->quant_config) build_quant_methods(model_stats->quant_methods, *model_stats->quant_config);
+    }
 
     const auto dtype = options.dtype().toScalarType();
     const auto dev = options.device();

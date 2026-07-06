@@ -96,7 +96,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -p INT                      overlap [model config or %d]\n", DEFAULT_OVERLAP);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
-    fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
+    fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance; auto-detected at model load, --flash=no forces off [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
     fprintf(fp_help, "  --stream=yes|no             use the streaming (pipelined) basecalling path [%s]\n", (opt.flag & SLORADO_STREAM) ? "yes" : "no");
     fprintf(fp_help, "  --mod STR                   detect modified bases (5mCG_5hmCG@v3) [%s]\n", opt.mod ? opt.mod : "NULL");
     fprintf(fp_help, "  --calibrate FILE            write per-layer quantization calibration stats to FILE\n");

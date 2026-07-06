@@ -456,5 +456,9 @@ void init_opt(opt_t* opt) {
     opt->mod = NULL;
     opt->quant = NULL;
 
+    // flash attention on by default; a load-time probe downgrades to SDPA if unsupported.
+    // --flash=no disables it outright and skips the probe.
+    opt->flag |= SLORADO_FLASH;
+
     // opt->flag |= SLORADO_SAM;
 }
