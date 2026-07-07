@@ -336,68 +336,76 @@ int basecaller_main(int argc, char* argv[]) {
 
     fprintf(stderr, "[%s] total entries: %ld", __func__, (long)core->total_reads);
     fprintf(stderr, "\n[%s] total bytes: %.1f M", __func__, core->sum_bytes/(float)(1000*1000));
+    
+    if (!(opt.flag & SLORADO_STREAM)) {
+        double total_time = realtime() - realtime0;
+        double pct_denom = total_time > 0.0 ? total_time : 1.0;
+        #define PCT(t) (100.0 * (t) / pct_denom)
 
-    fprintf(stderr, "\n[%s] model initialization: %.3f sec", __func__, core->time_init_runners);
-    fprintf(stderr, "\n[%s] data loading: %.3f sec", __func__, core->time_load_db);
-    fprintf(stderr, "\n[%s] data processing: %.3f sec", __func__, core->time_process_db);
-    fprintf(stderr, "\n[%s]     - parse: %.3f sec", __func__, core->time_parse);
-    fprintf(stderr, "\n[%s]     - preprocess: %.3f sec", __func__, core->time_preproc);
-    fprintf(stderr, "\n[%s]     - runners: %.3f sec", __func__, core->time_runners);
-    fprintf(stderr, "\n[%s]          - synchronisation: %.3f sec", __func__, core->time_sync);
+        fprintf(stderr, "\n[%s] model initialization: %.3f sec (%.1f%%)", __func__, core->time_init_runners, PCT(core->time_init_runners));
+        fprintf(stderr, "\n[%s] data loading: %.3f sec (%.1f%%)", __func__, core->time_load_db, PCT(core->time_load_db));
+        fprintf(stderr, "\n[%s] data processing: %.3f sec (%.1f%%)", __func__, core->time_process_db, PCT(core->time_process_db));
+        fprintf(stderr, "\n[%s]     - parse: %.3f sec (%.1f%%)", __func__, core->time_parse, PCT(core->time_parse));
+        fprintf(stderr, "\n[%s]     - preprocess: %.3f sec (%.1f%%)", __func__, core->time_preproc, PCT(core->time_preproc));
+        fprintf(stderr, "\n[%s]     - runners: %.3f sec (%.1f%%)", __func__, core->time_runners, PCT(core->time_runners));
+        fprintf(stderr, "\n[%s]          - synchronisation: %.3f sec (%.1f%%)", __func__, core->time_sync, PCT(core->time_sync));
 
-    auto runner_stats = *core->runner_stats;
-    for (size_t i = 0; i < runner_stats.size(); ++i) {
-        fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec", __func__, i,
-            runner_stats[i]->time_basecall +
-            runner_stats[i]->time_accept +
-            runner_stats[i]->time_modcall
-        );
-        fprintf(stderr, "\n[%s]             - accept: %.3f sec", __func__, runner_stats[i]->time_accept);
-        fprintf(stderr, "\n[%s]             - basecall: %.3f sec", __func__, runner_stats[i]->time_basecall);
-        fprintf(stderr, "\n[%s]                 - inference: %.3f sec", __func__, runner_stats[i]->time_infer);
-        if (core->model_config->family == MODEL_FAMILY_TX) { // tx
-            tx_stats_t *model_stats = (tx_stats_t *)runner_stats[i]->model_stats;
-            fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
-            fprintf(stderr, "\n[%s]                     - tx_encoder: %.3f sec", __func__, model_stats->time_tx_encoder);
-            fprintf(stderr, "\n[%s]                         - self_attn: %.3f sec", __func__, model_stats->time_self_attn);
-            fprintf(stderr, "\n[%s]                             - mm: %.3f sec", __func__, model_stats->time_mm);
-            fprintf(stderr, "\n[%s]                             - rotary_emb: %.3f sec", __func__, model_stats->time_rotary_emb);
-            fprintf(stderr, "\n[%s]                             - sdp_attn: %.3f sec", __func__, model_stats->time_sdp_attn);
-            fprintf(stderr, "\n[%s]                             - out_proj: %.3f sec", __func__, model_stats->time_out_proj);
-            fprintf(stderr, "\n[%s]                         - norm1: %.3f sec", __func__, model_stats->time_norm1);
-            fprintf(stderr, "\n[%s]                         - ff: %.3f sec", __func__, model_stats->time_ff);
-            fprintf(stderr, "\n[%s]                             - gate_up+silu: %.3f sec", __func__, model_stats->time_ff_gmlp);
-            fprintf(stderr, "\n[%s]                             - down_proj: %.3f sec", __func__, model_stats->time_ff_down);
-            fprintf(stderr, "\n[%s]                         - norm2: %.3f sec", __func__, model_stats->time_norm2);
-            fprintf(stderr, "\n[%s]                     - tx_decoder: %.3f sec", __func__, model_stats->time_tx_decoder);
-            fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
-        } else { // lstm
-            lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
-            fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
-            fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
-            if (core->model_config->lstm_inner_dim >= 0) {
-                fprintf(stderr, "\n[%s]                         - precompute: %.3f sec", __func__, model_stats->time_flstm_precompute);
-                fprintf(stderr, "\n[%s]                         - recurrence: %.3f sec", __func__, model_stats->time_flstm_recurrence);
+        auto runner_stats = *core->runner_stats;
+        for (size_t i = 0; i < runner_stats.size(); ++i) {
+            double runner_total = runner_stats[i]->time_basecall +
+                runner_stats[i]->time_accept +
+                runner_stats[i]->time_modcall;
+            fprintf(stderr, "\n[%s]          - model runner [%zu]: %.3f sec (%.1f%% util)", __func__, i,
+                runner_total, PCT(runner_total));
+            fprintf(stderr, "\n[%s]             - accept: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_accept, PCT(runner_stats[i]->time_accept));
+            fprintf(stderr, "\n[%s]             - basecall: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_basecall, PCT(runner_stats[i]->time_basecall));
+            fprintf(stderr, "\n[%s]                 - inference: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_infer, PCT(runner_stats[i]->time_infer));
+            if (core->model_config->family == MODEL_FAMILY_TX) { // tx
+                tx_stats_t *model_stats = (tx_stats_t *)runner_stats[i]->model_stats;
+                fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec (%.1f%% util)", __func__, model_stats->time_conv_stack, PCT(model_stats->time_conv_stack));
+                fprintf(stderr, "\n[%s]                     - tx_encoder: %.3f sec (%.1f%% util)", __func__, model_stats->time_tx_encoder, PCT(model_stats->time_tx_encoder));
+                fprintf(stderr, "\n[%s]                         - self_attn: %.3f sec (%.1f%% util)", __func__, model_stats->time_self_attn, PCT(model_stats->time_self_attn));
+                fprintf(stderr, "\n[%s]                             - mm: %.3f sec (%.1f%% util)", __func__, model_stats->time_mm, PCT(model_stats->time_mm));
+                fprintf(stderr, "\n[%s]                             - rotary_emb: %.3f sec (%.1f%% util)", __func__, model_stats->time_rotary_emb, PCT(model_stats->time_rotary_emb));
+                fprintf(stderr, "\n[%s]                             - sdp_attn: %.3f sec (%.1f%% util)", __func__, model_stats->time_sdp_attn, PCT(model_stats->time_sdp_attn));
+                fprintf(stderr, "\n[%s]                             - out_proj: %.3f sec (%.1f%% util)", __func__, model_stats->time_out_proj, PCT(model_stats->time_out_proj));
+                fprintf(stderr, "\n[%s]                         - norm1: %.3f sec (%.1f%% util)", __func__, model_stats->time_norm1, PCT(model_stats->time_norm1));
+                fprintf(stderr, "\n[%s]                         - ff: %.3f sec (%.1f%% util)", __func__, model_stats->time_ff, PCT(model_stats->time_ff));
+                fprintf(stderr, "\n[%s]                             - gate_up+silu: %.3f sec (%.1f%% util)", __func__, model_stats->time_ff_gmlp, PCT(model_stats->time_ff_gmlp));
+                fprintf(stderr, "\n[%s]                             - down_proj: %.3f sec (%.1f%% util)", __func__, model_stats->time_ff_down, PCT(model_stats->time_ff_down));
+                fprintf(stderr, "\n[%s]                         - norm2: %.3f sec (%.1f%% util)", __func__, model_stats->time_norm2, PCT(model_stats->time_norm2));
+                fprintf(stderr, "\n[%s]                     - tx_decoder: %.3f sec (%.1f%% util)", __func__, model_stats->time_tx_decoder, PCT(model_stats->time_tx_decoder));
+                fprintf(stderr, "\n[%s]                     - crf: %.3f sec (%.1f%% util)", __func__, model_stats->time_crf, PCT(model_stats->time_crf));
+            } else { // lstm
+                lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
+                fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec (%.1f%% util)", __func__, model_stats->time_conv_stack, PCT(model_stats->time_conv_stack));
+                fprintf(stderr, "\n[%s]                     - rnns: %.3f sec (%.1f%% util)", __func__, model_stats->time_rnns, PCT(model_stats->time_rnns));
+                if (core->model_config->lstm_inner_dim >= 0) {
+                    fprintf(stderr, "\n[%s]                         - precompute: %.3f sec (%.1f%% util)", __func__, model_stats->time_flstm_precompute, PCT(model_stats->time_flstm_precompute));
+                    fprintf(stderr, "\n[%s]                         - recurrence: %.3f sec (%.1f%% util)", __func__, model_stats->time_flstm_recurrence, PCT(model_stats->time_flstm_recurrence));
+                }
+                fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec (%.1f%% util)", __func__, model_stats->time_crf_1, PCT(model_stats->time_crf_1));
+                fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec (%.1f%% util)", __func__, model_stats->time_crf_2, PCT(model_stats->time_crf_2));
+                fprintf(stderr, "\n[%s]                     - clamp: %.3f sec (%.1f%% util)", __func__, model_stats->time_clamp, PCT(model_stats->time_clamp));
             }
-            fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
-            fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
-            fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
+            fprintf(stderr, "\n[%s]                 - decode: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_decode, PCT(runner_stats[i]->time_decode));
+            fprintf(stderr, "\n[%s]             - modcall: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_modcall, PCT(runner_stats[i]->time_modcall));
+            // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
         }
-        fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
-        fprintf(stderr, "\n[%s]             - modcall: %.3f sec", __func__, runner_stats[i]->time_modcall);
-        // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
+        fprintf(stderr, "\n[%s]     - postprocess: %.3f sec (%.1f%%)", __func__, core->time_postproc, PCT(core->time_postproc));
+        fprintf(stderr, "\n[%s]     - mod_preprocess: %.3f sec (%.1f%%)", __func__, core->time_preproc_mod, PCT(core->time_preproc_mod));
+        // fprintf(stderr, "\n[%s]         - seq_to_sig_map: %.3f sec", __func__, core->time_seq_to_sig_map);
+        // fprintf(stderr, "\n[%s]         - seq_to_ints: %.3f sec", __func__, core->time_seq_to_ints);
+        // fprintf(stderr, "\n[%s]         - populate_hits_sig: %.3f sec", __func__, core->time_populate_hits_sig);
+        // fprintf(stderr, "\n[%s]         - populate_signal: %.3f sec", __func__, core->time_populate_signal);
+        // fprintf(stderr, "\n[%s]         - get_minimal_encoding_skips: %.3f sec", __func__, core->time_get_minimal_encoding_skips);
+        // fprintf(stderr, "\n[%s]         - populate_encoded_kmer: %.3f sec", __func__, core->time_populate_encoded_kmer);
+        fprintf(stderr, "\n[%s]     - mod_postprocess: %.3f sec (%.1f%%)", __func__, core->time_postproc_mod, PCT(core->time_postproc_mod));
+        fprintf(stderr, "\n[%s] data output: %.3f sec (%.1f%%)", __func__, core->time_output, PCT(core->time_output));
+        fprintf(stderr, "\n[%s] data free: %.3f sec (%.1f%%)", __func__, core->time_free_db, PCT(core->time_free_db));
+
+        #undef PCT
     }
-    fprintf(stderr, "\n[%s]     - postprocess: %.3f sec", __func__, core->time_postproc);
-    fprintf(stderr, "\n[%s]     - mod_preprocess: %.3f sec", __func__, core->time_preproc_mod);
-    // fprintf(stderr, "\n[%s]         - seq_to_sig_map: %.3f sec", __func__, core->time_seq_to_sig_map);
-    // fprintf(stderr, "\n[%s]         - seq_to_ints: %.3f sec", __func__, core->time_seq_to_ints);
-    // fprintf(stderr, "\n[%s]         - populate_hits_sig: %.3f sec", __func__, core->time_populate_hits_sig);
-    // fprintf(stderr, "\n[%s]         - populate_signal: %.3f sec", __func__, core->time_populate_signal);
-    // fprintf(stderr, "\n[%s]         - get_minimal_encoding_skips: %.3f sec", __func__, core->time_get_minimal_encoding_skips);
-    // fprintf(stderr, "\n[%s]         - populate_encoded_kmer: %.3f sec", __func__, core->time_populate_encoded_kmer);
-    fprintf(stderr, "\n[%s]     - mod_postprocess: %.3f sec", __func__, core->time_postproc_mod);
-    fprintf(stderr, "\n[%s] data output: %.3f sec", __func__, core->time_output);
-    fprintf(stderr, "\n[%s] data free: %.3f sec", __func__, core->time_free_db);
     fprintf(stderr,"\n");
 
     // free the core data structure
