@@ -182,6 +182,27 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->time_init_runners += realtime();
     LOG_DEBUG("%s", "successfully initialized runners");
 
+    // The auto batch-size probe (trial_fits) runs full model_forward passes, which accumulate into
+    // the per-stage model_stats timers (time_tx_encoder, time_ff, ...). Those probe forwards are
+    // init cost (counted in time_init_runners), not real basecalling, so zero the per-stage timers
+    // here -- otherwise they exceed the real-loop time_infer and the reported breakdown is nonsense.
+    // Only the timing fields are cleared; calib/quant config pointers are preserved.
+    for (runner_stat_t *ts : *core->runner_stats) {
+        ts->time_accept = ts->time_basecall = ts->time_infer = ts->time_decode = ts->time_modcall = 0.0;
+        ts->total_dp = 0;
+        if (ts->model_stats == nullptr) continue;
+        if (core->model_config->family == MODEL_FAMILY_TX) {
+            tx_stats_t *m = (tx_stats_t *)ts->model_stats;
+            m->time_conv_stack = m->time_tx_encoder = m->time_tx_decoder = m->time_crf = 0.0;
+            m->time_self_attn = m->time_norm1 = m->time_ff = m->time_ff_gmlp = m->time_ff_down = m->time_norm2 = 0.0;
+            m->time_mm = m->time_rotary_emb = m->time_sdp_attn = m->time_out_proj = 0.0;
+        } else {
+            lstm_stats_t *m = (lstm_stats_t *)ts->model_stats;
+            m->time_conv_stack = m->time_rnns = m->time_crf_1 = m->time_crf_2 = m->time_clamp = 0.0;
+            m->time_flstm_precompute = m->time_flstm_recurrence = 0.0;
+        }
+    }
+
     core->sum_bytes=0;
     core->total_reads=0; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
 
