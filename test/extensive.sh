@@ -57,16 +57,8 @@ SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_read
 # tools (will be automatically downloaded if not present)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOOLS_DIR=${SCRIPT_DIR}/tools
-SAMTOOLS_VERSION=1.20
-DATAMASH_VERSION=1.8
-MINIMAP2_VERSION=2.24
-MINIMOD_VERSION=0.5.0
-
-export SAMTOOLS=${SAMTOOLS:-${TOOLS_DIR}/bin/samtools}
-export DATAMASH=${DATAMASH:-${TOOLS_DIR}/bin/datamash}
-export MINIMAP2=${MINIMAP2:-${TOOLS_DIR}/bin/minimap2}
-export MINIMOD=${MINIMOD:-${TOOLS_DIR}/bin/minimod}
+# thirdparty tools: versions, $MINIMAP2/$DATAMASH/$SAMTOOLS/$MINIMOD, download fns + install_tools()
+source "${SCRIPT_DIR}/../scripts/install_tools.sh"
 
 # =========================================================================================================
 # test data - this will be automatically downloaded if not present
@@ -182,114 +174,6 @@ download_test_data() {
 	rm -f $tar_path
 }
 
-download_minimap2() {
-    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
-    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
-
-    tarball=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}.tar.bz2
-    src_dir=${TOOLS_DIR}/src/minimap2-${MINIMAP2_VERSION}
-
-    test -e $tarball && rm -f $tarball
-    test -d $src_dir && rm -rf $src_dir
-
-    wget https://github.com/lh3/minimap2/releases/download/v${MINIMAP2_VERSION}/minimap2-${MINIMAP2_VERSION}.tar.bz2 -O $tarball || die "Downloading minimap2 failed"
-    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting minimap2 failed"
-    (
-        cd $src_dir || exit 1
-        arch=$(uname -m)
-        case "$arch" in
-            aarch64|arm64)
-                # Disable x86 SSE path and build with ARM NEON on 64-bit ARM.
-                make -j $NTHREADS arm_neon=1 aarch64=1 || exit 1
-                ;;
-            armv7l|armv8l)
-                # Disable x86 SSE path and build with ARM NEON on 32-bit ARM.
-                make -j $NTHREADS arm_neon=1 || exit 1
-                ;;
-            *)
-                make -j $NTHREADS || exit 1
-                ;;
-        esac
-    ) || die "Building minimap2 failed"
-    cp ${src_dir}/minimap2 ${TOOLS_DIR}/bin/minimap2 || die "Installing minimap2 failed"
-    chmod +x ${TOOLS_DIR}/bin/minimap2 || die "Setting minimap2 permissions failed"
-}
-
-download_minimod() {
-    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
-    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
-
-    tarball=${TOOLS_DIR}/src/minimod-v${MINIMOD_VERSION}-release.tar.gz
-    src_dir=${TOOLS_DIR}/src/minimod-v${MINIMOD_VERSION}
-
-    test -e $tarball && rm -f $tarball
-    test -d $src_dir && rm -rf $src_dir
-
-    wget https://github.com/warp9seq/minimod/releases/download/v${MINIMOD_VERSION}/minimod-v${MINIMOD_VERSION}-release.tar.gz -O $tarball || die "Downloading minimod failed"
-    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting minimod failed"
-    (
-        cd $src_dir || exit 1
-        scripts/install-hts.sh || exit 1
-        make -j $NTHREADS || exit 1
-    ) || die "Building minimod failed"
-    cp ${src_dir}/minimod ${TOOLS_DIR}/bin/minimod || die "Installing minimod failed"
-    chmod +x ${TOOLS_DIR}/bin/minimod || die "Setting minimod permissions failed"
-}
-
-download_samtools() {
-    # reuse existing local samtools if it has already been installed.
-    if test -x ${TOOLS_DIR}/bin/samtools; then
-        export SAMTOOLS=${TOOLS_DIR}/bin/samtools
-        return
-    fi
-
-    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
-    tarball=${TOOLS_DIR}/src/samtools-${SAMTOOLS_VERSION}.tar.bz2
-    src_dir=${TOOLS_DIR}/src/samtools-${SAMTOOLS_VERSION}
-
-    test -e $tarball && rm -f $tarball
-    test -d $src_dir && rm -rf $src_dir
-
-    wget https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2 -O $tarball || die "Downloading samtools failed"
-    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting samtools failed"
-    (
-        cd $src_dir || exit 1
-        ./configure --without-curses --disable-bz2 --disable-lzma --disable-libcurl --disable-plugins || exit 1
-        make -j $NTHREADS || exit 1
-    ) || die "Building samtools failed"
-
-    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
-    cp ${src_dir}/samtools ${TOOLS_DIR}/bin/samtools || die "Installing samtools failed"
-    chmod +x ${TOOLS_DIR}/bin/samtools || die "Setting samtools permissions failed"
-}
-
-download_datamash() {
-    test -d ${TOOLS_DIR}/src || mkdir -p ${TOOLS_DIR}/src || die "Creating ${TOOLS_DIR}/src failed"
-    tarball=${TOOLS_DIR}/src/datamash-${DATAMASH_VERSION}.tar.gz
-    src_dir=${TOOLS_DIR}/src/datamash-${DATAMASH_VERSION}
-
-    test -e $tarball && rm -f $tarball
-    test -d $src_dir && rm -rf $src_dir
-
-    wget https://ftp.gnu.org/gnu/datamash/datamash-${DATAMASH_VERSION}.tar.gz -O $tarball || die "Downloading datamash failed"
-    tar -xf $tarball -C ${TOOLS_DIR}/src || die "Extracting datamash failed"
-    (
-        cd $src_dir || exit 1
-        ./configure --prefix=$(pwd)/../../ || exit 1
-        make -j $NTHREADS || exit 1
-    ) || die "Building datamash failed"
-
-    test -d ${TOOLS_DIR}/bin || mkdir -p ${TOOLS_DIR}/bin || die "Creating ${TOOLS_DIR}/bin failed"
-    if [ -x ${src_dir}/datamash ]; then
-        cp ${src_dir}/datamash ${TOOLS_DIR}/bin/datamash || die "Installing datamash failed"
-    elif [ -x ${src_dir}/src/datamash ]; then
-        cp ${src_dir}/src/datamash ${TOOLS_DIR}/bin/datamash || die "Installing datamash failed"
-    else
-        die "Installing datamash failed (built binary not found)"
-    fi
-    chmod +x ${TOOLS_DIR}/bin/datamash || die "Setting datamash permissions failed"
-}
-
 download_model() {
     test -e $1.zip && rm $1.zip
     test -d $1 && rm -r $1
@@ -388,11 +272,8 @@ echo "Using slorado executable at: $SLORADO"
 echo "********************************************************************"
 echo ""
 
-# check tools
-test -x $MINIMOD || download_minimod
-test -x $MINIMAP2 || download_minimap2
-test -x $SAMTOOLS || download_samtools
-test -x $DATAMASH || download_datamash
+# build/install thirdparty tools (minimap2, datamash, samtools, minimod) into the shared tools dir
+install_tools
 
 $MINIMOD --version > /dev/null || die "minimod is missing"
 $MINIMAP2 --version > /dev/null || die "minimap2 is missing"

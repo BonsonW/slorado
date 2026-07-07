@@ -12,6 +12,8 @@
 # MODELS, then runs accuracy via ./test_acc_ls.sh <ENAME> if all runs succeeded.
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shared thirdparty-tool installer -> $MINIMAP2/$DATAMASH (built into test/tools) + install_tools()
+source "${SCRIPT_DIR}/../install_tools.sh"
 
 # ============================== CONFIG (edit paths here) ==============================
 # basecaller binaries
@@ -109,6 +111,7 @@ done
 
 if [ $FAIL -eq 0 ]; then
     echo "[$PROG] all runs ok -> accuracy on ${ENAME}"
+    install_tools minimap2 datamash   # ensure accuracy tools (built into test/tools if missing)
     OUTBASE="$OUTBASE" REF="$REF" bash "${SCRIPT_DIR}/test_acc_ls.sh" "$ENAME"; arc=$?
     if [ "$DRY" -eq 1 ]; then
         [ $arc -eq 0 ] && echo "=== DRY PASS OK ($PROG): basecall + accuracy pipeline works ===" \
