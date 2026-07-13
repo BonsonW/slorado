@@ -76,6 +76,19 @@ at::Tensor model_forward(runner_t *runner, const at::Tensor &x) {
     return runner->module->forward(x);
 }
 
+// Split forward for the streaming pipeline: conv+LSTM (pre-CRF) and CRF separately. Only the plain
+// LSTM (fast/hac v5) family supports the split; returns whether it did (callers fall back to the
+// combined model_forward otherwise).
+bool model_supports_split(const runner_t *runner) {
+    return runner->bc_model && runner->bc_family == MODEL_FAMILY_LSTM;
+}
+at::Tensor model_forward_nocrf(runner_t *runner, const at::Tensor &x) {
+    return lstm_model_forward_nocrf((lstm_model_t *)runner->bc_model, x);
+}
+at::Tensor model_crf(runner_t *runner, const at::Tensor &x) {
+    return lstm_model_crf((lstm_model_t *)runner->bc_model, x);
+}
+
 #if defined(HAVE_CUDA) || defined(HAVE_ROCM)
 // Cross-platform free/total device memory query.
 static void gpu_mem_get_info(size_t *free_b, size_t *total_b) {

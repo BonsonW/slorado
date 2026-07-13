@@ -45,7 +45,8 @@ void free_read_dat(read_dat_t *read_dat);
 // the CPU decode stage so decode runs concurrently with the next batch's GPU inference.
 struct decode_item_t {
     std::vector<chunk_item_t> items;
-    at::Tensor scores;               // host [nchunks, T, C], int8 or fp32
+    at::Tensor dev_scores;           // device [nchunks, T, C] int8/fp32 (decode stage GPU-scans)
+    at::Tensor host_scores;          // host copy (runner-side, after sync) for the CPU beam
     int runner_idx;
 };
 #endif
@@ -57,7 +58,7 @@ typedef struct {
     BoundedQueue<chunk_item_t> *chunk_q;
     BoundedQueue<std::shared_ptr<read_state_t>> *stitch_q;
 #if defined(HAVE_METAL)
-    BoundedQueue<decode_item_t> *decode_q;   // inference stage -> CPU decode stage (Metal overlap)
+    BoundedQueue<decode_item_t> *decode_q;   // inference stage -> GPU-scan+CPU-beam stage (Metal overlap)
 #endif
     // modbase stages (only used when mod)
     BoundedQueue<std::shared_ptr<read_state_t>> *mod_pre_q;
@@ -140,28 +141,92 @@ static void preprocess_stage(pipeline_ctx_t *ctx) {
 static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
+#if defined(HAVE_METAL)
+    runner_stat_t *ts = (*core->runner_stats)[runner_idx];
+    ts->time_wall -= realtime();
+#endif
 
     std::vector<chunk_item_t> buf;
     buf.reserve(gpu_batch);
 
-    auto flush = [&]() {
+#if defined(HAVE_METAL)
+    // Double-buffered: hold one batch's inference result (device scores, CRF+quant enqueued but not
+    // yet synced) as `pending`. When the NEXT batch's conv+LSTM has run (during which pending's
+    // CRF+quant executed on the MPS stream, overlapped), finalize pending cheaply and push it. This
+    // keeps the (~1.5s) CRF+quant+copy off the runner's critical path -- it hides behind inference.
+    decode_item_t pending;
+    bool have_pending = false;
+    // Only the plain-LSTM family can split conv+LSTM from the CRF; others (tx/flstm) use the combined
+    // forward with no double-buffer (the CRF+quant stays inline).
+    const bool split = model_supports_split((*core->runners)[runner_idx]);
+
+    auto infer_and_pipeline = [&]() {
         if (buf.empty()) return;
         std::vector<basecall_chunk_t *> ptrs;
         ptrs.reserve(buf.size());
         for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->chunks[buf[i].chunk_idx]);
 
-#if defined(HAVE_METAL)
-        // Inference only: produce host scores and hand the batch to the CPU decode stage, which runs
-        // concurrently with the next batch's GPU inference (the GPU is freed by moving scores to host).
-        at::Tensor scores = basecall_infer_host(core, runner_idx, ptrs);
-        decode_item_t di;
-        di.items = std::move(buf);
-        di.scores = std::move(scores);
-        di.runner_idx = runner_idx;
-        ctx->decode_q->push(std::move(di));
-        buf = std::vector<chunk_item_t>();   // buf was moved-from; reset
+        if (!split) {
+            // combined forward -> device scores; finalize immediately (no overlap available).
+            decode_item_t di;
+            at::Tensor dev = basecall_infer_host(core, runner_idx, ptrs);
+            di.host_scores = basecall_finalize_host(core, dev);
+            di.dev_scores = std::move(dev);
+            di.items = std::move(buf);
+            di.runner_idx = runner_idx;
+            ctx->decode_q->push(std::move(di));
+            buf = std::vector<chunk_item_t>();
+            buf.reserve(gpu_batch);
+            return;
+        }
+
+        // 1. conv+LSTM ONLY (blocks on metal_lstm's queue). During this block the PREVIOUS batch's
+        //    CRF+quant (enqueued in step 3 last time) executes on the MPS stream -- overlapped.
+        at::Tensor lstm_out = basecall_infer_lstm_host(core, runner_idx, ptrs);
+
+        // 2. Finalize+push the previous batch. The sync is cheap: its CRF+quant already ran during
+        //    step 1 above, and the current batch's CRF+quant is NOT enqueued yet (step 3), so the
+        //    sync doesn't drag it onto the critical path.
+        if (have_pending) {
+            ts->time_scores_copy -= realtime();
+            pending.host_scores = basecall_finalize_host(core, pending.dev_scores);
+            ts->time_scores_copy += realtime();
+            ts->time_push -= realtime();
+            ctx->decode_q->push(std::move(pending));
+            ts->time_push += realtime();
+        }
+
+        // 3. Now enqueue THIS batch's CRF+quant (async) -> hides behind the next batch's conv+LSTM.
+        pending = decode_item_t();
+        pending.dev_scores = basecall_crf_quant(core, runner_idx, lstm_out);
+        pending.items = std::move(buf);
+        pending.runner_idx = runner_idx;
+        have_pending = true;
+        buf = std::vector<chunk_item_t>();
         buf.reserve(gpu_batch);
+    };
+
+    chunk_item_t item;
+    ts->time_pop -= realtime();
+    while (ctx->chunk_q->pop(item)) {
+        ts->time_pop += realtime();
+        buf.push_back(std::move(item));
+        if (buf.size() == gpu_batch) infer_and_pipeline();
+        ts->time_pop -= realtime();
+    }
+    ts->time_pop += realtime();
+    infer_and_pipeline();                // infer the final partial batch (becomes pending)
+    if (have_pending) {                  // drain the last pending batch
+        pending.host_scores = basecall_finalize_host(core, pending.dev_scores);
+        ctx->decode_q->push(std::move(pending));
+    }
+    ts->time_wall += realtime();
 #else
+    auto flush = [&]() {
+        if (buf.empty()) return;
+        std::vector<basecall_chunk_t *> ptrs;
+        ptrs.reserve(buf.size());
+        for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->chunks[buf[i].chunk_idx]);
         basecall_chunks(core, runner_idx, ptrs);
         for (size_t i = 0; i < buf.size(); ++i) {
             // last chunk of this read done -> hand off to stitching
@@ -170,36 +235,63 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
             }
         }
         buf.clear();
-#endif
     };
 
     chunk_item_t item;
+#endif
+#if !defined(HAVE_METAL)
     while (ctx->chunk_q->pop(item)) {
         buf.push_back(std::move(item));
         if (buf.size() == gpu_batch) flush();
     }
     flush();
+#endif
 }
 
 #if defined(HAVE_METAL)
-// Stage 3b (Metal): CPU-decode each batch's host scores and route finished reads to stitching. Runs
-// on its own thread so decode overlaps the next batch's GPU inference in the runner stage.
+// Decode-stage instrumentation (single decode thread): busy vs blocked-on-queue.
+static double g_dec_wall = 0, g_dec_pop = 0, g_dec_scan = 0, g_dec_decode = 0, g_dec_push = 0;
+static uint64_t g_dec_batches = 0;
+
+// Stage 3b (Metal): GPU forward/backward scan + CPU beam search per batch. Runs on its own thread so
+// the GPU scan overlaps the runner stage's next-batch inference (separate Metal command queues) and
+// the CPU beam overlaps it too. Owns a single gpubuf (scan writes it, beam reads it, serially).
 static void decode_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
+    const int scan_T = (int)(core->chunk_size / core->model_stride);
+    openfish_gpubuf_t *gpubuf = openfish_gpubuf_init(scan_T, (int)core->opt.gpu_batch_size,
+                                                     core->model_config->state_len);
     decode_item_t di;
+    g_dec_wall -= realtime();
+    g_dec_pop -= realtime();
     while (ctx->decode_q->pop(di)) {
+        g_dec_pop += realtime();
         std::vector<basecall_chunk_t *> ptrs;
         ptrs.reserve(di.items.size());
         for (size_t i = 0; i < di.items.size(); ++i) ptrs.push_back(&di.items[i].read->chunks[di.items[i].chunk_idx]);
 
-        basecall_decode_host(core, di.runner_idx, di.scores, ptrs);
+        // GPU scan (fills gpubuf bwd/post; runner already synced the scores) then CPU beam.
+        g_dec_scan -= realtime();
+        basecall_scan_gpu(core, di.runner_idx, di.dev_scores, gpubuf);
+        g_dec_scan += realtime();
+        di.dev_scores = at::Tensor();   // release the device scores now the scan has consumed them
+        g_dec_decode -= realtime();
+        basecall_beam_host(core, di.runner_idx, di.host_scores, gpubuf, ptrs);
+        g_dec_decode += realtime();
 
+        g_dec_push -= realtime();
         for (size_t i = 0; i < di.items.size(); ++i) {
             if (di.items[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
                 ctx->stitch_q->push(di.items[i].read);
             }
         }
+        g_dec_push += realtime();
+        g_dec_batches++;
+        g_dec_pop -= realtime();
     }
+    g_dec_pop += realtime();
+    g_dec_wall += realtime();
+    openfish_gpubuf_free(gpubuf);
 }
 #endif
 
@@ -358,8 +450,9 @@ void run_pipeline(core_t *core) {
     BoundedQueue<std::shared_ptr<read_state_t>> mod_post_q(out_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> out_q(out_cap);
 #if defined(HAVE_METAL)
-    // Small cap: each item holds a batch's host scores (~hundreds of MB), so bound resident memory.
-    BoundedQueue<decode_item_t> decode_q(3);
+    // Each item holds a batch's device+host int8 scores; bound resident memory with a small cap. The
+    // GPU scan + CPU beam happen in the decode stage (which owns its gpubuf).
+    BoundedQueue<decode_item_t> decode_q(2);
 #endif
 
     pipeline_ctx_t ctx;
@@ -440,4 +533,26 @@ void run_pipeline(core_t *core) {
 
     core->total_reads = (int64_t)ctx.total_reads;
     core->sum_bytes = (int64_t)ctx.total_bytes;
+
+#if defined(HAVE_METAL)
+    if (getenv("SLORADO_PIPELINE_STATS")) {
+        fprintf(stderr, "\n[pipeline_stats] per-stage busy/blocked breakdown (metal streaming)\n");
+        for (int i = 0; i < n_runners; ++i) {
+            runner_stat_t *ts = (*core->runner_stats)[i];
+            double w = ts->time_wall > 0 ? ts->time_wall : 1.0;
+            double busy = ts->time_accept + ts->time_todev + ts->time_forward + ts->time_scores_copy;
+            fprintf(stderr, "[pipeline_stats] runner[%d]: wall=%.2fs batches=%llu busy=%.1f%% "
+                    "(accept=%.2f todev=%.2f forward=%.2f scores_copy=%.2f) pop_wait=%.2f(%.1f%%) push_wait=%.2f(%.1f%%)\n",
+                    i, ts->time_wall, (unsigned long long)ts->n_batches, 100.0 * busy / w,
+                    ts->time_accept, ts->time_todev, ts->time_forward, ts->time_scores_copy,
+                    ts->time_pop, 100.0 * ts->time_pop / w, ts->time_push, 100.0 * ts->time_push / w);
+        }
+        double dw = g_dec_wall > 0 ? g_dec_wall : 1.0;
+        fprintf(stderr, "[pipeline_stats] decode: wall=%.2fs batches=%llu gpu_scan=%.2f(%.1f%%) "
+                "cpu_beam=%.2f(%.1f%%) pop_wait=%.2f(%.1f%%) push_wait=%.2f(%.1f%%)\n",
+                g_dec_wall, (unsigned long long)g_dec_batches, g_dec_scan, 100.0 * g_dec_scan / dw,
+                g_dec_decode, 100.0 * g_dec_decode / dw,
+                g_dec_pop, 100.0 * g_dec_pop / dw, g_dec_push, 100.0 * g_dec_push / dw);
+    }
+#endif
 }

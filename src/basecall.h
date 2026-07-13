@@ -23,4 +23,16 @@ void basecall_chunks(const core_t* core, const int runner_idx, const std::vector
 at::Tensor basecall_infer_host(const core_t* core, const int runner_idx, const std::vector<basecall_chunk_t *> &chunks);
 void basecall_decode_host(const core_t* core, const int runner_idx, at::Tensor host_scores, const std::vector<basecall_chunk_t *> &chunks);
 
+#if defined(HAVE_METAL)
+// scan-on-GPU / beam-on-CPU split: infer produces device int8 scores, basecall_scan_gpu runs the
+// forward/backward scan on the GPU into gpubuf and returns a host copy of the scores, then
+// basecall_beam_host runs the CPU beam search over gpubuf's posteriors.
+void basecall_scan_gpu(const core_t* core, const int runner_idx, at::Tensor dev_scores, openfish_gpubuf_t *gpubuf);
+at::Tensor basecall_finalize_host(const core_t* core, at::Tensor dev_scores);
+// Split infer for double-buffering: conv+LSTM only, then CRF+quant deferred.
+at::Tensor basecall_infer_lstm_host(const core_t* core, const int runner_idx, const std::vector<basecall_chunk_t *> &chunks);
+at::Tensor basecall_crf_quant(const core_t* core, const int runner_idx, at::Tensor lstm_out);
+void basecall_beam_host(const core_t* core, const int runner_idx, at::Tensor host_scores, openfish_gpubuf_t *gpubuf, const std::vector<basecall_chunk_t *> &chunks);
+#endif
+
 #endif

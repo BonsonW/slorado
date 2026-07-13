@@ -211,6 +211,16 @@ typedef struct {
     double time_decode;
     double time_modcall;
 
+    // streaming-pipeline instrumentation (SLORADO_PIPELINE_STATS): busy vs blocked-on-queue per stage.
+    double time_wall;          // total lifetime of this runner/decode thread
+    double time_pop;           // blocked popping the input queue (chunk_q / decode_q)
+    double time_todev;         // input host->device upload
+    double time_forward;       // GPU forward (conv+LSTM+CRF), i.e. metal_lstm_run + linear
+    double time_scores_copy;   // infer thread: GPU int8 quant (enqueue)
+    double time_host_copy;     // decode thread: scores device->host DMA (off the infer critical path)
+    double time_push;          // blocked pushing the output queue (backpressure)
+    uint64_t n_batches;        // batches processed by this thread
+
     void *model_stats;
 
     uint64_t total_dp;

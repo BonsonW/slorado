@@ -98,8 +98,11 @@ static at::Tensor infer_chunks(
     torch::InferenceMode guard;
 
     LOG_DEBUG("%s", "basecalling chunks");
+    ts->time_todev -= realtime();
     auto input = runner->input_tensor.to(runner->tensor_opts.device());
+    ts->time_todev += realtime();
 
+    ts->time_forward -= realtime();
     ts->time_infer -= realtime();
     at::Tensor fp16_scores;
     if (core->sensitivity_stats) {
@@ -111,6 +114,7 @@ static at::Tensor infer_chunks(
     auto scores = model_forward(runner, input);
     STAGE_SYNC(runner->device != "cpu", runner->device_idx);
     ts->time_infer += realtime();
+    ts->time_forward += realtime();
 
     if (core->sensitivity_stats) {
         core->sensitivity_stats->accumulate(fp16_scores, scores);
@@ -248,22 +252,81 @@ at::Tensor basecall_infer_host(const core_t* core, const int runner_idx, const s
 
     at::Tensor scores = infer_chunks(core, chunks, runner_idx);          // [batch, T, C] on device
     auto sub = scores.narrow(0, 0, (int64_t)chunks.size());              // valid rows only
+    // Quantize on the GPU but DO NOT copy to host here: hand the decode stage the DEVICE tensor and
+    // let it do the .to(CPU). That takes the CRF+quant GPU work and the score DMA off the infer
+    // thread's critical path, so the GPU can start the next batch's forward while the previous
+    // batch's scores are still draining to host / being decoded.
+    ts->time_scores_copy -= realtime();
+    at::Tensor dev;
     if (core->model_config->clamp) {
         // scores in [-5, 5] -> int8 [-127, 127] (decode rescales by SCORES_I8_SCALE = 5/127).
-        return (sub * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).to(torch::kCPU).contiguous();
+        dev = (sub * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).contiguous();
+    } else {
+        dev = sub.to(torch::kFloat32).contiguous();
     }
-    return sub.to(torch::kFloat32).to(torch::kCPU).contiguous();
+    ts->time_scores_copy += realtime();
+    ts->n_batches++;
+    return dev;
 }
+
+#if defined(HAVE_METAL)
+// Split infer (streaming double-buffer): accept + conv+LSTM only -> device LSTM output [N,T,lstm].
+// The CRF+quant is deferred to basecall_crf_quant so it can be issued AFTER the previous batch is
+// finalized and thus overlap the NEXT batch's conv+LSTM (hiding it off the runner's critical path).
+at::Tensor basecall_infer_lstm_host(const core_t* core, const int runner_idx, const std::vector<basecall_chunk_t *> &chunks) {
+    runner_t* runner = (*core->runners)[runner_idx];
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    auto chunk_size = core->chunk_size;
+#ifdef USE_GPU
+    c10::DeviceGuard device_guard(runner->tensor_opts.device());
+#endif
+    torch::InferenceMode guard;
+
+    ts->time_accept -= realtime();
+    for (size_t i = 0; i < chunks.size(); ++i) accept_chunk(i, chunks[i], runner, chunk_size);
+    ts->time_accept += realtime();
+
+    ts->time_todev -= realtime();
+    auto input = runner->input_tensor.to(runner->tensor_opts.device());
+    ts->time_todev += realtime();
+
+    ts->time_forward -= realtime();
+    at::Tensor lstm_out = model_forward_nocrf(runner, input);           // conv+LSTM (blocks); [batch,T,lstm]
+    ts->time_forward += realtime();
+    ts->n_batches++;
+    return lstm_out.narrow(0, 0, (int64_t)chunks.size());              // valid rows only
+}
+
+// CRF linear + clamp + int8 quant, enqueued on the MPS stream but NOT synced. Returns device scores
+// (int8 when the model clamps, else fp32). The caller finalizes/copies later (double-buffered).
+at::Tensor basecall_crf_quant(const core_t* core, const int runner_idx, at::Tensor lstm_out) {
+    runner_t* runner = (*core->runners)[runner_idx];
+#ifdef USE_GPU
+    c10::DeviceGuard device_guard(runner->tensor_opts.device());
+#endif
+    torch::InferenceMode guard;
+    at::Tensor x = model_crf(runner, lstm_out);                        // linear + clamp -> [N,T,C]
+    if (core->model_config->clamp) {
+        return (x * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).contiguous();
+    }
+    return x.to(torch::kFloat32).contiguous();
+}
+#endif
 
 // CPU-decode host scores ([nchunks,T,C], int8 or fp32) and write moves/seq/qstring into the chunks.
 // Runs in a separate stage so it overlaps the next batch's GPU inference.
-void basecall_decode_host(const core_t* core, const int runner_idx, at::Tensor host_scores, const std::vector<basecall_chunk_t *> &chunks) {
+void basecall_decode_host(const core_t* core, const int runner_idx, at::Tensor dev_scores, const std::vector<basecall_chunk_t *> &chunks) {
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    // Copy scores device->host here (off the infer thread) so the DMA overlaps the next forward.
+    ts->time_host_copy -= realtime();
+    at::Tensor host_scores = dev_scores.device().is_cpu() ? dev_scores : dev_scores.to(torch::kCPU).contiguous();
+    ts->time_host_copy += realtime();
     const int N = (int)chunks.size();
     const int T = (int)host_scores.size(1);
     const int C = (int)host_scores.size(2);
     const int state_len = core->model_config->state_len;
-    const int nthreads = core->opt.num_thread;
+    int nthreads = core->opt.num_thread;
+    if (const char *e = getenv("SLORADO_DECODE_THREADS")) { int v = atoi(e); if (v > 0) nthreads = v; }
 
     const bool i8 = host_scores.scalar_type() == at::kChar;
     const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F16;
@@ -289,6 +352,77 @@ void basecall_decode_host(const core_t* core, const int runner_idx, at::Tensor h
     free(moves); free(sequence); free(qstring);
     ts->time_decode += realtime();
 }
+
+#if defined(HAVE_METAL)
+// GPU forward/backward scan for a batch: run openfish's scan on the device int8/fp16 scores into
+// gpubuf (bwd_NTC/post_NTC, unified-memory shared buffers), then return a host copy of the scores
+// for the CPU beam. This is the "scan on GPU" half -- it fills the otherwise-idle GPU (~0.06s/batch)
+// and leaves only the light beam search for the CPU.
+void basecall_scan_gpu(const core_t* core, const int runner_idx, at::Tensor dev_scores,
+                       openfish_gpubuf_t *gpubuf) {
+    (void)runner_idx;
+    const int N = (int)dev_scores.size(0);
+    const int T = (int)dev_scores.size(1);
+    const int C = (int)dev_scores.size(2);
+    const int state_len = core->model_config->state_len;
+    const bool i8 = dev_scores.scalar_type() == at::kChar;
+    const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F16;
+    const float sscale = i8 ? SCORES_I8_SCALE : 1.0f;
+
+    // Runs on the decode thread with NO torch ops (torch MPS isn't safe to touch from two threads --
+    // that crashes). The runner already synced the CRF+quant that wrote these scores (double-buffered,
+    // so cheaply), so the buffer is stable; openfish's scan reads it on its own command queue.
+    auto sc = dev_scores.contiguous();
+    if (sc.storage_offset() != 0) sc = sc.clone();
+    openfish_decode_gpu_scan(T, N, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts, gpubuf);
+}
+
+// Runner thread: finalize a batch's enqueued CRF+quant and copy its int8 scores to host for the CPU
+// beam. torch::mps::synchronize() must run on the runner (the only torch-MPS thread). Double-buffered
+// by the caller so the CRF+quant already ran during the NEXT batch's conv+LSTM -> the sync is cheap
+// and the copy is just the (small, int8) DMA. Returns host [N,T,C].
+at::Tensor basecall_finalize_host(const core_t* core, at::Tensor dev_scores) {
+    (void)core;
+    torch::mps::synchronize();
+    return dev_scores.contiguous().to(torch::kCPU).contiguous();
+}
+
+// CPU beam search over the GPU-scanned posteriors in gpubuf; writes moves/seq/qstring to the chunks.
+void basecall_beam_host(const core_t* core, const int runner_idx, at::Tensor host_scores,
+                        openfish_gpubuf_t *gpubuf, const std::vector<basecall_chunk_t *> &chunks) {
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    const int N = (int)chunks.size();
+    const int T = (int)host_scores.size(1);
+    const int C = (int)host_scores.size(2);
+    const int state_len = core->model_config->state_len;
+    int nthreads = core->opt.num_thread;
+    if (const char *e = getenv("SLORADO_DECODE_THREADS")) { int v = atoi(e); if (v > 0) nthreads = v; }
+    const bool i8 = host_scores.scalar_type() == at::kChar;
+    const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F16;
+    const float sscale = i8 ? SCORES_I8_SCALE : 1.0f;
+
+    uint8_t *moves; char *sequence; char *qstring;
+    ts->time_decode -= realtime();
+    openfish_decode_cpu_beam(T, N, C, nthreads, host_scores.data_ptr(), sdt, sscale, state_len,
+                             &core->decoder_opts, gpubuf, &moves, &sequence, &qstring);
+    for (int j = 0; j < N; ++j) {
+        basecall_chunk_t *ck = chunks[j];
+        size_t idx = (size_t)j * T;
+        ck->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
+        size_t num_bases = 0;
+        for (auto move : ck->moves) num_bases += move;
+        if (num_bases > (size_t)T) { ERROR("num bases %zu greater than number of timesteps %d", num_bases, T); exit(EXIT_FAILURE); }
+        ck->seq = std::string(sequence + idx, num_bases);
+        ck->qstring = std::string(qstring + idx, num_bases);
+        if (ck->seq.empty() || ck->qstring.empty() || ck->seq.size() != ck->qstring.size()) {
+            ERROR("beam produced bad seq/qstring (seq %zu qstr %zu)", ck->seq.size(), ck->qstring.size());
+            exit(EXIT_FAILURE);
+        }
+    }
+    free(moves); free(sequence); free(qstring);
+    ts->time_decode += realtime();
+}
+#endif
 
 // Inference + decode back-to-back on a packed batch (decode subtiles internally).
 static void call_chunks(

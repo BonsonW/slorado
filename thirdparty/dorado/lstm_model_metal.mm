@@ -242,6 +242,11 @@ static void ensure_conv_bufs(metal_lstm_ctx *c, int N, int chunk) {
     c->conv_cur_N = N; c->conv_cur_chunk = chunk;
 }
 
+// --- temp instrumentation: separate pure-GPU kernel time from ATen glue ---
+static double g_gpu_secs = 0.0;   // sum of (GPUEndTime-GPUStartTime) across command buffers
+static double g_wall_secs = 0.0;  // sum of commit->waitUntilCompleted wall time
+static long   g_calls = 0;
+
 static id<MTLBuffer> make_args(id<MTLDevice> dev, int batch_tiles, int T, int begin, int end) {
     int32_t a[4] = {batch_tiles, T, begin, end};
     return [dev newBufferWithBytes:a length:sizeof(a) options:MTLResourceStorageModeShared];
@@ -351,8 +356,14 @@ extern "C" int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *i
                        ctx->thread_groups, threads);
 
         [enc endEncoding];
+        struct timespec t0, t1;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
         [cb commit];
         [cb waitUntilCompleted];
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        g_wall_secs += (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+        g_gpu_secs  += (cb.GPUEndTime - cb.GPUStartTime);
+        g_calls++;
         if (cb.status == MTLCommandBufferStatusError) {
             fprintf(stderr, "[metal_lstm] command buffer error: %s\n",
                     cb.error ? cb.error.localizedDescription.UTF8String : "?");
@@ -363,5 +374,9 @@ extern "C" int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *i
 }
 
 extern "C" void metal_lstm_free(metal_lstm_ctx_t *ctx) {
+    if (g_calls) {
+        fprintf(stderr, "[metal_lstm] calls=%ld  pure-GPU=%.3fs  commit->wait wall=%.3fs  "
+                "(glue=wall-gpu=%.3fs)\n", g_calls, g_gpu_secs, g_wall_secs, g_wall_secs - g_gpu_secs);
+    }
     delete ctx;   // ARC releases the id<> members (device/queue/pipelines/buffers/weights)
 }

@@ -45,4 +45,10 @@ struct runner {
 // module. (Modbase runners call module->forward directly.)
 at::Tensor model_forward(runner_t *runner, const at::Tensor &x);
 
+// Split forward (streaming pipeline). model_supports_split() gates the LSTM-only conv+LSTM / CRF
+// split that lets the CRF be deferred and overlapped with the next batch's inference.
+bool model_supports_split(const runner_t *runner);
+at::Tensor model_forward_nocrf(runner_t *runner, const at::Tensor &x);
+at::Tensor model_crf(runner_t *runner, const at::Tensor &x);
+
 #endif

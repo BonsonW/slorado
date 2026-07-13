@@ -12,12 +12,24 @@ CPPFLAGS += -I slow5lib/include/ \
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2 -std=c++17
 DEPFLAGS = -MMD -MP -MF $(@:.o=.d)
+ifdef metal
+# macOS/Apple Silicon: libtorch ships dylibs; ld64 has no --as-needed and uses
+# @loader_path (not $ORIGIN) for relative rpaths. The macOS arm64 package bundles
+# the MPS backend inside libtorch_cpu.dylib, so no extra device library is linked.
+LIBS    +=  -Wl,-rpath,@loader_path/$(LIBTORCH_DIR)/lib -Wl,-rpath,@loader_path/../lib \
+			-Wl,-rpath,$(LIBTORCH_DIR)/lib \
+			$(LIBTORCH_DIR)/lib/libtorch_cpu.dylib \
+			$(LIBTORCH_DIR)/lib/libtorch.dylib \
+			$(LIBTORCH_DIR)/lib/libc10.dylib
+LDFLAGS  += $(LIBS) -lz -lm -lpthread
+else
 LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../lib' \
 			-Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
 			-Wl,--as-needed $(LIBTORCH_DIR)/lib/libc10.so
 LDFLAGS  += $(LIBS) -lz -lm -lpthread
+endif
 BUILD_DIR = build
 
 ifeq ($(f16c),1)
@@ -96,6 +108,17 @@ else ifdef rocm
 	CPPFLAGS += -I $(ROCM_INC)
 	LIBS += -Wl,--as-needed -lpthread -Wl,--no-as-needed,"$(LIBTORCH_DIR)/lib/libtorch_hip.so" -Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libc10_hip.so"
 	LDFLAGS += -L$(ROCM_LIB) -lamdhip64 -lrt -ldl
+else ifdef metal
+	# Apple Silicon GPU via libtorch's MPS backend. The MPS runtime lives inside
+	# libtorch_cpu.dylib (linked in the base block above); here we only add the
+	# Apple frameworks that openfish's Metal decode objects need.
+	CPPFLAGS += -DUSE_GPU=1 -DHAVE_METAL=1
+	# clang++ links libc++ implicitly; -lobjc is needed for openfish's Objective-C runtime symbols.
+	# IOKit is used to query the GPU core count for the LSTM kernel dispatch.
+	LDFLAGS += -framework Metal -framework Foundation -framework CoreFoundation -framework IOKit -lobjc
+	# slorado's Objective-C++ Metal glue: scores->MTLBuffer for openfish decode, and the dorado
+	# LSTM kernel driver (fast/hac v5 acceleration).
+	OBJ += $(BUILD_DIR)/metal_utils.o $(BUILD_DIR)/lstm_model_metal.o
 endif
 
 .PHONY: clean distclean test
@@ -109,6 +132,20 @@ $(BINARY): $(OBJ) slow5lib/lib/libslow5.a openfish/lib/libopenfish.a fluke/lib/l
 
 $(BUILD_DIR)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
+
+# Objective-C++ Metal glue (metal=1 builds only; added to OBJ in the metal branch above).
+$(BUILD_DIR)/metal_utils.o: src/metal_utils.mm
+	xcrun clang++ -x objective-c++ -fobjc-arc -std=c++17 $(CFLAGS) -I src/ $(DEPFLAGS) $< -c -o $@
+
+# Embed the dorado LSTM Metal kernels as a C string (compiled at runtime via newLibraryWithSource:).
+# Each line is wrapped as a string literal with a trailing \n; adjacent literals concatenate.
+$(BUILD_DIR)/lstm_model_metal_src.h: thirdparty/dorado/lstm_model_metal.metal
+	printf 'static const char KERNELS_METAL_SRC[] =\n' > $@
+	sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' $< >> $@
+	printf ';\n' >> $@
+
+$(BUILD_DIR)/lstm_model_metal.o: thirdparty/dorado/lstm_model_metal.mm $(BUILD_DIR)/lstm_model_metal_src.h
+	xcrun clang++ -x objective-c++ -fobjc-arc -std=c++17 $(CFLAGS) -I src/ -I thirdparty/dorado/ -I $(BUILD_DIR) $(DEPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/basecaller_main.o: src/basecaller_main.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
@@ -177,7 +214,7 @@ $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 openfish/lib/libopenfish.a:
-	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libopenfish.a
+	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) metal=$(metal) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libopenfish.a
 
 fluke/lib/libfluke.a:
 	$(MAKE) -C fluke cuda=$(cuda) rocm=$(rocm) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libfluke.a

@@ -198,7 +198,8 @@ lstm_model_t *load_lstm_model_proc(const model_config_t &config, const torch::Te
     return m;
 }
 
-at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
+// conv + bidirectional LSTM stack; returns the LSTM output (pre-CRF). Full scores = lstm_model_crf().
+at::Tensor lstm_model_forward_nocrf(const lstm_model_t *m, at::Tensor x) {
     const bool on_gpu = !x.device().is_cpu();
     const auto dev_idx = x.device().index();
     double a, b;
@@ -269,7 +270,20 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
     b = realtime();
     m->stats->time_rnns += b - a;
 
-    // CRF linear
+    return x;   // LSTM output [N, T, lstm_size]; CRF applied by lstm_model_crf
+}
+
+at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
+    return lstm_model_crf(m, lstm_model_forward_nocrf(m, x));
+}
+
+// CRF linear (+ clamp): LSTM output [N,T,lstm_size] -> scores [N,T,outsize]. Split out from
+// lstm_model_forward so the streaming pipeline can defer/overlap it with the next batch's conv+LSTM.
+at::Tensor lstm_model_crf(const lstm_model_t *m, at::Tensor x) {
+    const bool on_gpu = !x.device().is_cpu();
+    const auto dev_idx = x.device().index();
+    double a, b;
+
     a = realtime();
     x = at::linear(x, m->linear_w, m->linear_b);
     STAGE_SYNC(on_gpu, dev_idx);
@@ -283,7 +297,6 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
         b = realtime();
         m->stats->time_clamp += b - a;
     }
-
     return x;
 }
 

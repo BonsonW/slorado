@@ -47,6 +47,10 @@ typedef struct {
 
 lstm_model_t *load_lstm_model_proc(const model_config_t &config, const torch::TensorOptions &options, lstm_stats_t *model_stats);
 at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x);
+// Split forward (streaming pipeline): conv+LSTM (pre-CRF) and the CRF linear+clamp separately, so the
+// CRF can be deferred/overlapped with the next batch's inference.
+at::Tensor lstm_model_forward_nocrf(const lstm_model_t *m, at::Tensor x);
+at::Tensor lstm_model_crf(const lstm_model_t *m, at::Tensor x);
 void free_lstm_model(lstm_model_t *m);
 
 // Conv stack forward: [N, C_in, T] -> [N, T, C_out]. Shared by the procedural LSTM/FLSTM/TX models.
