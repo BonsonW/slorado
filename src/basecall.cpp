@@ -232,6 +232,64 @@ static void decode_chunks(
     LOG_DEBUG("%s", "done writing to chunks");
 }
 
+// --- Metal overlap: split inference (GPU) and decode (CPU) into separate pipeline stages ---------
+
+// Accept + infer, then move scores to host so the GPU is freed for the next batch. When the model
+// clamps scores to +/-5 we quantize to int8 on the GPU first (halves the copy and the resident
+// scores footprint; openfish's CPU decode dequantizes via score_scale). Returns host [nchunks,T,C].
+at::Tensor basecall_infer_host(const core_t* core, const int runner_idx, const std::vector<basecall_chunk_t *> &chunks) {
+    runner_t* runner = (*core->runners)[runner_idx];
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    auto chunk_size = core->chunk_size;
+
+    ts->time_accept -= realtime();
+    for (size_t i = 0; i < chunks.size(); ++i) accept_chunk(i, chunks[i], runner, chunk_size);
+    ts->time_accept += realtime();
+
+    at::Tensor scores = infer_chunks(core, chunks, runner_idx);          // [batch, T, C] on device
+    auto sub = scores.narrow(0, 0, (int64_t)chunks.size());              // valid rows only
+    if (core->model_config->clamp) {
+        // scores in [-5, 5] -> int8 [-127, 127] (decode rescales by SCORES_I8_SCALE = 5/127).
+        return (sub * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).to(torch::kCPU).contiguous();
+    }
+    return sub.to(torch::kFloat32).to(torch::kCPU).contiguous();
+}
+
+// CPU-decode host scores ([nchunks,T,C], int8 or fp32) and write moves/seq/qstring into the chunks.
+// Runs in a separate stage so it overlaps the next batch's GPU inference.
+void basecall_decode_host(const core_t* core, const int runner_idx, at::Tensor host_scores, const std::vector<basecall_chunk_t *> &chunks) {
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    const int N = (int)chunks.size();
+    const int T = (int)host_scores.size(1);
+    const int C = (int)host_scores.size(2);
+    const int state_len = core->model_config->state_len;
+    const int nthreads = core->opt.num_thread;
+
+    const bool i8 = host_scores.scalar_type() == at::kChar;
+    const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F16;
+    const float sscale = i8 ? SCORES_I8_SCALE : 1.0f;
+
+    uint8_t *moves; char *sequence; char *qstring;
+    ts->time_decode -= realtime();
+    openfish_decode_cpu(T, N, C, nthreads, host_scores.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, &moves, &sequence, &qstring);
+    for (int j = 0; j < N; ++j) {
+        basecall_chunk_t *ck = chunks[j];
+        size_t idx = (size_t)j * T;
+        ck->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
+        size_t num_bases = 0;
+        for (auto move : ck->moves) num_bases += move;
+        if (num_bases > (size_t)T) { ERROR("num bases %zu greater than number of timesteps %d", num_bases, T); exit(EXIT_FAILURE); }
+        ck->seq = std::string(sequence + idx, num_bases);
+        ck->qstring = std::string(qstring + idx, num_bases);
+        if (ck->seq.empty() || ck->qstring.empty() || ck->seq.size() != ck->qstring.size()) {
+            ERROR("decode produced bad seq/qstring (seq %zu qstr %zu)", ck->seq.size(), ck->qstring.size());
+            exit(EXIT_FAILURE);
+        }
+    }
+    free(moves); free(sequence); free(qstring);
+    ts->time_decode += realtime();
+}
+
 // Inference + decode back-to-back on a packed batch (decode subtiles internally).
 static void call_chunks(
     const core_t* core,

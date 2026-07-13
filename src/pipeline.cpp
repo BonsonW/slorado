@@ -40,12 +40,25 @@ void free_read_dat(read_dat_t *read_dat);
 // are owned as locals by run_pipeline(). total_bytes has a single writer (loader) and
 // total_reads a single writer (writer stage), so plain integers are safe (the joins in
 // run_pipeline establish the happens-before before they are read).
+#if defined(HAVE_METAL)
+// Metal overlap: a packed batch's host scores + its chunk items, queued from the inference stage to
+// the CPU decode stage so decode runs concurrently with the next batch's GPU inference.
+struct decode_item_t {
+    std::vector<chunk_item_t> items;
+    at::Tensor scores;               // host [nchunks, T, C], int8 or fp32
+    int runner_idx;
+};
+#endif
+
 typedef struct {
     core_t *core;
     bool mod;                        // modbase calling enabled (--mod)
     BoundedQueue<std::shared_ptr<read_state_t>> *read_q;
     BoundedQueue<chunk_item_t> *chunk_q;
     BoundedQueue<std::shared_ptr<read_state_t>> *stitch_q;
+#if defined(HAVE_METAL)
+    BoundedQueue<decode_item_t> *decode_q;   // inference stage -> CPU decode stage (Metal overlap)
+#endif
     // modbase stages (only used when mod)
     BoundedQueue<std::shared_ptr<read_state_t>> *mod_pre_q;
     BoundedQueue<mod_chunk_item_t> *mod_chunk_q;
@@ -137,8 +150,19 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
         ptrs.reserve(buf.size());
         for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->chunks[buf[i].chunk_idx]);
 
+#if defined(HAVE_METAL)
+        // Inference only: produce host scores and hand the batch to the CPU decode stage, which runs
+        // concurrently with the next batch's GPU inference (the GPU is freed by moving scores to host).
+        at::Tensor scores = basecall_infer_host(core, runner_idx, ptrs);
+        decode_item_t di;
+        di.items = std::move(buf);
+        di.scores = std::move(scores);
+        di.runner_idx = runner_idx;
+        ctx->decode_q->push(std::move(di));
+        buf = std::vector<chunk_item_t>();   // buf was moved-from; reset
+        buf.reserve(gpu_batch);
+#else
         basecall_chunks(core, runner_idx, ptrs);
-
         for (size_t i = 0; i < buf.size(); ++i) {
             // last chunk of this read done -> hand off to stitching
             if (buf[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
@@ -146,6 +170,7 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
             }
         }
         buf.clear();
+#endif
     };
 
     chunk_item_t item;
@@ -155,6 +180,28 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     }
     flush();
 }
+
+#if defined(HAVE_METAL)
+// Stage 3b (Metal): CPU-decode each batch's host scores and route finished reads to stitching. Runs
+// on its own thread so decode overlaps the next batch's GPU inference in the runner stage.
+static void decode_stage(pipeline_ctx_t *ctx) {
+    core_t *core = ctx->core;
+    decode_item_t di;
+    while (ctx->decode_q->pop(di)) {
+        std::vector<basecall_chunk_t *> ptrs;
+        ptrs.reserve(di.items.size());
+        for (size_t i = 0; i < di.items.size(); ++i) ptrs.push_back(&di.items[i].read->chunks[di.items[i].chunk_idx]);
+
+        basecall_decode_host(core, di.runner_idx, di.scores, ptrs);
+
+        for (size_t i = 0; i < di.items.size(); ++i) {
+            if (di.items[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                ctx->stitch_q->push(di.items[i].read);
+            }
+        }
+    }
+}
+#endif
 
 // Stage 4: stitch a read's chunks back into a single sequence (+ RNA reversal). Routes valid reads
 // to the modbase stages when --mod, else straight to output.
@@ -310,6 +357,10 @@ void run_pipeline(core_t *core) {
     BoundedQueue<mod_chunk_item_t> mod_chunk_q(chunk_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> mod_post_q(out_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> out_q(out_cap);
+#if defined(HAVE_METAL)
+    // Small cap: each item holds a batch's host scores (~hundreds of MB), so bound resident memory.
+    BoundedQueue<decode_item_t> decode_q(3);
+#endif
 
     pipeline_ctx_t ctx;
     ctx.core = core;
@@ -317,6 +368,9 @@ void run_pipeline(core_t *core) {
     ctx.read_q = &read_q;
     ctx.chunk_q = &chunk_q;
     ctx.stitch_q = &stitch_q;
+#if defined(HAVE_METAL)
+    ctx.decode_q = &decode_q;
+#endif
     ctx.mod_pre_q = &mod_pre_q;
     ctx.mod_chunk_q = &mod_chunk_q;
     ctx.mod_post_q = &mod_post_q;
@@ -346,6 +400,13 @@ void run_pipeline(core_t *core) {
     std::vector<std::thread> stitch;
     for (int i = 0; i < n_stitch; ++i) stitch.emplace_back(stitch_stage, &ctx);
 
+#if defined(HAVE_METAL)
+    // CPU decode stage(s) sit between the inference (runner) stage and stitching. One thread is
+    // enough: openfish_decode_cpu parallelises each batch internally across num_thread threads.
+    std::vector<std::thread> decoders;
+    decoders.emplace_back(decode_stage, &ctx);
+#endif
+
     std::vector<std::thread> runners;
     for (int i = 0; i < n_runners; ++i) runners.emplace_back(runner_stage, &ctx, i);
 
@@ -359,7 +420,11 @@ void run_pipeline(core_t *core) {
     loader.join();                          // loader closed read_q at EOF
     for (auto &t : preproc) t.join();
     chunk_q.close();
-    for (auto &t : runners) t.join();
+    for (auto &t : runners) t.join();       // inference stage done
+#if defined(HAVE_METAL)
+    decode_q.close();                       // no more batches to decode
+    for (auto &t : decoders) t.join();      // CPU decode drained -> all reads pushed to stitch
+#endif
     stitch_q.close();
     for (auto &t : stitch) t.join();
     if (mod) {
