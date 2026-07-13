@@ -198,10 +198,15 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
             xp = torch::zeros({Npad, T, C}, x.options());
             xp.narrow(0, 0, N).copy_(x);
         }
-        auto in = xp.transpose(0, 1).contiguous().to(torch::kFloat16).to(torch::kCPU);  // [T,Npad,C] fp16
-        auto out = torch::empty({T, Npad, C}, torch::TensorOptions().dtype(torch::kFloat16).device(torch::kCPU));
-        metal_lstm_run((metal_lstm_ctx_t *)m->metal_ctx, (int)Npad, (int)T, in.data_ptr(), out.data_ptr());
-        auto y = out.to(x.device()).transpose(0, 1).contiguous();   // [Npad,T,C] fp16
+        // Zero-copy: keep the conv output on MPS and hand the dorado LSTM kernels its MTLBuffer
+        // directly (storage().data() bit-casts to the buffer), writing into another MPS tensor -- no
+        // host round-trip. Sync torch's MPS stream first (the LSTM runs on its own command queue).
+        auto in = xp.transpose(0, 1).contiguous();                  // [T,Npad,C] fp16 MPS, offset 0
+        auto out = torch::empty({T, Npad, C}, xp.options());        // [T,Npad,C] fp16 MPS, offset 0
+        torch::mps::synchronize();
+        metal_lstm_run((metal_lstm_ctx_t *)m->metal_ctx, (int)Npad, (int)T,
+                       in.storage().data(), out.storage().data());
+        auto y = out.transpose(0, 1).contiguous();                  // [Npad,T,C] fp16 MPS
         x = (Npad != N) ? y.narrow(0, 0, N).contiguous() : y;
     } else
 #endif

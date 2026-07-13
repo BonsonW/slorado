@@ -17,7 +17,9 @@
 
 static constexpr int kTileSize = 8;
 static constexpr int kSIMDWidth = 32;
-static constexpr int kMaxTimeSteps = 20;   // matches dorado: cap kernel length per launch
+static constexpr int kMaxTimeSteps = 512;   // fewer piece-boundary GPU syncs than dorado's 20, while
+                                            // keeping each kernel launch bounded (dorado caps at 20 to
+                                            // avoid command-buffer submission errors on long kernels)
 static constexpr int kLstmGates = 4;
 
 struct metal_lstm_ctx {
@@ -34,7 +36,7 @@ struct metal_lstm_ctx {
 
     // working buffers, (re)allocated when (N,T) changes
     int cur_N = 0, cur_T = 0;
-    id<MTLBuffer> in_buf = nil, out_buf = nil, working = nil, state = nil, reorder_args = nil;
+    id<MTLBuffer> working = nil, state = nil, reorder_args = nil;   // scratch; in/out are caller-supplied
     std::vector<id<MTLBuffer>> args;                        // per <=20-step piece
 };
 
@@ -169,12 +171,11 @@ static id<MTLBuffer> make_args(id<MTLDevice> dev, int batch_tiles, int T, int be
     return [dev newBufferWithBytes:a length:sizeof(a) options:MTLResourceStorageModeShared];
 }
 
+// Allocate the per-(N,T) scratch (recurrence ring + cell state + arg buffers). in/out are supplied
+// by the caller (the conv-output and result MPS tensors' MTLBuffers) for a zero-copy run.
 static void ensure_buffers(metal_lstm_ctx *c, int N, int T) {
     if (c->cur_N == N && c->cur_T == T && c->working) return;
     const int C = c->lstm_size;
-    // in/out are fp16 (ftype_in/ftype_out are half — see lstm_model_metal.metal).
-    c->in_buf  = [c->device newBufferWithLength:(size_t)T * N * C * sizeof(uint16_t) options:MTLResourceStorageModeShared];
-    c->out_buf = [c->device newBufferWithLength:(size_t)T * N * C * sizeof(uint16_t) options:MTLResourceStorageModeShared];
     c->working = [c->device newBufferWithLength:(size_t)(T + 3) * N * C * sizeof(uint16_t) options:MTLResourceStorageModeShared];
     c->state   = [c->device newBufferWithLength:(size_t)N * C * sizeof(uint16_t) options:MTLResourceStorageModeShared];
     const int batch_tiles = N / kTileSize;
@@ -198,15 +199,18 @@ static void encode_reorder(id<MTLComputeCommandEncoder> enc, id<MTLComputePipeli
         threadsPerThreadgroup:MTLSizeMake(threads, 1, 1)];
 }
 
-extern "C" int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *in_f32, void *out_f32) {
+// Zero-copy run: in_mtl/out_mtl are MTLBuffers (from the conv-output and result MPS tensors'
+// storage().data()); the kernels read/write them in place, so no host round-trip. The caller must
+// have synced torch's MPS stream first (openfish/LSTM use a separate command queue).
+extern "C" int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *in_mtl, const void *out_mtl) {
     if (!ctx || !ctx->ok) return 1;
     if (N % (kTileSize * 6) != 0) {   // SIMD_TILES_M(6) * TILE_SIZE(8) = 48
         fprintf(stderr, "[metal_lstm] N=%d not a multiple of 48\n", N);
         return 1;
     }
-    const int C = ctx->lstm_size;
     ensure_buffers(ctx, N, T);
-    memcpy([ctx->in_buf contents], in_f32, (size_t)T * N * C * sizeof(uint16_t));
+    id<MTLBuffer> in_buf  = (__bridge id<MTLBuffer>)in_mtl;
+    id<MTLBuffer> out_buf = (__bridge id<MTLBuffer>)out_mtl;
 
     const int threads = ctx->simd_groups * kSIMDWidth;
     const int res_bytes = (int)sizeof(uint16_t) * ctx->simd_groups * 2 * kTileSize * kTileSize;
@@ -219,7 +223,7 @@ extern "C" int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *i
         // conv output (fp32 row-major [T,N,C]) -> interleaved LSTM layout (fp16), layer-0 direction.
         bool rev0 = layer_reverse(ctx, 0);
         encode_reorder(enc, rev0 ? ctx->reorder_in_rev : ctx->reorder_in_fwd, ctx->reorder_args,
-                       ctx->in_buf, ctx->working, ctx->thread_groups, threads);
+                       in_buf, ctx->working, ctx->thread_groups, threads);
 
         for (int l = 0; l < ctx->num_layers; ++l) {
             id<MTLComputePipelineState> cps = ctx->lstm_cps[layer_reverse(ctx, l) ? 1 : 0];
@@ -236,8 +240,8 @@ extern "C" int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *i
             }
         }
 
-        // interleaved reverse-layer output -> fp32 row-major [T,N,C].
-        encode_reorder(enc, ctx->reorder_out, ctx->reorder_args, ctx->working, ctx->out_buf,
+        // interleaved reverse-layer output -> fp16 row-major [T,N,C] (in the caller's out MTLBuffer).
+        encode_reorder(enc, ctx->reorder_out, ctx->reorder_args, ctx->working, out_buf,
                        ctx->thread_groups, threads);
 
         [enc endEncoding];
@@ -249,8 +253,7 @@ extern "C" int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *i
             return 1;
         }
     }
-    memcpy(out_f32, [ctx->out_buf contents], (size_t)T * N * C * sizeof(uint16_t));
-    return 0;
+    return 0;   // results are already in the caller's out MTLBuffer (zero-copy)
 }
 
 extern "C" void metal_lstm_free(metal_lstm_ctx_t *ctx) {

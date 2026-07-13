@@ -37,9 +37,11 @@ int metal_lstm_layer_reverse(const metal_lstm_ctx_t *ctx, int layer);
 // a private MTLBuffer; the caller's tensor can be freed after.
 void metal_lstm_set_layer(metal_lstm_ctx_t *ctx, int layer, const void *reordered_w_f16, size_t bytes);
 
-// Run the full stack. in_f32_TNC / out_f32_TNC are host fp32 [T, N, C]; N must be a multiple of 48
-// (SIMD_TILES_M*TILE_SIZE) — the caller pads. Returns 0 on success.
-int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *in_f32_TNC, void *out_f32_TNC);
+// Run the full stack, zero-copy: in_mtl / out_mtl are MTLBuffers (the conv-output and result MPS
+// tensors' storage().data(), fp16 [T, N, C], contiguous, storage offset 0). N must be a multiple of
+// 48 (SIMD_TILES_M*TILE_SIZE) — the caller pads. The caller must sync torch's MPS stream first (the
+// LSTM runs on a separate command queue). Returns 0 on success.
+int metal_lstm_run(metal_lstm_ctx_t *ctx, int N, int T, const void *in_mtl, const void *out_mtl);
 
 void metal_lstm_free(metal_lstm_ctx_t *ctx);
 
