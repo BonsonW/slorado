@@ -70,6 +70,7 @@ struct sensitivity_stats_t;
 #define DEFAULT_OVERLAP (500)
 #define DEFAULT_BATCH_SIZE (4096)
 #define DEFAULT_GPU_BATCH_SIZE (512)
+#define DEFAULT_MPS_BATCH_SIZE (384) // Apple MPS fixed batch; multiple of 48 for the dorado LSTM kernel tiling (override with -C)
 #define MAX_AUTO_GPU_BATCH_SIZE (4096) // upper bound for auto batch-size search
 #define BATCH_SIZE_SAMPLE_READS (256)
 

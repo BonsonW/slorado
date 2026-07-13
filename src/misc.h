@@ -36,8 +36,14 @@ extern bool g_scores_i8;
 // Self-contained one-liner for those syncs: no #ifdef USE_GPU or device check needed at the call
 // site. `on_gpu` guards the CPU path (no CUDA sync there). Correctness in the streaming (no-sync)
 // path is guaranteed by CUDA stream ordering, not these syncs — they are timing instrumentation.
-#ifdef USE_GPU
+#if defined(HAVE_METAL)
+#include <torch/mps.h>
+#endif
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
 #define STAGE_SYNC(on_gpu, dev) do { if (g_stage_sync && (on_gpu)) torch::cuda::synchronize(dev); } while (0)
+#elif defined(HAVE_METAL)
+// MPS has no per-index device; drain the single MPS stream. Timing instrumentation only.
+#define STAGE_SYNC(on_gpu, dev) do { (void)(dev); if (g_stage_sync && (on_gpu)) torch::mps::synchronize(); } while (0)
 #else
 #define STAGE_SYNC(on_gpu, dev) do { (void)(on_gpu); (void)(dev); } while (0)
 #endif

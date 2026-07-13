@@ -24,7 +24,7 @@ using Slice = torch::indexing::Slice;
 // Probe whether flash attention actually runs on this device/dtype/head_dim by executing a tiny
 // forward pass and catching failures. Returns false on CPU, unsupported builds, or any throw.
 static bool flash_attn_supported(int head_dim, const torch::TensorOptions &options) {
-#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
+#if (defined(HAVE_CUDA) || defined(HAVE_ROCM)) && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
     if (options.device().is_cpu()) return false;
     try {
         auto probe_opts = options.dtype(torch::kHalf);
@@ -152,7 +152,7 @@ tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::Tensor
 
     // int8 kernel backends (engages only if a backend is available for every layer).
     enum fluke_format_t quant_format = fluke_parse_format(quant_mode);
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (quant_format != FLUKE_FORMAT_NONE && !dev.is_cpu()) {
         fluke_dims_t dims{d_model, txp.dim_feedforward, nhead, head_dim, /*max_seq=*/1024};
         const int dev_idx = dev.index();
@@ -194,9 +194,34 @@ static const layer_quant_t *lq_lookup(tx_stats_t *stats, const std::string &pref
 static at::Tensor tx_rotary(const tx_layer_t *L, at::Tensor qkv, tx_stats_t *stats) {
     const int batch = qkv.size(0), seqlen = qkv.size(1), nheads = qkv.size(3), head_dim = qkv.size(4);
     const int rotary_dim = 32;
+
+#if defined(HAVE_METAL)
+    // MPS: fluke's rotary is a host function over raw fp32 pointers (crashes on an fp16 MPS buffer),
+    // so apply rotate-half with ATen instead -- functional ops, so it runs on the MPS device. Matches
+    // fluke_rotary_emb: pair dim j with dim j+rotary_dim, o0 = x0*cos - x1*sin, o1 = x0*sin + x1*cos,
+    // applied to Q and K only (V untouched); dims >= 2*rotary_dim pass through.
+    if (!qkv.device().is_cpu()) {
+        auto cos = L->rot_cos.narrow(0, 0, seqlen).narrow(1, 0, rotary_dim).to(qkv.dtype()).view({1, seqlen, 1, rotary_dim});
+        auto sin = L->rot_sin.narrow(0, 0, seqlen).narrow(1, 0, rotary_dim).to(qkv.dtype()).view({1, seqlen, 1, rotary_dim});
+        auto rot_half = [&](at::Tensor t) {                        // t: [B, S, H, D]
+            auto x0 = t.narrow(-1, 0, rotary_dim);                 // [B, S, H, rotary_dim]
+            auto x1 = t.narrow(-1, rotary_dim, rotary_dim);
+            at::Tensor rotated = torch::cat({x0 * cos - x1 * sin, x0 * sin + x1 * cos}, -1);
+            if (head_dim > 2 * rotary_dim) {
+                rotated = torch::cat({rotated, t.narrow(-1, 2 * rotary_dim, head_dim - 2 * rotary_dim)}, -1);
+            }
+            return rotated;
+        };
+        auto q = rot_half(qkv.select(2, 0));                       // [B, S, H, D]
+        auto k = rot_half(qkv.select(2, 1));
+        auto v = qkv.select(2, 2);
+        return torch::stack({q, k, v}, 2);                        // [B, S, 3, H, D]
+    }
+#endif
+
     const int sb = qkv.stride(0), ss = qkv.stride(1), sh = qkv.stride(3);
     auto ch = qkv.chunk(3, 2);
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (!qkv.device().is_cpu()) {
         fluke_rotary_emb_gpu(ch[0].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh);
         fluke_rotary_emb_gpu(ch[1].data_ptr(), L->rot_sin.data_ptr(), L->rot_cos.data_ptr(), batch, seqlen, nheads, head_dim, rotary_dim, sb, ss, sh);
@@ -234,7 +259,7 @@ static at::Tensor tx_attn_tail(tx_model_t *m, const tx_layer_t *L, torch::Tensor
     const auto win_upper = std::get<0>(L->attn_window);
     const auto win_lower = std::get<1>(L->attn_window);
     torch::Tensor attn_output_ntc;
-#if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
+#if (defined(HAVE_CUDA) || defined(HAVE_ROCM)) && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
     if (stats->use_flash) {
         float softmax_scale = 1.0 / std::sqrt(head_dim);
         auto qkv_chunks = qkv.chunk(3, 2);
@@ -324,7 +349,7 @@ static at::Tensor tx_gmlp_forward(const tx_layer_t *L, torch::Tensor x, tx_stats
     const int dev = x.device().index();
     double t0 = realtime();
     torch::Tensor t = qlinear({L->fc1_w, at::Tensor(), lq_fc1, cs, L->cl_fc1}, x);
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
     auto silu_o = torch::empty({t.size(0), t.size(1), K}, t.options());
@@ -366,7 +391,7 @@ static void tx_encoder_forward(tx_model_t *m, const tx_layer_t *L, torch::Tensor
     double a, b;
 
     auto run_norm = [&](const at::Tensor &norm_w, const torch::Tensor &in) {
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
         auto MN = in.size(0) * in.size(1);
         auto out = torch::empty({in.size(0), in.size(1), in.size(2)}, in.options());
         auto K = in.size(2);
@@ -405,7 +430,7 @@ static void tx_encoder_forward(tx_model_t *m, const tx_layer_t *L, torch::Tensor
     stats->time_norm2 += b - a;
 }
 
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
 static void tx_encoder_forward_quant(tx_model_t *m, const tx_layer_t *L, tensor_quant_t &a) {
     tx_stats_t *stats = m->stats;
     const float alpha = L->deepnorm_alpha;
@@ -452,7 +477,7 @@ at::Tensor tx_model_forward(tx_model_t *m, at::Tensor x) {
     stats->time_conv_stack += b - a;
 
     a = realtime();
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (m->quant_stream && on_gpu && h.size(1) <= 2048) {
         tensor_quant_t aq = quantize_tensor(h, -1);
         for (auto &L : m->layers) tx_encoder_forward_quant(m, &L, aq);

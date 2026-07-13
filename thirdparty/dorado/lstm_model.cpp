@@ -12,11 +12,42 @@
 #include <vector>
 #endif
 
+#if defined(HAVE_METAL)
+#include "lstm_model_metal.h"
+
+// Build the metal LSTM context for a plain-LSTM model: compile kernels and hand each layer its
+// weights reordered into dorado's [3C+1, C, 4] tiled layout (U|W|W|bias, gates IFGO->GIFO, bias =
+// bias_ih+bias_hh). Direction (and the dorado U/W swap) follow reverse_first alternation, matching
+// slorado's flip-before-every-layer order. Returns nullptr if the config can't run on the kernel.
+static void *build_metal_lstm(const lstm_model_t *m, int lstm_size) {
+    metal_lstm_ctx_t *ctx = metal_lstm_create(lstm_size, (int)m->lstms.size(), /*reverse_first=*/1);
+    if (!ctx) return nullptr;
+    if (!metal_lstm_ok(ctx)) { metal_lstm_free(ctx); return nullptr; }
+    const int C = lstm_size;
+    for (size_t i = 0; i < m->lstms.size(); ++i) {
+        const bool rev = metal_lstm_layer_reverse(ctx, (int)i) != 0;
+        // Reorder on CPU in fp32 to avoid MPS view/op quirks; result fp16 [3C+1, C, 4].
+        auto w_ih = m->lstms[i].w_ih.to(torch::kCPU).to(torch::kFloat32);
+        auto w_hh = m->lstms[i].w_hh.to(torch::kCPU).to(torch::kFloat32);
+        auto bias = (m->lstms[i].b_ih + m->lstms[i].b_hh).to(torch::kCPU).to(torch::kFloat32);
+        auto t_w = (rev ? w_hh : w_ih).reshape({4, C, C}).transpose(1, 2);
+        auto t_u = (rev ? w_ih : w_hh).reshape({4, C, C}).transpose(1, 2);
+        auto t_b = bias.reshape({4, 1, C});
+        auto comb = torch::cat({t_u, t_w, t_w, t_b}, 1);                       // [4, 3C+1, C]
+        comb = torch::stack({comb[2], comb[0], comb[1], comb[3]}, 2);          // [3C+1, C, 4]
+        comb = comb.to(torch::kFloat16).contiguous();
+        metal_lstm_set_layer(ctx, (int)i, comb.data_ptr(), comb.numel() * sizeof(uint16_t));
+    }
+    return ctx;
+}
+#endif
+
 using namespace torch::nn;
 
 void flatten_lstm_weights(lstm_layer_t &l, int input_size, int hidden, bool batch_first) {
-#if defined(USE_GPU)
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     // ATen op; dispatches to cuDNN on CUDA and MIOpen on ROCm (both need flattened RNN weights).
+    // Skipped on MPS (no cuDNN RNN backend): torch::lstm dispatches to _lstm_mps without it.
     if (l.w_ih.device().is_cpu()) return;
     l.w_ih = l.w_ih.contiguous();
     l.w_hh = l.w_hh.contiguous();
@@ -131,6 +162,13 @@ lstm_model_t *load_lstm_model_proc(const model_config_t &config, const torch::Te
     m->linear_w = to_dev(tensors[idx++]);
     if (has_lin_bias) m->linear_b = to_dev(tensors[idx++]);
 
+#if defined(HAVE_METAL)
+    if (!dev.is_cpu()) {
+        m->metal_ctx = build_metal_lstm(m, config.lstm_size);
+        INFO("metal LSTM kernel %s", m->metal_ctx ? "enabled" : "unavailable (using ATen _lstm_mps)");
+    }
+#endif
+
     return m;
 }
 
@@ -148,16 +186,37 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
 
     // bidirectional-alternating LSTM stack (flip time per layer, final flip if odd)
     a = realtime();
-    for (const auto &l : m->lstms) {
-        auto flipped = x.flip(1);
-        const int64_t N = flipped.size(0);
-        auto h0 = torch::zeros({1, N, m->lstm_size}, flipped.options());
-        auto c0 = torch::zeros({1, N, m->lstm_size}, flipped.options());
-        x = std::get<0>(torch::lstm(flipped, {h0, c0}, {l.w_ih, l.w_hh, l.b_ih, l.b_hh},
-                                    /*has_biases*/ true, /*num_layers*/ 1, /*dropout*/ 0.0,
-                                    /*train*/ false, /*bidirectional*/ false, /*batch_first*/ true));
+#if defined(HAVE_METAL)
+    if (m->metal_ctx && metal_lstm_ok((metal_lstm_ctx_t *)m->metal_ctx) && !x.device().is_cpu()) {
+        // dorado's tiled Metal LSTM. It wants fp16 [T,N,C] host in/out and N a multiple of 48; pad
+        // the batch, run on the GPU (reorder -> layers -> reorder), then slice back. The reorder
+        // kernels reproduce slorado's forward output order, so no per-layer flips here.
+        const int64_t N = x.size(0), T = x.size(1), C = x.size(2);
+        const int64_t Npad = (N + 47) / 48 * 48;
+        at::Tensor xp = x;
+        if (Npad != N) {
+            xp = torch::zeros({Npad, T, C}, x.options());
+            xp.narrow(0, 0, N).copy_(x);
+        }
+        auto in = xp.transpose(0, 1).contiguous().to(torch::kFloat16).to(torch::kCPU);  // [T,Npad,C] fp16
+        auto out = torch::empty({T, Npad, C}, torch::TensorOptions().dtype(torch::kFloat16).device(torch::kCPU));
+        metal_lstm_run((metal_lstm_ctx_t *)m->metal_ctx, (int)Npad, (int)T, in.data_ptr(), out.data_ptr());
+        auto y = out.to(x.device()).transpose(0, 1).contiguous();   // [Npad,T,C] fp16
+        x = (Npad != N) ? y.narrow(0, 0, N).contiguous() : y;
+    } else
+#endif
+    {
+        for (const auto &l : m->lstms) {
+            auto flipped = x.flip(1);
+            const int64_t N = flipped.size(0);
+            auto h0 = torch::zeros({1, N, m->lstm_size}, flipped.options());
+            auto c0 = torch::zeros({1, N, m->lstm_size}, flipped.options());
+            x = std::get<0>(torch::lstm(flipped, {h0, c0}, {l.w_ih, l.w_hh, l.b_ih, l.b_hh},
+                                        /*has_biases*/ true, /*num_layers*/ 1, /*dropout*/ 0.0,
+                                        /*train*/ false, /*bidirectional*/ false, /*batch_first*/ true));
+        }
+        if (m->lstms.size() & 1) x = x.flip(1);
     }
-    if (m->lstms.size() & 1) x = x.flip(1);
     STAGE_SYNC(on_gpu, dev_idx);
     b = realtime();
     m->stats->time_rnns += b - a;
@@ -181,12 +240,17 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
 }
 
 void free_lstm_model(lstm_model_t *m) {
+#if defined(HAVE_METAL)
+    if (m && m->metal_ctx) metal_lstm_free((metal_lstm_ctx_t *)m->metal_ctx);
+#endif
     delete m;
 }
 
 // --- procedural FLSTM model (hac/fast v6) -------------------------------------------------------
 
-#ifdef USE_GPU
+// The int8 FLSTM kernels live in fluke, which only builds on CUDA/ROCm; gate the whole quantized
+// path on that (not USE_GPU) so the Metal/MPS build falls back to the fp16 ATen recurrence below.
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
 // Persistent per-(N,T) recurrence buffers, shared across all FLSTM layers. The recurrence itself —
 // the T-step loop, the fused-vs-two-kernel choice, the hh|x concat, all per-step scratch, and
 // CUDA-graph capture/replay — lives entirely in fluke (fluke_flstm_run_recurrence), so slorado holds
@@ -275,7 +339,7 @@ flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::
 
     // int8 kernel path: pre-quantize down weights, fuse the up-projection into per-gate weights.
     enum fluke_format_t quant_format = fluke_parse_format(quant_mode);
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (quant_format != FLUKE_FORMAT_NONE && !dev.is_cpu()) {
         const int dev_idx = dev.index();
         const int H = m->C;      // hidden size
@@ -361,12 +425,16 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
     b = realtime();
     stats->time_flstm_precompute += b - a;
 
-    auto hh = torch::empty({T + 1, N, C}, x.options());
+    torch::Tensor hh, dn_hh_all;
+
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
+    // GPU path: fluke's per-step kernel writes directly into a persistent [T+1,N,C] ring buffer via
+    // raw pointers, with mm_out/addmm_out reusing pre-allocated scratch to avoid per-step allocation.
+    hh = torch::empty({T + 1, N, C}, x.options());
     hh[0].zero_();
     auto c        = torch::zeros({N, C},     x.options());
     auto scratch  = torch::empty({N, 4 * C}, x.options());
     auto dn_hh_buf = torch::empty({N, K},    x.options());
-    torch::Tensor dn_hh_all;
     if (L->cl_up_hh) dn_hh_all = torch::empty({T, N, K}, x.options());
 
     a = realtime();
@@ -374,21 +442,39 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
         torch::mm_out(dn_hh_buf, fake_quant(hh[t], lq_dn_hh.act), dn_w_hh.t());
         if (dn_hh_all.defined()) dn_hh_all[t] = dn_hh_buf;
         torch::addmm_out(scratch, L->up_b_hh, fake_quant(dn_hh_buf, lq_up_hh.act), up_w_hh_t);
-
-#ifdef USE_GPU
         fluke_flstm_step_gpu(scratch.data_ptr(), ih[t].data_ptr(),
                                 c.data_ptr(), hh[t + 1].data_ptr(), N, C);
-#else
-        auto gates = scratch.add(ih[t]).chunk(4, 1);
-        auto i = gates[0].mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
-        auto f = gates[1].mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
-        auto g = gates[2].clamp_(-1.f, 1.f);
-        auto o = gates[3].mul_(0.2f).add_(0.5f).clamp_(0.f, 1.f);
-        c = (f * c) + (i * g);
-        hh[t + 1] = o * torch::tanh(c);
-#endif
     }
     b = realtime();
+#else
+    // CPU / MPS path: functional ops only. The GPU path's mm_out/addmm_out into persistent scratch
+    // and the hh[t+1] = ... slice-assignment produce wrong results on the MPS backend (the recurrent
+    // state does not propagate, collapsing the output to homopolymers). Build each step's hidden
+    // state as an independent tensor and stack them at the end -- no in-place writes, no aliasing.
+    std::vector<at::Tensor> hh_steps;
+    hh_steps.reserve(T + 1);
+    hh_steps.push_back(torch::zeros({N, C}, x.options()));  // hh[0]
+    auto c = torch::zeros({N, C}, x.options());
+    std::vector<at::Tensor> dn_hh_steps;
+    if (L->cl_up_hh) dn_hh_steps.reserve(T);
+
+    a = realtime();
+    for (int t = 0; t < T; ++t) {
+        auto dn_hh = torch::mm(fake_quant(hh_steps[t], lq_dn_hh.act), dn_w_hh.t());      // [N, K]
+        if (L->cl_up_hh) dn_hh_steps.push_back(dn_hh);
+        auto scratch = torch::addmm(L->up_b_hh, fake_quant(dn_hh, lq_up_hh.act), up_w_hh_t);  // [N, 4C]
+        auto gates = scratch.add(ih[t]).chunk(4, 1);
+        auto i = gates[0].mul(0.2f).add(0.5f).clamp(0.f, 1.f);
+        auto f = gates[1].mul(0.2f).add(0.5f).clamp(0.f, 1.f);
+        auto g = gates[2].clamp(-1.f, 1.f);
+        auto o = gates[3].mul(0.2f).add(0.5f).clamp(0.f, 1.f);
+        c = (f * c) + (i * g);
+        hh_steps.push_back(o * torch::tanh(c));
+    }
+    hh = torch::stack(hh_steps, 0);                          // [T+1, N, C]
+    if (L->cl_up_hh) dn_hh_all = torch::stack(dn_hh_steps, 0);  // [T, N, K]
+    b = realtime();
+#endif
     stats->time_flstm_recurrence += b - a;
 
     using namespace torch::indexing;
@@ -402,7 +488,7 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
     return hh.index({Slice(1, None)}).transpose(0, 1).contiguous();  // [N, T, C]
 }
 
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
 // int8 FLSTM layer over the persistent ring buffers. input x [N, T, C] in NATURAL time order:
 // fp16 for the first layer (quantized here per-token), else the previous layer's int8 hidden view
 // (scale 1/127) — down-projected directly. No physical flips: even layers scan time in reverse via
@@ -477,7 +563,7 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
     // the fp16 path flips per layer with a final flip if odd.
     a = realtime();
     const bool quant = !m->flstms.empty() && m->flstms[0].backend != nullptr;
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (quant) {
         for (size_t i = 0; i < m->flstms.size(); ++i)
             x = flstm_layer_forward_quant(m, &m->flstms[i], (int)i, x, (i + 1 == m->flstms.size()));
@@ -523,7 +609,7 @@ at::Tensor flstm_model_forward(const flstm_model_t *m, at::Tensor x) {
 // trial forwards at a different N and would otherwise leave that N's hh_all (GBs) resident,
 // starving subsequent trials. The real run repopulates the pool lazily on first forward.
 void free_flstm_bufs_pool(flstm_model_t *m) {
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (m && m->quant_ctx) {
         flstm_qctx *qc = (flstm_qctx *)m->quant_ctx;
         for (auto &bf : qc->pool) if (bf.rec) fluke_flstm_rec_free(bf.rec);
@@ -533,7 +619,7 @@ void free_flstm_bufs_pool(flstm_model_t *m) {
 }
 
 void free_flstm_model(flstm_model_t *m) {
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (m->quant_ctx) {
         flstm_qctx *qc = (flstm_qctx *)m->quant_ctx;
         for (auto &bf : qc->pool) if (bf.rec) fluke_flstm_rec_free(bf.rec);

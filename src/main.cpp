@@ -58,6 +58,15 @@ int print_usage(FILE *fp_help) {
 int main(int argc, char* argv[]) {
     double realtime0 = realtime();
 
+#if defined(HAVE_METAL)
+    // On memory-constrained Macs libtorch's MPS allocator watermark can spuriously report the device
+    // as full (huge "other allocations") and refuse every allocation. Lift the cap so allocations are
+    // driven by real availability; slorado keeps the actual footprint bounded via a conservative
+    // default batch size (DEFAULT_MPS_BATCH_SIZE, override with -C). Set before any MPS use; honour a
+    // user-provided value (overwrite=0).
+    setenv("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0", 0);
+#endif
+
     int ret = 1;
 
     if (argc < 2) {

@@ -42,6 +42,7 @@ typedef struct {
     bool clamp;
     float clamp_min, clamp_max;
     lstm_stats_t *stats;
+    void *metal_ctx = nullptr;         // metal_lstm_ctx_t* on the MPS/Metal build; else unused
 } lstm_model_t;
 
 lstm_model_t *load_lstm_model_proc(const model_config_t &config, const torch::TensorOptions &options, lstm_stats_t *model_stats);

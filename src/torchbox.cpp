@@ -76,7 +76,7 @@ at::Tensor model_forward(runner_t *runner, const at::Tensor &x) {
     return runner->module->forward(x);
 }
 
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
 // Cross-platform free/total device memory query.
 static void gpu_mem_get_info(size_t *free_b, size_t *total_b) {
     size_t f = 0, t = 0;
@@ -143,6 +143,13 @@ static bool trial_fits(runner_t *runner, core_t *core, int est_chunk_size, int n
 std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     std::vector<std::string> devices;
 
+    // MPS (Apple Silicon) exposes a single device with no index or multi-device
+    // enumeration; accept both spellings and normalise to the torch device name.
+    if (device_arg == "metal" || device_arg == "mps") {
+        devices.push_back("mps");
+        return devices;
+    }
+
     if (device_arg == "cuda:all" || device_arg == "cuda:auto") {
         for (int8_t i = 0; i < (int8_t)torch::cuda::device_count(); i++) {
             devices.push_back("cuda:" + std::to_string(i));
@@ -193,7 +200,11 @@ void init_runner(
     runner->device = device;
 
     if (device != "cpu") {
-#ifdef USE_GPU
+#if defined(HAVE_METAL)
+        // MPS has a single device and no index; the "metal"/"mps" string carries none.
+        runner->device_idx = 0;
+        runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(c10::kMPS);
+#elif defined(USE_GPU)
         int64_t device_idx = device[device.size()-1] - '0'; // quick and dirty device index extraction
         runner->device_idx = device_idx;
         runner->tensor_opts = torch::TensorOptions().dtype(dtype).device(c10::kCUDA, device_idx);
@@ -245,7 +256,7 @@ void init_runner(
     // catchable c10::Error, so this works identically on CUDA and ROCm without relying on allocator
     // peak stats, and it measures true capacity directly rather than extrapolating a per-chunk cost.
     if (device != "cpu" && batch_size == 0) {
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
         c10::DeviceGuard device_guard(runner->tensor_opts.device());
         const int est_chunk_size = modbase
             ? (int)core->modbase_config->context.chunk_size
@@ -309,6 +320,15 @@ void init_runner(
         fprintf(stderr, "[%s] %.1f MB free / %.1f MB total on %s, auto GPU batch size: %d%s\n",
                 __func__, free_mem / 1e6, total_mem / 1e6, device.c_str(),
                 batch_size, modbase ? " [modbase]" : "");
+#elif defined(HAVE_METAL)
+        // MPS has no reliable free/total memory query (no cudaMemGetInfo analogue) and its allocator
+        // watermark can spuriously report the device as full on memory-constrained Macs (we disable
+        // that cap via PYTORCH_MPS_HIGH_WATERMARK_RATIO, see set_mps_env). With the cap off a trial
+        // probe would always "succeed" and pick an oversized batch that thrashes swap, so instead use
+        // a conservative fixed default that fits an ~8 GB unified-memory Mac; override with -C.
+        batch_size = DEFAULT_MPS_BATCH_SIZE;
+        fprintf(stderr, "[%s] Metal: using default GPU batch size %d (override with -C)%s\n",
+                __func__, batch_size, modbase ? " [modbase]" : "");
 #endif
     }
 

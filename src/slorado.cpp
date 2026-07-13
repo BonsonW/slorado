@@ -466,7 +466,9 @@ void init_opt(opt_t* opt) {
 
     opt->debug_break = -1;
 
-#ifdef USE_GPU
+#if defined(HAVE_METAL)
+    opt->device = "metal";
+#elif defined(USE_GPU)
     opt->device = "cuda:all";
 #else
     opt->device = "cpu";

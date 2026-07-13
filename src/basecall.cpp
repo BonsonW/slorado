@@ -44,6 +44,10 @@ SOFTWARE.
 #include <c10/core/DeviceGuard.h>
 #endif
 
+#if defined(HAVE_METAL)
+#include "metal_utils.h"
+#endif
+
 typedef struct {
     core_t* core;
     db_t* db;
@@ -167,7 +171,17 @@ static void decode_chunks(
         if (runner->device == "cpu") {
             openfish_decode_cpu(T, nt, C, nthreads, sub_NTC.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, &moves, &sequence, &qstring);
         } else {
-#ifdef USE_GPU
+#if defined(HAVE_METAL)
+            // In-place Metal decode: an MPS tensor's storage().data() bit-casts to its MTLBuffer (cf.
+            // ATen getMTLBufferStorage); openfish bridges the same pointer back, so we hand it the
+            // scores buffer directly -- no host copy, no scratch MTLBuffer. Needs storage offset 0
+            // (clone the rare offset case) and an MPS-stream sync first, since openfish decodes on its
+            // own command queue.
+            auto sc = sub_NTC.contiguous();
+            if (sc.storage_offset() != 0) sc = sc.clone();
+            torch::mps::synchronize();
+            openfish_decode_gpu(T, nt, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+#elif defined(USE_GPU)
             openfish_decode_gpu(T, nt, C, sub_NTC.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else
             ERROR("Invalid device: %s. Please compile again for GPU", runner->device.c_str());

@@ -78,8 +78,10 @@ static void mod_call_chunks(
         active_input_sigs.to(runner->tensor_opts.device_opt().value()),
         active_input_seqs.to(runner->tensor_opts.device_opt().value())
     );
-#ifdef USE_GPU
+#if defined(HAVE_CUDA) || defined(HAVE_ROCM)
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
+#elif defined(HAVE_METAL)
+    if (runner->device != "cpu") torch::mps::synchronize();
 #endif
 
     auto scores_f16 = scores.cpu().contiguous();

@@ -18,8 +18,10 @@ elif [ ${DEV} == "cuda" ]; then
     VER=2.4.0
 elif [ ${DEV} == "rocm" ]; then
     VER=2.9.0
+elif [ ${DEV} == "metal" ]; then
+    VER=2.4.0
 else
-    die "Unknown DEV option ${DEV}. Supported options are: cpu, cuda, rocm"
+    die "Unknown DEV option ${DEV}. Supported options are: cpu, cuda, rocm, metal"
 fi
 
 
@@ -60,11 +62,26 @@ elif [ ${DEV} = "rocm" ]; then
     else
         die "Untested Torch version ${VER} for ROCm. Tested versions are: 2.2.0, 2.9.0"
     fi
+elif [ ${DEV} = "metal" ]; then
+    # Apple Silicon: the macOS arm64 libtorch package bundles the MPS backend
+    # (there is no separate "mps" package). Tested versions: 2.4.0 - 2.7.0.
+    case "${VER}" in
+        2.4.0|2.5.0|2.6.0|2.7.0) ;;
+        *) die "Untested Torch version ${VER} for Metal. Tested versions are: 2.4.0, 2.5.0, 2.6.0, 2.7.0" ;;
+    esac
+    LINK="https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-${VER}.zip"
+    MAKE_CMD="make -j metal=1"
 fi
 
 echo "Downloading Torch ${VER} for ${DEV}. Please wait ..."
 echo "Download link: ${LINK}"
-wget ${LINK} -O torch.zip || die "Could not download torch"
+if command -v wget >/dev/null 2>&1; then
+    wget ${LINK} -O torch.zip || die "Could not download torch"
+elif command -v curl >/dev/null 2>&1; then
+    curl -L "${LINK}" -o torch.zip || die "Could not download torch"
+else
+    die "Neither wget nor curl found; cannot download torch"
+fi
 unzip torch.zip -d thirdparty/torch/ || die "Could not extract torch"
 if [ ${WHL} -eq 1 ] ; then
     mv thirdparty/torch/torch thirdparty/torch/libtorch

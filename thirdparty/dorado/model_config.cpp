@@ -1130,10 +1130,10 @@ context_params_t parse_context_params(const toml_table_t *config_toml) {
     const auto bases_after = get_int_in_range(params, "kmer_context_bases_1", 0, 9, REQUIRED);
 
     toml_datum_t reverse_datum = toml_bool_in(params, "reverse_signal");
-    const auto reverse = reverse_datum.ok ? reverse_datum.u.b : false;
+    const auto reverse = reverse_datum.ok ? (bool)reverse_datum.u.b : false;
 
     toml_datum_t justify_datum = toml_bool_in(params, "base_start_justify");
-    const auto base_start_justify = justify_datum.ok ? justify_datum.u.b : false;
+    const auto base_start_justify = justify_datum.ok ? (bool)justify_datum.u.b : false;
 
     context_params_t cp{context_before, context_after, context_before + context_after, chunk_size,
                      bases_before, bases_after, bases_before + bases_after + 1,

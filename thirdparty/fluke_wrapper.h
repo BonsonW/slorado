@@ -11,6 +11,16 @@
 #include <ATen/core/Tensor.h>
 #include <string>
 
+// fluke.h only defines its opaque backend/recurrence types on CUDA/ROCm builds (the fused
+// kernels are GPU-only). On other builds (CPU, Metal/MPS) forward-declare them so slorado's
+// struct fields and the wrapper's stub declarations below still name a type; they are only ever
+// held as null pointers and never dereferenced (all fluke call sites are HAVE_CUDA/HAVE_ROCM gated).
+#if !defined(HAVE_CUDA) && !defined(HAVE_ROCM)
+typedef struct fluke_int8_backend fluke_int8_backend_t;
+typedef struct fluke_flstm_backend fluke_flstm_backend_t;
+typedef struct fluke_flstm_rec fluke_flstm_rec_t;
+#endif
+
 struct tensor_quant_t; // defined in thirdparty/dorado/tensor_chunk_utils.h
 
 // Quantization format a layer's method string maps to at the kernel level.
