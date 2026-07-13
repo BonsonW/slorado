@@ -28,9 +28,20 @@ metal_lstm_ctx_t *metal_lstm_create(int lstm_size, int num_layers, int reverse_f
 // Whether the current device/config can run on Metal (lstm_size tiles correctly, kernels compiled).
 int metal_lstm_ok(const metal_lstm_ctx_t *ctx);
 
+// Whether the fused conv stack is available (all 3 conv layers registered) -- the run then takes the
+// raw signal MTLBuffer and does conv+lstm on the GPU.
+int metal_lstm_has_conv(const metal_lstm_ctx_t *ctx);
+
 // Per-layer reverse flag (reverse_first alternating), so the caller applies dorado's U/W weight swap
 // consistently when preparing the reordered weight buffer for that layer.
 int metal_lstm_layer_reverse(const metal_lstm_ctx_t *ctx, int layer);
+
+// Register a conv layer (1,2,3) of the fused conv stack. When all three are set, the run does
+// conv1->conv2->conv3 on the GPU (conv3 writes the LSTM layout directly), taking the raw signal
+// MTLBuffer instead of a conv-output -- replacing the ATen conv and reorder_input. w is the dorado
+// padded weight+bias layout [rows, new_out_size] (built ATen-side), fp16. clamp = 1 for SWISH_CLAMP.
+void metal_lstm_set_conv(metal_lstm_ctx_t *ctx, int layer, int in_size, int out_size, int win,
+                         int stride, int clamp, const void *w, size_t bytes);
 
 // Hand over one layer's already-reordered weights: host fp16, dorado layout [3*C+1, C, 4] (U|W|W|bias
 // combined, gates reordered IFGO->GIFO, bias = bias_ih+bias_hh folded into the last row). Copied into

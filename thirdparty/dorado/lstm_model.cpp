@@ -38,6 +38,32 @@ static void *build_metal_lstm(const lstm_model_t *m, int lstm_size) {
         comb = comb.to(torch::kFloat16).contiguous();
         metal_lstm_set_layer(ctx, (int)i, comb.data_ptr(), comb.numel() * sizeof(uint16_t));
     }
+
+    // Conv stack: hand each conv layer its weights in dorado's padded [rows, out] layout so the whole
+    // conv1->conv2->conv3 runs on the GPU (conv3 writes the LSTM layout). Only the exact fast/hac v5
+    // shapes dorado's specialized kernels support; anything else leaves has_conv false -> ATen conv.
+    if (m->convs.size() == 3) {
+        // dorado's specialized kernels: conv1_in1_out16 (win5), conv2_in16_out16 (win5), conv3 (in16).
+        auto shape = [](const conv_layer_t &c, int in, int out, int win) {
+            return c.w.size(1) == in && c.w.size(0) == out && (win == 0 || c.w.size(2) == win);
+        };
+        bool shapes_ok = shape(m->convs[0], 1, 16, 5) && shape(m->convs[1], 16, 16, 5) &&
+                         m->convs[2].w.size(1) == 16 && lstm_size == 96;   // verified: fast v5 only
+        for (size_t i = 0; shapes_ok && i < 3; ++i) {
+            const auto &cv = m->convs[i];
+            const int out = (int)cv.w.size(0), in = (int)cv.w.size(1), win = (int)cv.w.size(2);
+            const int pad_rows = (in == 1 && out == 16) ? 5 : (in == 4 && out == 16) ? 4 : 0;  // repeats=1
+            const int rows = 2 * pad_rows + win * in + 1;
+            auto tw = cv.w.to(torch::kCPU).to(torch::kFloat32).permute({2, 1, 0}).contiguous();   // [win,in,out]
+            auto tb = torch::zeros({rows, out}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+            tb.narrow(0, pad_rows, win * in).view({win, in, out}).copy_(tw);
+            tb.select(0, rows - 1).copy_(cv.b.to(torch::kCPU).to(torch::kFloat32));               // bias row
+            auto tbf = tb.to(torch::kFloat16).contiguous();
+            const int clamp = (cv.activation == Activation::SWISH_CLAMP) ? 1 : 0;
+            metal_lstm_set_conv(ctx, (int)i + 1, in, out, win, cv.stride, clamp,
+                                tbf.data_ptr(), tbf.numel() * sizeof(uint16_t));
+        }
+    }
     return ctx;
 }
 #endif
@@ -177,36 +203,53 @@ at::Tensor lstm_model_forward(const lstm_model_t *m, at::Tensor x) {
     const auto dev_idx = x.device().index();
     double a, b;
 
-    // conv stack: [N, C_in, T] -> [N, T, C_out]
-    a = realtime();
-    x = conv_stack_forward(m->convs, x);
-    STAGE_SYNC(on_gpu, dev_idx);
-    b = realtime();
-    m->stats->time_conv_stack += b - a;
+#if defined(HAVE_METAL)
+    const bool fused_conv = m->metal_ctx && metal_lstm_has_conv((metal_lstm_ctx_t *)m->metal_ctx) && on_gpu;
+#else
+    const bool fused_conv = false;
+#endif
+
+    // conv stack: [N, C_in, T] -> [N, T, C_out]. Skipped when the Metal conv+LSTM block runs it on GPU.
+    if (!fused_conv) {
+        a = realtime();
+        x = conv_stack_forward(m->convs, x);
+        STAGE_SYNC(on_gpu, dev_idx);
+        b = realtime();
+        m->stats->time_conv_stack += b - a;
+    }
 
     // bidirectional-alternating LSTM stack (flip time per layer, final flip if odd)
     a = realtime();
 #if defined(HAVE_METAL)
-    if (m->metal_ctx && metal_lstm_ok((metal_lstm_ctx_t *)m->metal_ctx) && !x.device().is_cpu()) {
-        // dorado's tiled Metal LSTM. It wants fp16 [T,N,C] host in/out and N a multiple of 48; pad
-        // the batch, run on the GPU (reorder -> layers -> reorder), then slice back. The reorder
-        // kernels reproduce slorado's forward output order, so no per-layer flips here.
+    if (fused_conv) {
+        // Fused conv+LSTM on GPU: x is the raw scaled signal [N,1,chunk]. Pass its MTLBuffer as
+        // [N,chunk]; the metal block does conv1->conv2->conv3->lstm->reorder and returns [T,N,C].
+        const int64_t N = x.size(0), chunk = x.size(2);
+        const int64_t T = chunk / m->convs.back().stride;   // conv3 stride
+        const int64_t C = m->lstm_size;
+        const int64_t Npad = (N + 47) / 48 * 48;
+        at::Tensor xp = x;                                  // [N,1,chunk]
+        if (Npad != N) { xp = torch::zeros({Npad, 1, chunk}, x.options()); xp.narrow(0, 0, N).copy_(x); }
+        auto sig = xp.reshape({Npad, chunk}).contiguous();  // [Npad,chunk] fp16 MPS, offset 0
+        auto out = torch::empty({T, Npad, C}, x.options()); // [T,Npad,C] fp16 MPS
+        torch::mps::synchronize();
+        metal_lstm_run((metal_lstm_ctx_t *)m->metal_ctx, (int)Npad, (int)T,
+                       sig.storage().data(), out.storage().data());
+        auto y = out.transpose(0, 1).contiguous();          // [Npad,T,C]
+        x = (Npad != N) ? y.narrow(0, 0, N).contiguous() : y;
+    } else if (m->metal_ctx && metal_lstm_ok((metal_lstm_ctx_t *)m->metal_ctx) && on_gpu) {
+        // Zero-copy Metal LSTM from the (ATen) conv output: hand the kernels the conv tensor's
+        // MTLBuffer directly and write into another MPS tensor -- no host round-trip.
         const int64_t N = x.size(0), T = x.size(1), C = x.size(2);
         const int64_t Npad = (N + 47) / 48 * 48;
         at::Tensor xp = x;
-        if (Npad != N) {
-            xp = torch::zeros({Npad, T, C}, x.options());
-            xp.narrow(0, 0, N).copy_(x);
-        }
-        // Zero-copy: keep the conv output on MPS and hand the dorado LSTM kernels its MTLBuffer
-        // directly (storage().data() bit-casts to the buffer), writing into another MPS tensor -- no
-        // host round-trip. Sync torch's MPS stream first (the LSTM runs on its own command queue).
-        auto in = xp.transpose(0, 1).contiguous();                  // [T,Npad,C] fp16 MPS, offset 0
-        auto out = torch::empty({T, Npad, C}, xp.options());        // [T,Npad,C] fp16 MPS, offset 0
+        if (Npad != N) { xp = torch::zeros({Npad, T, C}, x.options()); xp.narrow(0, 0, N).copy_(x); }
+        auto in = xp.transpose(0, 1).contiguous();          // [T,Npad,C] fp16 MPS, offset 0
+        auto out = torch::empty({T, Npad, C}, xp.options());
         torch::mps::synchronize();
         metal_lstm_run((metal_lstm_ctx_t *)m->metal_ctx, (int)Npad, (int)T,
                        in.storage().data(), out.storage().data());
-        auto y = out.transpose(0, 1).contiguous();                  // [Npad,T,C] fp16 MPS
+        auto y = out.transpose(0, 1).contiguous();
         x = (Npad != N) ? y.narrow(0, 0, N).contiguous() : y;
     } else
 #endif
