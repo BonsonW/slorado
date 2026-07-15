@@ -262,7 +262,11 @@ at::Tensor basecall_infer_host(const core_t* core, const int runner_idx, const s
         // scores in [-5, 5] -> int8 [-127, 127] (decode rescales by SCORES_I8_SCALE = 5/127).
         dev = (sub * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).contiguous();
     } else {
-        dev = sub.to(torch::kFloat32).contiguous();
+        // Native (non-clamp, e.g. transformer) scores: the GPU scan reads these as fp16 (openfish
+        // Metal F16 == __fp16), so keep the DEVICE copy fp16. basecall_finalize_host converts the
+        // HOST copy to fp32 for the CPU beam (openfish CPU F16 == float). Handing fp32 to the GPU
+        // scan misreads the bytes as fp16 -> garbage (only bites clamp=false models; LSTM int8).
+        dev = sub.to(torch::kHalf).contiguous();
     }
     ts->time_scores_copy += realtime();
     ts->n_batches++;
@@ -309,7 +313,8 @@ at::Tensor basecall_crf_quant(const core_t* core, const int runner_idx, at::Tens
     if (core->model_config->clamp) {
         return (x * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).contiguous();
     }
-    return x.to(torch::kFloat32).contiguous();
+    // fp16 on-device for the GPU scan (see basecall_infer_host); finalize converts the host copy to fp32.
+    return x.to(torch::kHalf).contiguous();
 }
 #endif
 
@@ -384,7 +389,12 @@ void basecall_scan_gpu(const core_t* core, const int runner_idx, at::Tensor dev_
 at::Tensor basecall_finalize_host(const core_t* core, at::Tensor dev_scores) {
     (void)core;
     torch::mps::synchronize();
-    return dev_scores.contiguous().to(torch::kCPU).contiguous();
+    at::Tensor host = dev_scores.contiguous().to(torch::kCPU).contiguous();
+    // int8 scores read identically on GPU (scan) and CPU (beam). Native fp16 scores, however, must
+    // become fp32 for the CPU beam (openfish CPU F16 == float) while the device copy stays fp16 for
+    // the GPU scan -- otherwise the beam reads 2-byte halves as 4-byte floats and mis-decodes.
+    if (host.scalar_type() != at::kChar) host = host.to(torch::kFloat32).contiguous();
+    return host;
 }
 
 // CPU beam search over the GPU-scanned posteriors in gpubuf; writes moves/seq/qstring to the chunks.
