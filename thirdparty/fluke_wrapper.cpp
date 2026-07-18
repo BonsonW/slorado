@@ -14,13 +14,22 @@ enum fluke_format_t fluke_parse_format(const std::string &method) {
 // are never selected (fluke_select_backend returns NULL) and compile to stubs.
 #if defined(HAVE_CUDA) || defined(HAVE_ROCM)
 
+#ifdef HAVE_CUDA
 #include <ATen/cuda/CUDAContext.h>   // at::cuda::getCurrentCUDAStream()
+#elif defined(HAVE_ROCM)
+#include <c10/hip/HIPStream.h>       // c10::hip::getCurrentHIPStream() — lightweight; the ATen/hip
+                                     // context header drags in cusolver, and ATen/cuda pulls cuda_runtime_api.h
+#endif
 
 // The stream the fluke kernels launch on: torch's current stream for this device. During CUDA-graph
 // capture torch sets the current stream to the capture stream, so the flstm/down-proj launches are
 // captured automatically (matching how ATen's own ops behave).
 static inline void *fluke_current_stream() {
+#ifdef HAVE_CUDA
     return (void *)at::cuda::getCurrentCUDAStream().stream();
+#else
+    return (void *)c10::hip::getCurrentHIPStream().stream();
+#endif
 }
 
 fluke_int8_backend_t *fluke_select_backend(int device_index, enum fluke_format_t desired, fluke_dims_t dims) {
@@ -62,39 +71,6 @@ at::Tensor fluke_gated_mlp_i8(const fluke_int8_backend_t *b, const tensor_quant_
     return out.view({N, T, d.dim_feedforward});
 }
 
-fluke_flstm_backend_t *fluke_select_flstm(int device_index, enum fluke_format_t desired, int H, int K_hh, int R) {
-    if (desired != FLUKE_FORMAT_INT8) return nullptr;      // only int8 kernels exist today
-    return fluke_flstm_select(device_index, H, K_hh, R);   // fluke's own handle; NULL on arch/shape mismatch
-}
-
-void fluke_flstm_down_proj_i8_into(const fluke_flstm_backend_t *b, at::Tensor &out, const at::Tensor &a_i8,
-                                   const at::Tensor &scale_a, const tensor_quant_t &w) {
-    const int64_t M = a_i8.size(0);
-    fluke_down_proj_i8_gpu(b, out.data_ptr(), a_i8.data_ptr(), w.tensor.data_ptr(),
-                           scale_a.data_ptr(), w.scale.data_ptr(), (int)M, fluke_current_stream());
-}
-
-at::Tensor fluke_dequant_int8_transpose(const at::Tensor &in_tnc, float scale) {
-    const int64_t T = in_tnc.size(0), N = in_tnc.size(1), C = in_tnc.size(2);
-    auto in = in_tnc.contiguous();
-    auto out = torch::empty({N, T, C}, in.options().dtype(at::kHalf));
-    fluke_dequant_int8_transpose_gpu(in.data_ptr(), out.data_ptr(), (int)T, (int)N, (int)C, scale);
-    return out;
-}
-
-// Only the run needs a bridge (at::Tensors -> ptrs); create/free are fluke's C ABI, called directly.
-void fluke_flstm_run_recurrence(fluke_flstm_rec_t *rec, int layer_idx,
-                                at::Tensor &hh_all, at::Tensor &cell, const at::Tensor &x_down,
-                                const at::Tensor &w_dn, const at::Tensor &comb_scale,
-                                const at::Tensor gate_w[4], const at::Tensor gate_b[4], bool reverse) {
-    fluke_flstm_recurrence(rec, layer_idx,
-        hh_all.data_ptr(), cell.data_ptr(), x_down.data_ptr(),
-        w_dn.data_ptr(), comb_scale.data_ptr(),
-        gate_w[0].data_ptr(), gate_w[1].data_ptr(), gate_w[2].data_ptr(), gate_w[3].data_ptr(),
-        gate_b[0].data_ptr(), gate_b[1].data_ptr(), gate_b[2].data_ptr(), gate_b[3].data_ptr(),
-        reverse ? 1 : 0, fluke_current_stream());
-}
-
 #else // no GPU backend — ops never selected, so these are stubs.
 
 fluke_int8_backend_t *fluke_select_backend(int, enum fluke_format_t, fluke_dims_t) { return nullptr; }
@@ -104,16 +80,5 @@ at::Tensor fluke_qkv_rotary_i8(const fluke_int8_backend_t *, const tensor_quant_
 
 at::Tensor fluke_gated_mlp_i8(const fluke_int8_backend_t *, const tensor_quant_t &, const tensor_quant_t &,
                               const tensor_quant_t &) { return at::Tensor(); }
-
-fluke_flstm_backend_t *fluke_select_flstm(int, enum fluke_format_t, int, int, int) { return nullptr; }
-
-void fluke_flstm_down_proj_i8_into(const fluke_flstm_backend_t *, at::Tensor &, const at::Tensor &,
-                                   const at::Tensor &, const tensor_quant_t &) {}
-
-at::Tensor fluke_dequant_int8_transpose(const at::Tensor &, float) { return at::Tensor(); }
-
-void fluke_flstm_run_recurrence(fluke_flstm_rec_t *, int, at::Tensor &, at::Tensor &,
-                                const at::Tensor &, const at::Tensor &, const at::Tensor &,
-                                const at::Tensor[4], const at::Tensor[4], bool) {}
 
 #endif // HAVE_CUDA || HAVE_ROCM

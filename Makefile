@@ -12,7 +12,8 @@ CPPFLAGS += -I slow5lib/include/ \
 CFLAGS	+= 	-g -Wall -O2
 CXXFLAGS   += -g -Wall -O2 -std=c++17
 DEPFLAGS = -MMD -MP -MF $(@:.o=.d)
-LIBS    +=  -Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../lib' \
+LIBS    +=  -Wl,--disable-new-dtags \
+			-Wl,-rpath,'$$ORIGIN/$(LIBTORCH_DIR)/lib' -Wl,-rpath,'$$ORIGIN/../lib' \
 			-Wl,-rpath,$(LIBTORCH_DIR)/lib \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch_cpu.so"  \
 			-Wl,--as-needed,"$(LIBTORCH_DIR)/lib/libtorch.so"  \
@@ -179,8 +180,10 @@ $(BUILD_DIR)/toml.o: thirdparty/tomlc99/toml.c
 openfish/lib/libopenfish.a:
 	$(MAKE) -C openfish cuda=$(cuda) rocm=$(rocm) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libopenfish.a
 
+# fused=1 enables fluke's fused DSL kernels (needs AOT artifacts exported per arch; see
+# fluke/README). Default (unset) builds the portable fp16-fallback stubs — no artifacts needed.
 fluke/lib/libfluke.a:
-	$(MAKE) -C fluke cuda=$(cuda) rocm=$(rocm) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libfluke.a
+	$(MAKE) -C fluke cuda=$(cuda) rocm=$(rocm) fused=$(fused) ROCM_ROOT="$(ROCM_ROOT)" ROCM_ARCH="$(ROCM_ARCH)" CUDA_ROOT="$(CUDA_ROOT)" CUDA_ARCH="$(CUDA_ARCH)" lib/libfluke.a
 
 slow5lib/lib/libslow5.a:
 	$(MAKE) -C slow5lib zstd=$(zstd) no_simd=$(no_simd) zstd_local=$(zstd_local) lib/libslow5.a

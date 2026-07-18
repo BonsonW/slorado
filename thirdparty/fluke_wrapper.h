@@ -41,37 +41,3 @@ at::Tensor fluke_qkv_rotary_i8(const fluke_int8_backend_t *b, const tensor_quant
 // [dim_feedforward, d_model] (+per-out-channel scale). Returns fp16 silu(gate)*up [N,T,dim_feedforward].
 at::Tensor fluke_gated_mlp_i8(const fluke_int8_backend_t *b, const tensor_quant_t &x, const tensor_quant_t &gate,
                               const tensor_quant_t &up);
-
-// ── factored-LSTM (v6 hac) int8 path ────────────────────────────────────────────────────────────
-// The backend (fluke_flstm_backend_t) and recurrence-state (fluke_flstm_rec_t) handles are fluke's
-// own opaque C types — slorado stores and passes them directly (no extra wrapper handle). The rec
-// lifecycle is fluke's C ABI too (fluke_flstm_rec_create/free); only the ops that take at::Tensors
-// need a bridge here.
-
-// Return an FLSTM backend when `desired` is int8 and fluke has a precompiled kernel matching this
-// device's arch and shape (H hidden, K_hh recurrent rank, R input rank); otherwise NULL (caller
-// keeps the fp16 path). The handle is shared for the process and must not be freed.
-fluke_flstm_backend_t *fluke_select_flstm(int device_index, enum fluke_format_t desired, int H, int K_hh, int R);
-
-// int8 down-projection into a caller-provided fp16 `out` [M, R] = (a_i8[M,H] * scale_a[M]) @
-// (w.tensor[R,H] * w.scale[R])^T. Used for the ih precompute (M = T*N); the per-step hh projection
-// is now internal to the recurrence. out and a_i8 give M; w gives R.
-void fluke_flstm_down_proj_i8_into(const fluke_flstm_backend_t *b, at::Tensor &out, const at::Tensor &a_i8,
-                                   const at::Tensor &scale_a, const tensor_quant_t &w);
-
-// Fused dequantize + transpose: in int8 [T, N, C] (scale) -> out fp16 [N, T, C], out[n,t,c] =
-// in[t,n,c] * scale. Used to convert the last FLSTM layer's int8 hidden ring to fp16 in one pass.
-at::Tensor fluke_dequant_int8_transpose(const at::Tensor &in_tnc, float scale);
-
-// ── Unified recurrence (fluke owns the loop + CUDA graph + fused/two-kernel choice) ──────────────
-// Create/free the recurrence state via fluke's C ABI directly: fluke_flstm_rec_create(backend, N, T,
-// num_layers) / fluke_flstm_rec_free(rec) (declared in <fluke/fluke.h>). Only the run below needs a
-// bridge (it takes at::Tensors). Run one layer's full T-step recurrence (zeroes boundary hidden +
-// cell, loops, captures/replays a CUDA graph, chooses fused vs two-kernel internally):
-//   hh_all [T+1,N,C] int8 ring; cell [N,C] f32 (in place); x_down [T,N,K] f16 (precomputed);
-//   w_dn [K_hh,H] int8 + comb_scale [K_hh] f32; gate_w[g] [H,Kc] f16, gate_b[g] [H] f32 (i,f,g,o);
-//   reverse = scan direction (ring parity).
-void fluke_flstm_run_recurrence(fluke_flstm_rec_t *rec, int layer_idx,
-                                at::Tensor &hh_all, at::Tensor &cell, const at::Tensor &x_down,
-                                const at::Tensor &w_dn, const at::Tensor &comb_scale,
-                                const at::Tensor gate_w[4], const at::Tensor gate_b[4], bool reverse);
