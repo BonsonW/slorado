@@ -432,6 +432,51 @@ void basecall_beam_host(const core_t* core, const int runner_idx, at::Tensor hos
     free(moves); free(sequence); free(qstring);
     ts->time_decode += realtime();
 }
+
+// TEMPORARY (benchmark): full GPU decode -- scan + beam + qual + sequence-gen ALL on the GPU (the
+// batch path's openfish_decode_gpu), as a drop-in alternative to basecall_scan_gpu +
+// basecall_beam_host (GPU scan + CPU beam) in the streaming decode stage. Lets us A/B the beam
+// search on GPU vs CPU with the pipeline, GPU scan and score dtypes held identical. Selected via
+// SLORADO_GPU_BEAM. Like basecall_scan_gpu, runs on the decode thread and touches NO torch MPS ops:
+// dev_scores is already contiguous and was synced by the runner's basecall_finalize_host, so only
+// the raw MTLBuffer pointer (storage().data()) is handed to openfish.
+void basecall_decode_gpu_full(const core_t* core, const int runner_idx, at::Tensor dev_scores,
+                              openfish_gpubuf_t *gpubuf, const std::vector<basecall_chunk_t *> &chunks) {
+    runner_stat_t* ts = (*core->runner_stats)[runner_idx];
+    const int N = (int)chunks.size();
+    const int T = (int)dev_scores.size(1);
+    const int C = (int)dev_scores.size(2);
+    const int state_len = core->model_config->state_len;
+    const bool i8 = dev_scores.scalar_type() == at::kChar;
+    const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F16;
+    const float sscale = i8 ? SCORES_I8_SCALE : 1.0f;
+
+    // Mirror basecall_scan_gpu's buffer handling (contiguous no-op; clone only for the rare non-zero
+    // storage offset) so the ONLY behavioural difference vs the GPU-scan+CPU-beam path is the beam.
+    auto sc = dev_scores.contiguous();
+    if (sc.storage_offset() != 0) sc = sc.clone();
+
+    uint8_t *moves; char *sequence; char *qstring;
+    ts->time_decode -= realtime();
+    openfish_decode_gpu(T, N, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts,
+                        gpubuf, &moves, &sequence, &qstring);
+    for (int j = 0; j < N; ++j) {
+        basecall_chunk_t *ck = chunks[j];
+        size_t idx = (size_t)j * T;
+        ck->moves = std::vector<uint8_t>(moves + idx, moves + idx + T);
+        size_t num_bases = 0;
+        for (auto move : ck->moves) num_bases += move;
+        if (num_bases > (size_t)T) { ERROR("num bases %zu greater than number of timesteps %d", num_bases, T); exit(EXIT_FAILURE); }
+        ck->seq = std::string(sequence + idx, num_bases);
+        ck->qstring = std::string(qstring + idx, num_bases);
+        if (ck->seq.empty() || ck->qstring.empty() || ck->seq.size() != ck->qstring.size()) {
+            ERROR("gpu decode produced bad seq/qstring (seq %zu qstr %zu)", ck->seq.size(), ck->qstring.size());
+            exit(EXIT_FAILURE);
+        }
+    }
+    free(moves); free(sequence); free(qstring);
+    ts->time_decode += realtime();
+}
 #endif
 
 // Inference + decode back-to-back on a packed batch (decode subtiles internally).

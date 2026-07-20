@@ -17,9 +17,9 @@
 
 static constexpr int kTileSize = 8;
 static constexpr int kSIMDWidth = 32;
-static constexpr int kMaxTimeSteps = 512;   // fewer piece-boundary GPU syncs than dorado's 20, while
-                                            // keeping each kernel launch bounded (dorado caps at 20 to
-                                            // avoid command-buffer submission errors on long kernels)
+static constexpr int kMaxTimeSteps = 512;   // timesteps per LSTM kernel dispatch (state kept resident
+                                            // across the piece). Swept 20..1024: no measurable effect
+                                            // (kernel is gate-matmul bound), so left at 512.
 static constexpr int kLstmGates = 4;
 
 struct metal_lstm_ctx {

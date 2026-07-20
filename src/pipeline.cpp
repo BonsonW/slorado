@@ -271,13 +271,23 @@ static void decode_stage(pipeline_ctx_t *ctx) {
         for (size_t i = 0; i < di.items.size(); ++i) ptrs.push_back(&di.items[i].read->chunks[di.items[i].chunk_idx]);
 
         // GPU scan (fills gpubuf bwd/post; runner already synced the scores) then CPU beam.
-        g_dec_scan -= realtime();
-        basecall_scan_gpu(core, di.runner_idx, di.dev_scores, gpubuf);
-        g_dec_scan += realtime();
-        di.dev_scores = at::Tensor();   // release the device scores now the scan has consumed them
-        g_dec_decode -= realtime();
-        basecall_beam_host(core, di.runner_idx, di.host_scores, gpubuf, ptrs);
-        g_dec_decode += realtime();
+        // SLORADO_GPU_BEAM (benchmark toggle): run the beam on the GPU too (full openfish_decode_gpu),
+        // so the ONLY difference vs the default is where the beam search runs -- GPU vs CPU.
+        static const bool gpu_beam = getenv("SLORADO_GPU_BEAM") != nullptr;
+        if (gpu_beam) {
+            g_dec_decode -= realtime();
+            basecall_decode_gpu_full(core, di.runner_idx, di.dev_scores, gpubuf, ptrs);
+            g_dec_decode += realtime();
+            di.dev_scores = at::Tensor();   // release the device scores now the GPU decode consumed them
+        } else {
+            g_dec_scan -= realtime();
+            basecall_scan_gpu(core, di.runner_idx, di.dev_scores, gpubuf);
+            g_dec_scan += realtime();
+            di.dev_scores = at::Tensor();   // release the device scores now the scan has consumed them
+            g_dec_decode -= realtime();
+            basecall_beam_host(core, di.runner_idx, di.host_scores, gpubuf, ptrs);
+            g_dec_decode += realtime();
+        }
 
         g_dec_push -= realtime();
         for (size_t i = 0; i < di.items.size(); ++i) {

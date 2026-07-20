@@ -22,7 +22,8 @@ OS="$(uname -s)"
 
 # ============================== CONFIG (edit paths here) ==============================
 MODEL_TYPE="dna_r10.4.1_e8.2_400bps"
-MODELS=( fast@v5.0.0 )
+# space-separated list, env-overridable: MODELS="fast@v5.0.0 hac@v5.0.0 sup@v5.0.0"
+read -ra MODELS <<< "${MODELS:-fast@v5.0.0}"
 THREADS="${THREADS:-$(getconf _NPROCESSORS_ONLN)}"
 
 if [ "$OS" = "Darwin" ]; then
@@ -34,7 +35,7 @@ if [ "$OS" = "Darwin" ]; then
     BLOW5="${BLOW5:-${REPO_ROOT}/test/PGXXXX230339/reads_1k.blow5}"
     POD5="${POD5:-${REPO_ROOT}/test/PGXXXX230339/reads_1k.pod5}"
     OUTBASE="${OUTBASE:-${REPO_ROOT}/test/bench_out}"
-    REF="${REF:-}"                       # no local hg38 on mac by default -> accuracy auto-skips
+    REF="${REF:-${REPO_ROOT}/test/slorado_test_ext_dat/genome/hg38noAlt.idx}"   # bundled minimap2 index -> accuracy runs
     DEVICES=( metal )
     # slorado's dylibs live under thirdparty/torch; make them findable at runtime.
     export DYLD_LIBRARY_PATH="${REPO_ROOT}/thirdparty/torch/libtorch/lib:${DYLD_LIBRARY_PATH:-}"
@@ -80,7 +81,7 @@ esac
 test -n "$BIN" && test -e "$BIN" || die "binary not found: $BIN"
 
 if [ "$DRY" -eq 1 ]; then
-    MODELS=( fast@v5.0.0 ); OUTBASE="$SCRIPT_DIR"; DATASET="dry"
+    OUTBASE="$SCRIPT_DIR"; DATASET="dry"   # dry run keeps the requested MODELS so every model is exercised
     [ "$OS" = "Darwin" ] && DEVICES=( metal ) || DEVICES=( cuda:0 )
     case "$PROG" in dorado) INPUT="$DRY_POD5" ;; *) INPUT="$DRY_BLOW5" ;; esac
 else
@@ -115,6 +116,30 @@ ndev() {
     esac
 }
 
+# Per-model Metal GPU batch (-C). SUP's transformer GEMMs exceed MPS's max single-buffer size at
+# the default 384 (6 GB alloc -> abort), so cap SUP. Override via FAST_BATCH/HAC_BATCH/SUP_BATCH.
+metal_gpu_batch() {
+    case "$1" in
+        fast*) echo "${FAST_BATCH:-384}" ;;
+        hac*)  echo "${HAC_BATCH:-384}" ;;
+        sup*)  echo "${SUP_BATCH:-64}" ;;
+        *)     echo "${GPU_BATCH:-384}" ;;
+    esac
+}
+
+# Per-model Metal chunk size (-c). HAC's default ~10k chunk makes a ~235MB LSTM working buffer that
+# stalls at batch 384 on 8GB unified memory; a 4800 chunk keeps it under the stall threshold so the
+# efficient batch-384 kernel is actually usable (~1.8x faster, same accuracy). 0 = model default.
+metal_chunk() {
+    case "$1" in
+        hac*) echo "${HAC_CHUNK:-4800}" ;;
+        # SUP's CRF output [N,2T,4096] (state_len 5) stalls MPS at large N*T on 8GB; a 3072 chunk with
+        # -C64 keeps it ~0.5GB (0.6 vs 0.17 reads/s baseline, same accuracy).
+        sup*) echo "${SUP_CHUNK:-3072}" ;;
+        *)    echo "0" ;;
+    esac
+}
+
 run() {
     local device="$1" modeltag="$2"
     local model="${MODEL_TYPE}_${modeltag}"
@@ -127,8 +152,11 @@ run() {
     case "$PROG" in
       slorado)
         if [ "$OS" = "Darwin" ]; then
-            # Metal: pure fp16 path (--flash/--quant are CUDA/ROCm-only).
-            "$BIN" basecaller --stream=yes -B4G -t "$THREADS" -x "$device" "${MODEL_DIR}/${model}" "$INPUT" > "$fq" 2> "$lg"
+            # Metal: pure fp16 path (--flash/--quant are CUDA/ROCm-only). Per-model -C/-c (see
+            # metal_gpu_batch / metal_chunk) tuned for 8GB unified memory.
+            local cbatch cchunk copt; cbatch=$(metal_gpu_batch "$modeltag"); cchunk=$(metal_chunk "$modeltag")
+            copt=""; [ "$cchunk" -gt 0 ] && copt="-c $cchunk"
+            "$BIN" basecaller --stream=yes -C "$cbatch" $copt -B4G -t "$THREADS" -x "$device" "${MODEL_DIR}/${model}" "$INPUT" > "$fq" 2> "$lg"
         else
             "$BIN" basecaller --stream=yes --flash=yes --quant=int8 -B4G -t "$THREADS" -x "$device" "${MODEL_DIR}/${model}" "$INPUT" > "$fq" 2> "$lg"
         fi ;;
