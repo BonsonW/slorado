@@ -406,6 +406,11 @@ int basecaller_main(int argc, char* argv[]) {
 
         #undef PCT
     }
+
+    // (experiment) score-tensor size emitted by the NN over the whole run, measured as fp16 bytes.
+    fprintf(stderr, "\n[%s] score tensor: %lu elements, %lu bytes as fp16 (%.3f GiB)", __func__,
+        (unsigned long)g_score_numel, (unsigned long)g_score_bytes_fp16,
+        (double)g_score_bytes_fp16 / (1024.0 * 1024.0 * 1024.0));
     fprintf(stderr,"\n");
 
     // free the core data structure

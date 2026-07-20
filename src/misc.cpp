@@ -50,6 +50,9 @@ bool g_stage_sync = true;
 // int8 CRF scores: set by init_core from whether --quant is enabled (dorado-style; halves the
 // scores tensor + int8 decode). Default false = fp16 scores for unquantized runs.
 bool g_scores_i8 = false;
+// (experiment) score-tensor size accounting -- see misc.h.
+uint64_t g_score_numel = 0;
+uint64_t g_score_bytes_fp16 = 0;
 
 double realtime(void) {
     struct timeval tp;

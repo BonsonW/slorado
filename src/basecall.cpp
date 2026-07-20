@@ -84,7 +84,6 @@ static at::Tensor infer_chunks(
     const std::vector<basecall_chunk_t *> &chunks,
     const int runner_idx
 ) {
-    (void)chunks;
     runner_t* runner = (*core->runners)[runner_idx];
     runner_stat_t* ts = (*core->runner_stats)[runner_idx];
 
@@ -107,6 +106,16 @@ static at::Tensor infer_chunks(
     auto scores = model_forward(runner, input);
     STAGE_SYNC(runner->device != "cpu", runner->device_idx);
     ts->time_infer += realtime();
+
+    // (experiment) tally the score tensor emitted by the NN. Measure bytes as if fp16 (numel * 2),
+    // independent of the native score dtype (int8/fp16). scores is [N_cap, T, C] where N_cap is the
+    // full gpu batch capacity; the leftover batch has padding rows beyond the valid chunks. Count
+    // only the valid rows (chunks.size()) so padding is excluded.
+    {
+        const uint64_t numel = (uint64_t)chunks.size() * (uint64_t)scores.size(1) * (uint64_t)scores.size(2);
+        g_score_numel += numel;
+        g_score_bytes_fp16 += numel * (uint64_t)2;  // fp16 = 2 bytes/element
+    }
 
     if (core->sensitivity_stats) {
         core->sensitivity_stats->accumulate(fp16_scores, scores);

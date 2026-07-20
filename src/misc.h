@@ -33,6 +33,13 @@ extern bool g_scores_i8;
 // Dequant multiplier for int8 CRF scores (matches dorado ±5 clamp -> [-127,127]).
 #define SCORES_I8_SCALE (5.0f / 127.0f)
 
+// (experiment) score-tensor size accounting. Accumulated across every model forward in the run.
+// g_score_numel  : total number of score elements emitted by the NN ([N,T,C] summed over batches).
+// g_score_bytes_fp16 : those elements measured as if stored fp16 (numel * 2 bytes), regardless of
+//                      the native dtype (int8/fp16). Reported at end of run.
+extern uint64_t g_score_numel;
+extern uint64_t g_score_bytes_fp16;
+
 // Self-contained one-liner for those syncs: no #ifdef USE_GPU or device check needed at the call
 // site. `on_gpu` guards the CPU path (no CUDA sync there). Correctness in the streaming (no-sync)
 // path is guaranteed by CUDA stream ordering, not these syncs — they are timing instrumentation.
