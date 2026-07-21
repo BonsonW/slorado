@@ -53,9 +53,6 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/torchbox.o \
 	  $(BUILD_DIR)/basecall.o \
 	  $(BUILD_DIR)/modcall.o \
-	  $(BUILD_DIR)/calib.o \
-	  $(BUILD_DIR)/quant.o \
-	  $(BUILD_DIR)/sensitivity.o \
 	  $(BUILD_DIR)/tensor_chunk_utils.o \
 	  $(BUILD_DIR)/modbase.o \
 	  $(BUILD_DIR)/lstm_model.o \
@@ -139,15 +136,6 @@ $(BUILD_DIR)/basecall.o: src/basecall.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 $(BUILD_DIR)/modcall.o: src/modcall.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/calib.o: src/calib.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/quant.o: src/quant.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
-
-$(BUILD_DIR)/sensitivity.o: src/sensitivity.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
 # dorado

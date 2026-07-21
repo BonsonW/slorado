@@ -73,11 +73,9 @@ static struct option long_options[] = {
     {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
     {"flash", required_argument, 0, 0},             //16 toggles flash attention when possible
     {"mod", required_argument, 0, 0},               //17 detect modified bases
-    {"calibrate", required_argument, 0, 0},         //18 output calibration stats JSON
-    {"quant-config", required_argument, 0, 0},      //19 per-layer quant config JSON
-    {"sensitivity", required_argument, 0, 0},       //20 output sensitivity KL JSON
-    {"quant", required_argument, 0, 0},             //21 quantized inference mode (e.g. int8) if a backend is available
-    {"stream", required_argument, 0, 0},            //22 use the streaming (pipelined) basecalling path
+    {"quant", required_argument, 0, 0},             //18 quantized inference mode (e.g. int8) if a backend is available
+    {"stream", required_argument, 0, 0},            //19 use the streaming (pipelined) basecalling path
+    {"cpu-beam", required_argument, 0, 0},          //20 iGPU decode split: GPU scan + CPU beam (implies --stream)
     {0, 0, 0, 0}};
 
 
@@ -98,11 +96,9 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance; auto-detected at model load, --flash=no forces off [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
     fprintf(fp_help, "  --stream=yes|no             use the streaming (pipelined) basecalling path [%s]\n", (opt.flag & SLORADO_STREAM) ? "yes" : "no");
+    fprintf(fp_help, "  --cpu-beam=yes|no           iGPU decode split: GPU posterior scan + CPU beam search (implies --stream) [%s]\n", (opt.flag & SLORADO_CPU_BEAM) ? "yes" : "no");
     fprintf(fp_help, "  --mod STR                   detect modified bases (5mCG_5hmCG@v3) [%s]\n", opt.mod ? opt.mod : "NULL");
-    fprintf(fp_help, "  --calibrate FILE            write per-layer quantization calibration stats to FILE\n");
-    fprintf(fp_help, "  --quant-config FILE         load per-layer quantization config from JSON FILE\n");
-    fprintf(fp_help, "  --sensitivity FILE          compute KL(fp16, quant) per batch and write to FILE\n");
-    fprintf(fp_help, "  --quant STR                 quantized inference mode (int8) if a backend is available [%s]\n", opt.quant ? opt.quant : "NULL");
+    fprintf(fp_help, "  --quant STR                 quantized inference mode (int8): int8 CRF scores + fluke int8 GEMM [%s]\n", opt.quant ? opt.quant : "NULL");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
@@ -193,18 +189,15 @@ int basecaller_main(int argc, char* argv[]) {
             opt.flag |= SLORADO_SAM;
         } else if (c == 0 && longindex == 16) { // flash attention
             yes_or_no(&opt.flag, SLORADO_FLASH, long_options[longindex].name, optarg, 1);
-        } else if (c == 0 && longindex == 17) { // flash attention
+        } else if (c == 0 && longindex == 17) { // modbase detection
             opt.mod = optarg;
-        } else if (c == 0 && longindex == 18) { // calibration output
-            opt.calibrate_out = optarg;
-        } else if (c == 0 && longindex == 19) { // quant config
-            opt.quant_config_path = optarg;
-        } else if (c == 0 && longindex == 20) { // sensitivity output
-            opt.sensitivity_out = optarg;
-        } else if (c == 0 && longindex == 21) { // quantized inference mode
+        } else if (c == 0 && longindex == 18) { // quantized inference mode
             opt.quant = optarg;
-        } else if (c == 0 && longindex == 22) { // streaming pipeline
+        } else if (c == 0 && longindex == 19) { // streaming pipeline
             yes_or_no(&opt.flag, SLORADO_STREAM, long_options[longindex].name, optarg, 1);
+        } else if (c == 0 && longindex == 20) { // iGPU decode split (GPU scan + CPU beam)
+            yes_or_no(&opt.flag, SLORADO_CPU_BEAM, long_options[longindex].name, optarg, 1);
+            if (opt.flag & SLORADO_CPU_BEAM) opt.flag |= SLORADO_STREAM; // decode split lives in the stream pipeline
         }
     }
 
@@ -258,13 +251,15 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (opt.calibrate_out != NULL) {
-        opt.device = (char *)"cuda:0";
-        fprintf(stderr, "[basecaller_main] calibration mode: forcing device to cuda:0\n");
-    }
-    if (opt.sensitivity_out != NULL || opt.quant_config_path != NULL) {
-        opt.device = (char *)"cuda:0";
-        fprintf(stderr, "[basecaller_main] quant/sensitivity mode: forcing device to cuda:0\n");
+    if (opt.flag & SLORADO_CPU_BEAM) {
+#ifndef USE_GPU
+        ERROR("%s", "--cpu-beam requires a GPU build (make cuda=1 or rocm=1)");
+        exit(EXIT_FAILURE);
+#endif
+        if (opt.device != NULL && strcmp(opt.device, "cpu") == 0) {
+            ERROR("%s", "--cpu-beam splits decode onto the CPU but needs a GPU for inference/scan; do not use -x cpu");
+            exit(EXIT_FAILURE);
+        }
     }
 
 /////////////////////////////////////////////////////////////////////////////

@@ -40,9 +40,6 @@ SOFTWARE.
 #include "slorado.h"
 #include "misc.h"
 #include "error.h"
-#include "calib.h"
-#include "quant.h"
-#include "sensitivity.h"
 
 #include "basecall.h"
 #include "modcall.h"
@@ -157,24 +154,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->model_config = new model_config_t(model_config);
     LOG_TRACE("%s", "model config loaded");
 
-    if (opt.calibrate_out != NULL) {
-        core->calib_stats = new calib_stats_t();
-        fprintf(stderr, "[init_core] calibration mode enabled, stats will be written to %s\n", opt.calibrate_out);
-    }
-
-    if (opt.quant_config_path != NULL) {
-        core->quant_config = new std::unordered_map<std::string, std::string>(
-            load_quant_config(std::string(opt.quant_config_path)));
-    }
-
-    if (opt.sensitivity_out != NULL) {
-        if (core->quant_config == nullptr) {
-            fprintf(stderr, "[init_core] warning: --sensitivity requires --quant-config; no quant layers will differ from fp16\n");
-        }
-        core->sensitivity_stats = new sensitivity_stats_t();
-        fprintf(stderr, "[init_core] sensitivity mode enabled, KL stats will be written to %s\n", opt.sensitivity_out);
-    }
-
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
     core->opt.gpu_batch_size = opt.gpu_batch_size; // sync auto-detected value back to core
@@ -186,7 +165,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     // the per-stage model_stats timers (time_tx_encoder, time_ff, ...). Those probe forwards are
     // init cost (counted in time_init_runners), not real basecalling, so zero the per-stage timers
     // here -- otherwise they exceed the real-loop time_infer and the reported breakdown is nonsense.
-    // Only the timing fields are cleared; calib/quant config pointers are preserved.
+    // Only the timing fields are cleared.
     for (runner_stat_t *ts : *core->runner_stats) {
         ts->time_accept = ts->time_basecall = ts->time_infer = ts->time_decode = ts->time_modcall = 0.0;
         ts->total_dp = 0;
@@ -212,23 +191,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
 /* free the core data structure */
 void free_core(core_t* core, opt_t opt) {
-    if (core->calib_stats != nullptr && opt.calibrate_out != nullptr) {
-        core->calib_stats->save_json(std::string(opt.calibrate_out));
-        delete core->calib_stats;
-        core->calib_stats = nullptr;
-    }
-
-    if (core->sensitivity_stats != nullptr && opt.sensitivity_out != nullptr) {
-        core->sensitivity_stats->save_tsv(std::string(opt.sensitivity_out), opt.quant_config_path);
-        delete core->sensitivity_stats;
-        core->sensitivity_stats = nullptr;
-    }
-
-    if (core->quant_config != nullptr) {
-        delete core->quant_config;
-        core->quant_config = nullptr;
-    }
-
+    (void)opt;
     free_runners(core);
 
     slow5_close(core->sp);

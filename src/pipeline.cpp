@@ -33,8 +33,40 @@
 
 #include "dorado/tensor_chunk_utils.h"
 
+#ifdef USE_GPU
+#ifdef HAVE_CUDA
+#include <c10/cuda/CUDAStream.h>
+#elif defined(HAVE_ROCM)
+#include <c10/hip/HIPStream.h>
+#endif
+// Synchronize ONLY the runner's own (torch current) stream -- enough to guarantee the forward + int8
+// cast are done and input_tensor is safe to reuse -- WITHOUT the device-wide wait of
+// torch::cuda::synchronize(), which would also block on the decode thread's scan stream and serialize
+// the two. Lets the scan's dedicated stream actually overlap inference.
+static inline void sync_runner_stream(int64_t dev) {
+#ifdef HAVE_CUDA
+    c10::cuda::getCurrentCUDAStream(dev).synchronize();
+#elif defined(HAVE_ROCM)
+    c10::hip::getCurrentHIPStream(dev).synchronize();
+#endif
+}
+#endif
+
 // defined in torchbox.cpp
 void free_read_dat(read_dat_t *read_dat);
+
+// One inference batch handed from the runner stage to the decode stage in --cpu-beam mode. Carries
+// the chunk items (their shared_ptr reads stay alive for decode + bookkeeping) plus the scores the two
+// decode halves read: scan_scores (GPU-side, for openfish_decode_gpu_scan) and beam_scores (host-side,
+// for the CPU beam). For int8 clamp models both alias ONE managed buffer (zero-copy); for fp16 models
+// scan_scores is the device fp16 tensor and beam_scores an fp32 host copy (the scan needs fp16, the
+// beam needs fp32, so they cannot share).
+typedef struct {
+    std::vector<chunk_item_t> items;
+    at::Tensor scan_scores;
+    at::Tensor beam_scores;
+    int runner_idx;
+} decode_item_t;
 
 // Shared state passed to every stage. Just a bag of pointers: the queues and counters
 // are owned as locals by run_pipeline(). total_bytes has a single writer (loader) and
@@ -43,8 +75,11 @@ void free_read_dat(read_dat_t *read_dat);
 typedef struct {
     core_t *core;
     bool mod;                        // modbase calling enabled (--mod)
+    bool cpu_beam;                   // --cpu-beam: split decode onto GPU scan + CPU beam (decode_stage)
     BoundedQueue<std::shared_ptr<read_state_t>> *read_q;
     BoundedQueue<chunk_item_t> *chunk_q;
+    BoundedQueue<decode_item_t> *decode_q;   // runner -> decode_stage (only used when cpu_beam)
+    ManagedScorePool *score_pool;            // managed int8 score buffers (cpu_beam; NULL otherwise)
     BoundedQueue<std::shared_ptr<read_state_t>> *stitch_q;
     // modbase stages (only used when mod)
     BoundedQueue<std::shared_ptr<read_state_t>> *mod_pre_q;
@@ -53,6 +88,16 @@ typedef struct {
     BoundedQueue<std::shared_ptr<read_state_t>> *out_q;
     uint64_t total_reads;
     uint64_t total_bytes;
+
+    // --cpu-beam profiling (printed when SLORADO_PIPELINE_STATS is set). Single runner + single
+    // decode thread each, so these plain doubles have one writer apiece (safe to read after join).
+    double t_infer = 0;       // runner: model forward + int8 quant (kernel launch, async)
+    double t_hostcopy = 0;    // runner: scores.to(CPU) -- this is where the GPU inference actually blocks
+    double t_push_wait = 0;   // runner: blocked pushing to decode_q (full => decode is the bottleneck)
+    double t_pop_wait = 0;    // decode: blocked waiting for a batch  (empty => inference is the bottleneck)
+    double t_scan = 0;        // decode: GPU posterior scan (openfish_decode_gpu_scan, incl. sync)
+    double t_beam = 0;        // decode: CPU beam search + writeback
+    uint64_t n_dec_batches = 0;
 } pipeline_ctx_t;
 
 // A read is worth basecalling / mod calling only if it has signal and produced a sequence.
@@ -131,11 +176,51 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     std::vector<chunk_item_t> buf;
     buf.reserve(gpu_batch);
 
+    // --cpu-beam: run inference only, then hand the scores to the decode_stage (GPU scan + CPU beam)
+    // so decode of this batch overlaps inference of the next. Otherwise decode inline (fused GPU).
     auto flush = [&]() {
         if (buf.empty()) return;
         std::vector<basecall_chunk_t *> ptrs;
         ptrs.reserve(buf.size());
         for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->chunks[buf[i].chunk_idx]);
+
+#ifdef USE_GPU
+        if (ctx->cpu_beam) {
+            double a = realtime();
+            // int8 clamp models -> scores land in managed memory (zero-copy); fp16 -> device tensor.
+            at::Tensor scores = basecall_infer_scores(core, runner_idx, ptrs, ctx->score_pool);
+            const bool i8 = scores.scalar_type() == at::kChar;
+            double b = realtime();
+
+            at::Tensor scan_scores, beam_scores;
+            if (i8) {
+                // Managed buffer: both the GPU scan and CPU beam read it directly. Sync the runner's
+                // own stream so the quant's write (and the whole forward) is complete before the decode
+                // thread reads the buffer -- stream-scoped, so it does NOT wait on the decode scan.
+                sync_runner_stream((*core->runners)[runner_idx]->device_idx);
+                scan_scores = scores;
+                beam_scores = scores;
+            } else {
+                // fp16: GPU scan reads the device fp16 tensor; the CPU beam needs an fp32 host copy
+                // (openfish's OPENFISH_SCORE_F16 == fp16 on the GPU, fp32 on the CPU). .to(CPU) syncs.
+                scan_scores = scores;
+                beam_scores = scores.to(torch::kCPU, torch::kFloat32);
+            }
+            double c = realtime();
+            decode_item_t di;
+            di.items = std::move(buf);
+            di.scan_scores = std::move(scan_scores);
+            di.beam_scores = std::move(beam_scores);
+            di.runner_idx = runner_idx;
+            ctx->decode_q->push(std::move(di));
+            double d = realtime();
+            ctx->t_infer += b - a;
+            ctx->t_hostcopy += c - b;   // managed sync (int8) or fp32 host copy (fp16)
+            ctx->t_push_wait += d - c;
+            buf.clear();   // moved-from; ensure empty for the next batch
+            return;
+        }
+#endif
 
         basecall_chunks(core, runner_idx, ptrs);
 
@@ -154,6 +239,60 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
         if (buf.size() == gpu_batch) flush();
     }
     flush();
+}
+
+// Stage 3b (--cpu-beam): decode a batch of scores produced by the runner stage. Runs the GPU
+// forward/backward posterior scan then the CPU beam search on its own thread, so this batch's decode
+// overlaps the runner stage's inference of the next batch. One thread suffices because the CPU beam
+// is internally multi-threaded. Decodes in row-subtiles of decode_tile (like the fused decode_chunks)
+// so the host-visible gpubuf's scan tensors stay bounded regardless of the (possibly large) batch;
+// the CPU beam reads the GPU-written posteriors from managed memory with no copy.
+static void decode_stage(pipeline_ctx_t *ctx) {
+#ifdef USE_GPU
+    core_t *core = ctx->core;
+    const int tile = std::min(core->opt.gpu_batch_size, DEFAULT_GPU_BATCH_SIZE);
+    openfish_gpubuf_t *gpubuf = openfish_gpubuf_init_hostvis(
+        core->chunk_size / core->model_stride, tile, core->model_config->state_len);
+
+    decode_item_t di;
+    while (true) {
+        double w0 = realtime();
+        bool got = ctx->decode_q->pop(di);
+        ctx->t_pop_wait += realtime() - w0;
+        if (!got) break;
+
+        const int N = (int)di.items.size();
+        for (int n0 = 0; n0 < N; n0 += tile) {
+            const int nt = std::min(tile, N - n0);
+            std::vector<basecall_chunk_t *> ptrs;
+            ptrs.reserve(nt);
+            for (int j = 0; j < nt; ++j) ptrs.push_back(&di.items[n0 + j].read->chunks[di.items[n0 + j].chunk_idx]);
+
+            // narrow() on dim 0 of the contiguous [N,T,C] tensors gives a contiguous row-block whose
+            // data_ptr() points at row n0 -- exactly what the openfish scan/beam expect for nt rows.
+            // (For int8, scan_scores and beam_scores alias the same managed buffer.)
+            double s0 = realtime();
+            basecall_scan_gpu(core, gpubuf, di.scan_scores.narrow(0, n0, nt));
+            double s1 = realtime();
+            basecall_beam_cpu(core, gpubuf, di.beam_scores.narrow(0, n0, nt), ptrs);
+            ctx->t_scan += s1 - s0;
+            ctx->t_beam += realtime() - s1;
+        }
+        ctx->n_dec_batches++;
+        di.scan_scores = at::Tensor{};   // release scores now that all tiles are decoded
+        di.beam_scores = at::Tensor{};   // (returns the managed buffer to the pool for int8)
+
+        for (int i = 0; i < N; ++i) {
+            if (di.items[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                ctx->stitch_q->push(di.items[i].read);
+            }
+        }
+    }
+
+    openfish_gpubuf_free(gpubuf);
+#else
+    (void)ctx;
+#endif
 }
 
 // Stage 4: stitch a read's chunks back into a single sequence (+ RNA reversal). Routes valid reads
@@ -288,6 +427,7 @@ void run_pipeline(core_t *core) {
         exit(EXIT_FAILURE);
     }
     const bool mod = core->opt.mod != NULL;
+    const bool cpu_beam = (core->opt.flag & SLORADO_CPU_BEAM) != 0;
     const int n_mod_runners = mod ? (int)core->mod_runners->size() : 0;
 
     // Split the worker-thread budget between preprocess (heavier: signal scaling +
@@ -305,17 +445,27 @@ void run_pipeline(core_t *core) {
     // Queues and counters are owned here; the context just points at them.
     BoundedQueue<std::shared_ptr<read_state_t>> read_q(read_cap);
     BoundedQueue<chunk_item_t> chunk_q(chunk_cap);
+    // Small cap (per runner) bounds the resident score tensors handed to the decode stage.
+    BoundedQueue<decode_item_t> decode_q(std::max<size_t>(2, (size_t)n_runners * 2));
     BoundedQueue<std::shared_ptr<read_state_t>> stitch_q(stitch_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> mod_pre_q(stitch_cap);
     BoundedQueue<mod_chunk_item_t> mod_chunk_q(chunk_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> mod_post_q(out_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> out_q(out_cap);
 
+    ManagedScorePool *score_pool = nullptr;
+#ifdef USE_GPU
+    if (cpu_beam) score_pool = create_score_pool();
+#endif
+
     pipeline_ctx_t ctx;
     ctx.core = core;
     ctx.mod = mod;
+    ctx.cpu_beam = cpu_beam;
     ctx.read_q = &read_q;
     ctx.chunk_q = &chunk_q;
+    ctx.decode_q = &decode_q;
+    ctx.score_pool = score_pool;
     ctx.stitch_q = &stitch_q;
     ctx.mod_pre_q = &mod_pre_q;
     ctx.mod_chunk_q = &mod_chunk_q;
@@ -329,8 +479,8 @@ void run_pipeline(core_t *core) {
                 "%d mod-preprocess, %d mod-runner, %d mod-postprocess threads\n",
                 __func__, n_pre, n_runners, n_stitch, n_pre, n_mod_runners, n_stitch);
     } else {
-        fprintf(stderr, "[%s] streaming pipeline: %d preprocess, %d runner, %d stitch threads\n",
-                __func__, n_pre, n_runners, n_stitch);
+        fprintf(stderr, "[%s] streaming pipeline: %d preprocess, %d runner, %s%d stitch threads\n",
+                __func__, n_pre, n_runners, cpu_beam ? "1 decode (GPU scan + CPU beam), " : "", n_stitch);
     }
 
     // Start downstream stages first so they are ready to consume.
@@ -346,6 +496,11 @@ void run_pipeline(core_t *core) {
     std::vector<std::thread> stitch;
     for (int i = 0; i < n_stitch; ++i) stitch.emplace_back(stitch_stage, &ctx);
 
+    // --cpu-beam: single decode thread between the runners and stitching (CPU beam is internally
+    // multi-threaded). Started before the runners so it is ready to consume decode_q.
+    std::thread decode;
+    if (cpu_beam) decode = std::thread(decode_stage, &ctx);
+
     std::vector<std::thread> runners;
     for (int i = 0; i < n_runners; ++i) runners.emplace_back(runner_stage, &ctx, i);
 
@@ -360,6 +515,10 @@ void run_pipeline(core_t *core) {
     for (auto &t : preproc) t.join();
     chunk_q.close();
     for (auto &t : runners) t.join();
+    if (cpu_beam) {
+        decode_q.close();                   // runners done -> no more decode items
+        decode.join();
+    }
     stitch_q.close();
     for (auto &t : stitch) t.join();
     if (mod) {
@@ -375,4 +534,24 @@ void run_pipeline(core_t *core) {
 
     core->total_reads = (int64_t)ctx.total_reads;
     core->sum_bytes = (int64_t)ctx.total_bytes;
+
+#ifdef USE_GPU
+    if (score_pool) destroy_score_pool(score_pool);
+#endif
+
+    if (cpu_beam && getenv("SLORADO_PIPELINE_STATS") != NULL) {
+        const uint64_t nb = ctx.n_dec_batches ? ctx.n_dec_batches : 1;
+        fprintf(stderr,
+            "\n[cpu-beam profile] %lu decode batches (n_runners=%d, decode threads=1)\n"
+            "  runner : infer(launch)=%.2fs  hostcopy+sync=%.2fs  push_wait=%.2fs\n"
+            "  decode : pop_wait=%.2fs  gpu_scan=%.2fs  cpu_beam=%.2fs\n"
+            "  per-batch avg (ms): infer=%.1f hostcopy=%.1f push_wait=%.1f | pop_wait=%.1f scan=%.1f beam=%.1f\n"
+            "  bottleneck hint: runner push_wait high => decode-bound (CPU beam too slow);"
+            " decode pop_wait high => inference-bound (overlap helps)\n",
+            (unsigned long)ctx.n_dec_batches, n_runners,
+            ctx.t_infer, ctx.t_hostcopy, ctx.t_push_wait,
+            ctx.t_pop_wait, ctx.t_scan, ctx.t_beam,
+            1e3 * ctx.t_infer / nb, 1e3 * ctx.t_hostcopy / nb, 1e3 * ctx.t_push_wait / nb,
+            1e3 * ctx.t_pop_wait / nb, 1e3 * ctx.t_scan / nb, 1e3 * ctx.t_beam / nb);
+    }
 }

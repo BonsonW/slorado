@@ -31,7 +31,6 @@ SOFTWARE.
 ******************************************************************************/
 #include "error.h"
 #include "misc.h"
-#include "calib.h"
 #include "torchbox.h"
 #include "dorado/tensor_chunk_utils.h"
 #include "dorado/lstm_model.h"
@@ -126,7 +125,11 @@ static bool trial_fits(runner_t *runner, core_t *core, int est_chunk_size, int n
             out.contiguous();
         }
         torch::cuda::synchronize(device_idx);
-    } catch (const c10::Error &) {
+    } catch (const std::exception &) {
+        // A CUDA/HIP OOM surfaces as a catchable c10::Error, but a too-large batch can also trip a
+        // backend parameter limit (e.g. MIOpen int32 tensor-length overflow on the plain-LSTM path),
+        // which throws a different exception. Either way this batch does not work -- treat it as
+        // "doesn't fit" so the probe backs off to a smaller one instead of aborting.
         ok = false;
     }
     // The FLSTM recurrence caches per-(N,T) buffers (hh_all etc, GBs) that survive emptyCache;
@@ -212,24 +215,18 @@ void init_runner(
         if (core->model_config->family == MODEL_FAMILY_TX) {
             LOG_TRACE("%s", "loading tx model (procedural)");
             tx_stats_t *model_stats = init_tx_stats();
-            model_stats->calib_stats = core->calib_stats;
-            model_stats->quant_config = core->quant_config;
             runner->bc_model = load_tx_model_proc(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, core->opt.quant ? core->opt.quant : "", core->opt.num_thread);
             runner->bc_family = MODEL_FAMILY_TX;
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         } else if (core->model_config->family == MODEL_FAMILY_FLSTM) {
             LOG_TRACE("%s", "loading flstm model (procedural)");
             lstm_stats_t *model_stats = init_lstm_stats();
-            model_stats->calib_stats = core->calib_stats;
-            model_stats->quant_config = core->quant_config;
             runner->bc_model = load_flstm_model_proc(*core->model_config, runner->tensor_opts, model_stats, core->opt.quant ? core->opt.quant : "");
             runner->bc_family = MODEL_FAMILY_FLSTM;
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         } else {
             LOG_TRACE("%s", "loading lstm model (procedural)");
             lstm_stats_t *model_stats = init_lstm_stats();
-            model_stats->calib_stats = core->calib_stats;
-            model_stats->quant_config = core->quant_config;
             runner->bc_model = load_lstm_model_proc(*core->model_config, runner->tensor_opts, model_stats);
             runner->bc_family = MODEL_FAMILY_LSTM;
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
@@ -287,13 +284,27 @@ void init_runner(
         gpu_mem_get_info(&free_mem, &total_mem);
         const size_t headroom = total_mem / 10;
 
+        // cpu-beam (--cpu-beam): the runner has no device gpubuf; the decode thread's host-visible
+        // gpubuf holds only the two scan tensors (bwd_NTC/post_NTC), subtiled to decode_tile rows (as
+        // in decode_stage). On a unified-memory iGPU that managed memory shares the device budget, so
+        // account for those two tensors at decode_tile instead of the full fused gpubuf.
+        const bool cpu_beam = (core->opt.flag & SLORADO_CPU_BEAM) != 0;
+        const size_t num_states = (size_t)1 << (2 * core->model_config->state_len);  // 4^state_len
+
         int chosen = 0;
         for (int n = hi; n >= 1; n /= 2) {
-            // decode is subtiled: the gpubuf is sized for the decode tile, not the full batch
             const int decode_tile = std::min(n, DEFAULT_GPU_BATCH_SIZE);
-            const size_t gpubuf_bytes = modbase ? 0
-                : openfish_gpubuf_size(T, decode_tile, core->model_config->state_len);
-            if (trial_fits(runner, core, est_chunk_size, n, gpubuf_bytes + headroom, modbase)) {
+            size_t decode_bytes;
+            if (modbase) {
+                decode_bytes = 0;
+            } else if (cpu_beam) {
+                // two scan tensors [decode_tile, T+1, num_states] of float, allocated managed
+                decode_bytes = 2 * sizeof(float) * (size_t)decode_tile * (T + 1) * num_states;
+            } else {
+                // fused decode is subtiled: the gpubuf is sized for the decode tile, not the full batch
+                decode_bytes = openfish_gpubuf_size(T, decode_tile, core->model_config->state_len);
+            }
+            if (trial_fits(runner, core, est_chunk_size, n, decode_bytes + headroom, modbase)) {
                 chosen = n;
                 break;
             }
@@ -313,8 +324,9 @@ void init_runner(
     }
 
     // Allocate the openfish CRF decode buffer (basecall only; modbase does not decode with
-    // openfish) and the input tensor with the resolved batch size.
-    if (device != "cpu" && !modbase) {
+    // openfish) and the input tensor with the resolved batch size. In --cpu-beam mode the runner
+    // does not decode -- the decode_stage owns a host-visible gpubuf instead -- so skip it here.
+    if (device != "cpu" && !modbase && !(core->opt.flag & SLORADO_CPU_BEAM)) {
 #ifdef USE_GPU
         c10::DeviceGuard device_guard(runner->tensor_opts.device());
         // Decode in row-subtiles so the CRF decode buffer (fwd/bwd/posterior NTC, ~4.5MB/row) and
@@ -414,7 +426,7 @@ void free_runners(core_t *core) {
 
     for (size_t i = 0; i < core->runners->size(); ++i) {
         runner_t *runner = (*core->runners)[i];
-        if (runner->device != "cpu") {
+        if (runner->device != "cpu" && runner->gpubuf) {
 #ifdef USE_GPU
             c10::DeviceGuard device_guard(runner->tensor_opts.device());
             openfish_gpubuf_free(runner->gpubuf);

@@ -5,7 +5,6 @@
 #include "error.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
-#include "quant.h"
 
 #ifdef USE_GPU
 #include <fluke/fluke.h>
@@ -15,8 +14,11 @@
 using namespace torch::nn;
 
 void flatten_lstm_weights(lstm_layer_t &l, int input_size, int hidden, bool batch_first) {
-#if defined(USE_GPU)
-    // ATen op; dispatches to cuDNN on CUDA and MIOpen on ROCm (both need flattened RNN weights).
+#if defined(HAVE_CUDA)
+    // cuDNN-only optimization: pre-pack the RNN weights into one contiguous buffer so torch::lstm
+    // doesn't recompact (and warn) on every call. _cudnn_rnn_flatten_weight is gated behind
+    // AT_CUDNN_ENABLED(), so it is unavailable on ROCm (MIOpen manages RNN weights internally and
+    // does not need this step) -- skip it there and let torch::lstm handle the weights directly.
     if (l.w_ih.device().is_cpu()) return;
     l.w_ih = l.w_ih.contiguous();
     l.w_hh = l.w_hh.contiguous();
@@ -187,10 +189,6 @@ void free_lstm_model(lstm_model_t *m) {
 // --- procedural FLSTM model (hac/fast v6) -------------------------------------------------------
 
 flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::TensorOptions &options, lstm_stats_t *model_stats, const std::string &quant_mode) {
-    if (model_stats && model_stats->quant_config) {
-        build_quant_methods(model_stats->quant_methods, *model_stats->quant_config);
-    }
-
     flstm_model_t *m = new flstm_model_t();
     m->stats = model_stats;
     m->C = config.lstm_size;
@@ -218,15 +216,6 @@ flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::
         L.up_w_hh = to_dev(t[3]);
         L.up_b_ih = to_dev(t[4]);
         L.up_b_hh = to_dev(t[5]);
-        L.prefix = std::string("rnns.rnn") + std::to_string(i + 1);
-        // Register calib layers with the real (loaded) weights — no placeholder/update dance.
-        if (model_stats && model_stats->calib_stats) {
-            calib_stats_t *cs = model_stats->calib_stats;
-            L.cl_dn_ih = cs->register_layer(L.prefix + ".dn_ih", L.dn_w_ih);
-            L.cl_up_ih = cs->register_layer(L.prefix + ".up_ih", L.up_w_ih);
-            L.cl_dn_hh = cs->register_layer(L.prefix + ".dn_hh", L.dn_w_hh);
-            L.cl_up_hh = cs->register_layer(L.prefix + ".up_hh", L.up_w_hh);
-        }
         m->flstms.push_back(std::move(L));
     }
 
@@ -239,10 +228,10 @@ flstm_model_t *load_flstm_model_proc(const model_config_t &config, const torch::
     m->linear1_w = to_dev(lin[0]);
     m->linear2_w = to_dev(lin[1]);
 
-    // The fused int8 FLSTM kernel path was removed; FLSTM always runs fp16 (fake-quant calib still
-    // applies via the quant_methods above). quant_mode is accepted but not accelerated here.
+    // The fused int8 FLSTM kernel path was removed; FLSTM always runs fp16. quant_mode is accepted
+    // (it still enables int8 CRF score emission via g_scores_i8) but the GEMMs are not accelerated.
     if (!quant_mode.empty())
-        WARNING("quant mode '%s' not supported for FLSTM — using fp16", quant_mode.c_str());
+        WARNING("quant mode '%s' not accelerated for FLSTM — GEMMs run fp16", quant_mode.c_str());
 
     return m;
 }
@@ -254,36 +243,20 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
     const int N = x.size(1);
     const bool on_gpu = !x.device().is_cpu();
     double a, b;
-    calib_stats_t *cs = stats->calib_stats;
 
-    static const layer_quant_t k_empty_lq;
-    auto lq = [&](const char *suffix) -> const layer_quant_t& {
-        if (!L->prefix.empty() && !stats->quant_methods.empty()) {
-            auto it = stats->quant_methods.find(L->prefix + suffix);
-            if (it != stats->quant_methods.end()) return it->second;
-        }
-        return k_empty_lq;
-    };
-    const auto &lq_dn_ih = lq(".dn_ih");
-    const auto &lq_up_ih = lq(".up_ih");
-    const auto &lq_dn_hh = lq(".dn_hh");
-    const auto &lq_up_hh = lq(".up_hh");
-
-    // Cache (possibly fake-quantized) weights once outside the loop.
-    auto dn_w_ih = fake_quant(L->dn_w_ih, lq_dn_ih.weight);          // [K, C]
-    auto up_w_ih = fake_quant(L->up_w_ih, lq_up_ih.weight);          // [4*C, K]
-    auto dn_w_hh = fake_quant(L->dn_w_hh, lq_dn_hh.weight);          // [K, C]
-    auto up_w_hh_t = fake_quant(L->up_w_hh, lq_up_hh.weight).t().contiguous();  // [K, 4*C]
+    // Cache the transposed hh weight once outside the loop.
+    auto dn_w_ih = L->dn_w_ih;                        // [K, C]
+    auto up_w_ih = L->up_w_ih;                        // [4*C, K]
+    auto dn_w_hh = L->dn_w_hh;                        // [K, C]
+    auto up_w_hh_t = L->up_w_hh.t().contiguous();     // [K, 4*C]
 
     // --- IH precompute: two matmuls over the full sequence ---
     a = realtime();
     auto x_flat = x.view({T * N, x.size(2)});
-    if (L->cl_dn_ih) cs->accumulate(L->cl_dn_ih, x.transpose(0, 1));  // (N, T, C)
 
-    auto dn_ih = at::linear(fake_quant(x_flat, lq_dn_ih.act), dn_w_ih);
-    if (L->cl_up_ih) cs->accumulate(L->cl_up_ih, dn_ih.view({T, N, K}).transpose(0, 1).contiguous());
+    auto dn_ih = at::linear(x_flat, dn_w_ih);
 
-    auto ih = at::linear(fake_quant(dn_ih, lq_up_ih.act), up_w_ih, L->up_b_ih).view({T, N, 4 * C});
+    auto ih = at::linear(dn_ih, up_w_ih, L->up_b_ih).view({T, N, 4 * C});
     STAGE_SYNC(on_gpu, x.device().index());
     b = realtime();
     stats->time_flstm_precompute += b - a;
@@ -293,14 +266,11 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
     auto c        = torch::zeros({N, C},     x.options());
     auto scratch  = torch::empty({N, 4 * C}, x.options());
     auto dn_hh_buf = torch::empty({N, K},    x.options());
-    torch::Tensor dn_hh_all;
-    if (L->cl_up_hh) dn_hh_all = torch::empty({T, N, K}, x.options());
 
     a = realtime();
     for (int t = 0; t < T; ++t) {
-        torch::mm_out(dn_hh_buf, fake_quant(hh[t], lq_dn_hh.act), dn_w_hh.t());
-        if (dn_hh_all.defined()) dn_hh_all[t] = dn_hh_buf;
-        torch::addmm_out(scratch, L->up_b_hh, fake_quant(dn_hh_buf, lq_up_hh.act), up_w_hh_t);
+        torch::mm_out(dn_hh_buf, hh[t], dn_w_hh.t());
+        torch::addmm_out(scratch, L->up_b_hh, dn_hh_buf, up_w_hh_t);
 
 #ifdef USE_GPU
         fluke_flstm_step_gpu(scratch.data_ptr(), ih[t].data_ptr(),
@@ -319,13 +289,6 @@ static at::Tensor flstm_layer_forward(const flstm_layer_t *L, at::Tensor x, lstm
     stats->time_flstm_recurrence += b - a;
 
     using namespace torch::indexing;
-    if (L->cl_dn_hh) {
-        cs->accumulate(L->cl_dn_hh, hh.index({Slice(0, T)}).transpose(0, 1).contiguous());
-    }
-    if (L->cl_up_hh && dn_hh_all.defined()) {
-        cs->accumulate(L->cl_up_hh, dn_hh_all.transpose(0, 1).contiguous());
-    }
-
     return hh.index({Slice(1, None)}).transpose(0, 1).contiguous();  // [N, T, C]
 }
 

@@ -1,6 +1,5 @@
 #include "tx_model.h"
 #include "misc.h"
-#include "quant.h"
 
 #include <ATen/Functions.h>
 #include <ATen/TensorIndexing.h>
@@ -60,7 +59,6 @@ tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::Tensor
     if (model_stats) {
         model_stats->use_flash = use_flash;
         model_stats->nthreads = nthreads;
-        if (model_stats->quant_config) build_quant_methods(model_stats->quant_methods, *model_stats->quant_config);
     }
 
     const auto dtype = options.dtype().toScalarType();
@@ -95,8 +93,6 @@ tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::Tensor
     at::Tensor rot_cos = torch::cos(freqs).to(torch::kFloat32).contiguous();
     at::Tensor rot_sin = torch::sin(freqs).to(torch::kFloat32).contiguous();
 
-    calib_stats_t *cs = model_stats ? model_stats->calib_stats : nullptr;
-
     for (int i = 0; i < depth; ++i) {
         const std::string p = "transformer_encoder." + std::to_string(i) + ".";
         auto t = load_tensors(config.model_path, {
@@ -129,12 +125,6 @@ tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::Tensor
         L.deepnorm_alpha = torch::tensor(txp.deepnorm_alpha).to(dtype).item<float>();
         L.attn_prefix = p + "self_attn";
         L.ff_prefix = p + "ff";
-        if (cs) {
-            L.cl_wqkv     = cs->register_layer(L.attn_prefix + ".wqkv",     L.wqkv_w);
-            L.cl_out_proj = cs->register_layer(L.attn_prefix + ".out_proj", L.out_proj_w);
-            L.cl_fc1      = cs->register_layer(L.ff_prefix + ".fc1",        L.fc1_w);
-            L.cl_fc2      = cs->register_layer(L.ff_prefix + ".fc2",        L.fc2_w);
-        }
         m->layers.push_back(std::move(L));
     }
 
@@ -183,14 +173,6 @@ tx_model_t *load_tx_model_proc(const model_config_t &config, const torch::Tensor
     return m;
 }
 
-static const layer_quant_t *lq_lookup(tx_stats_t *stats, const std::string &prefix, const char *suffix) {
-    if (stats && !prefix.empty() && !stats->quant_methods.empty()) {
-        auto it = stats->quant_methods.find(prefix + suffix);
-        if (it != stats->quant_methods.end()) return &it->second;
-    }
-    return nullptr;
-}
-
 static at::Tensor tx_rotary(const tx_layer_t *L, at::Tensor qkv, tx_stats_t *stats) {
     const int batch = qkv.size(0), seqlen = qkv.size(1), nheads = qkv.size(3), head_dim = qkv.size(4);
     const int rotary_dim = 32;
@@ -222,8 +204,8 @@ static at::Tensor tx_get_mask(tx_model_t *m, const tx_layer_t *L, int64_t size, 
     return mask;
 }
 
-// Shared fp16 attention core: SDPA / flash + out_proj (qlinear). qkv: fp16 [N,T,3,nhead,head_dim].
-static at::Tensor tx_attn_tail(tx_model_t *m, const tx_layer_t *L, torch::Tensor qkv, const layer_quant_t *lq_op) {
+// Shared fp16 attention core: SDPA / flash + out_proj. qkv: fp16 [N,T,3,nhead,head_dim].
+static at::Tensor tx_attn_tail(tx_model_t *m, const tx_layer_t *L, torch::Tensor qkv) {
     tx_stats_t *stats = m->stats;
     const int64_t N = qkv.size(0), T = qkv.size(1), C = L->d_model;
     const int head_dim = L->head_dim, nhead = L->nhead, num_splits = L->num_splits;
@@ -272,7 +254,7 @@ static at::Tensor tx_attn_tail(tx_model_t *m, const tx_layer_t *L, torch::Tensor
     stats->time_sdp_attn += b - a;
 
     a = realtime();
-    auto out = qlinear({L->out_proj_w, L->out_proj_b, lq_op, stats->calib_stats, L->cl_out_proj}, attn_output_ntc);
+    auto out = at::linear(attn_output_ntc, L->out_proj_w, L->out_proj_b);
     STAGE_SYNC(on_gpu, qkv.device().index());
     b = realtime();
     stats->time_out_proj += b - a;
@@ -285,11 +267,8 @@ static at::Tensor tx_mha_forward(tx_model_t *m, const tx_layer_t *L, torch::Tens
     const bool on_gpu = !x.device().is_cpu();
     double a, b;
 
-    const layer_quant_t *lq_wqkv = lq_lookup(stats, L->attn_prefix, ".wqkv");
-    const layer_quant_t *lq_op   = lq_lookup(stats, L->attn_prefix, ".out_proj");
-
     a = realtime();
-    auto qkv = qlinear({L->wqkv_w, at::Tensor(), lq_wqkv, stats->calib_stats, L->cl_wqkv}, x)
+    auto qkv = at::linear(x, L->wqkv_w)
                    .view({N, T, 3, L->nhead, L->head_dim});
     STAGE_SYNC(on_gpu, x.device().index());
     b = realtime();
@@ -301,29 +280,24 @@ static at::Tensor tx_mha_forward(tx_model_t *m, const tx_layer_t *L, torch::Tens
     b = realtime();
     stats->time_rotary_emb += b - a;
 
-    return tx_attn_tail(m, L, qkv, lq_op);
+    return tx_attn_tail(m, L, qkv);
 }
 
 static at::Tensor tx_mha_forward_quant(tx_model_t *m, const tx_layer_t *L, const tensor_quant_t &x) {
     tx_stats_t *stats = m->stats;
-    const layer_quant_t *lq_op = lq_lookup(stats, L->attn_prefix, ".out_proj");
     const bool on_gpu = !x.tensor.device().is_cpu();
     double a = realtime();
     auto qkv = fluke_qkv_rotary_i8(L->attn_backend, x, L->qw_wqkv, L->rot_sin, L->rot_cos);
     STAGE_SYNC(on_gpu, x.tensor.device().index());
     stats->time_mm += realtime() - a;
-    return tx_attn_tail(m, L, qkv, lq_op);
+    return tx_attn_tail(m, L, qkv);
 }
 
 static at::Tensor tx_gmlp_forward(const tx_layer_t *L, torch::Tensor x, tx_stats_t *stats) {
-    const layer_quant_t *lq_fc1 = lq_lookup(stats, L->ff_prefix, ".fc1");
-    const layer_quant_t *lq_fc2 = lq_lookup(stats, L->ff_prefix, ".fc2");
-    calib_stats_t *cs = stats ? stats->calib_stats : nullptr;
-
     const bool on_gpu = !x.device().is_cpu();
     const int dev = x.device().index();
     double t0 = realtime();
-    torch::Tensor t = qlinear({L->fc1_w, at::Tensor(), lq_fc1, cs, L->cl_fc1}, x);
+    torch::Tensor t = at::linear(x, L->fc1_w);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -338,7 +312,7 @@ static at::Tensor tx_gmlp_forward(const tx_layer_t *L, torch::Tensor x, tx_stats
     if (stats) stats->time_ff_gmlp += realtime() - t0;
 
     t0 = realtime();
-    auto out = qlinear({L->fc2_w, at::Tensor(), lq_fc2, cs, L->cl_fc2}, t);
+    auto out = at::linear(t, L->fc2_w);
     STAGE_SYNC(on_gpu, dev);
     if (stats) stats->time_ff_down += realtime() - t0;
     return out;
@@ -351,9 +325,8 @@ static at::Tensor tx_gmlp_forward_quant(const tx_layer_t *L, const tensor_quant_
     STAGE_SYNC(true, dev);
     if (stats) stats->time_ff_gmlp += realtime() - t0;
 
-    const layer_quant_t *lq_fc2 = lq_lookup(stats, L->ff_prefix, ".fc2");
     t0 = realtime();
-    auto out = qlinear({L->fc2_w, at::Tensor(), lq_fc2, nullptr, nullptr}, g);
+    auto out = at::linear(g, L->fc2_w);
     STAGE_SYNC(true, dev);
     if (stats) stats->time_ff_down += realtime() - t0;
     return out;
