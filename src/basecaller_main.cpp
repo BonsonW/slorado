@@ -63,19 +63,16 @@ static struct option long_options[] = {
     {"version", no_argument, 0, 'V'},               //5
     {"output", required_argument, 0, 'o'},          //6 output to a file [stdout]
     {"debug-break", required_argument, 0, 0},       //7 break after processing the first batch (used for debugging)
-    {"profile-cpu", required_argument, 0, 0},       //8 perform section by section (used for profiling - for CPU only)
-    {"accel",required_argument, 0, 0},              //9 accelerator //not used, can be reused for something elese
-    {"chunk-size", required_argument, 0, 'c'},      //10 chunk size [12288]
-    {"overlap", required_argument, 0, 'p'},         //11 overlap [150]
-    {"device", required_argument, 0, 'x'},          //12 device [cpu]
-    {"num-runners", required_argument, 0, 'r'},     //13 number of runners [1]
-    {"emit-sam", no_argument, 0, 0},                //14 toggles emit sam
-    {"gpu_batchsize", required_argument, 0, 'C'},   //15 gpu batchsize - number of chunks loaded at once [512]
-    {"flash", required_argument, 0, 0},             //16 toggles flash attention when possible
-    {"mod", required_argument, 0, 0},               //17 detect modified bases
-    {"quant", required_argument, 0, 0},             //18 quantized inference mode (e.g. int8) if a backend is available
-    {"stream", required_argument, 0, 0},            //19 use the streaming (pipelined) basecalling path
-    {"cpu-beam", required_argument, 0, 0},          //20 iGPU decode split: GPU scan + CPU beam (implies --stream)
+    {"chunk-size", required_argument, 0, 'c'},      //8 chunk size [12288]
+    {"overlap", required_argument, 0, 'p'},         //9 overlap [150]
+    {"device", required_argument, 0, 'x'},          //10 device [cpu]
+    {"num-runners", required_argument, 0, 'r'},     //11 number of runners [1]
+    {"emit-sam", no_argument, 0, 0},                //12 toggles emit sam
+    {"gpu_batchsize", required_argument, 0, 'C'},   //13 gpu batchsize - number of chunks loaded at once [512]
+    {"flash", required_argument, 0, 0},             //14 toggles flash attention when possible
+    {"mod", required_argument, 0, 0},               //15 detect modified bases
+    {"quant", required_argument, 0, 0},             //16 quantized inference mode (e.g. int8) if a backend is available
+    {"stream", required_argument, 0, 0},            //17 use the streaming (pipelined) basecalling path
     {0, 0, 0, 0}};
 
 
@@ -96,7 +93,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance; auto-detected at model load, --flash=no forces off [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
     fprintf(fp_help, "  --stream=yes|no             use the streaming (pipelined) basecalling path [%s]\n", (opt.flag & SLORADO_STREAM) ? "yes" : "no");
-    fprintf(fp_help, "  --cpu-beam=yes|no           iGPU decode split: GPU posterior scan + CPU beam search (implies --stream) [%s]\n", (opt.flag & SLORADO_CPU_BEAM) ? "yes" : "no");
     fprintf(fp_help, "  --mod STR                   detect modified bases (5mCG_5hmCG@v3) [%s]\n", opt.mod ? opt.mod : "NULL");
     fprintf(fp_help, "  --quant STR                 quantized inference mode (int8): int8 CRF scores + fluke int8 GEMM [%s]\n", opt.quant ? opt.quant : "NULL");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
@@ -104,7 +100,6 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "\ndebug options:\n");
     fprintf(fp_help, "  --debug-break INT           break after processing the specified no. of batches\n");
     fprintf(fp_help, "  --emit-sam                  emits sam output format\n");
-    fprintf(fp_help, "  --profile-cpu=yes|no        process section by section (used for profiling on CPU)\n");
 }
 
 int basecaller_main(int argc, char* argv[]) {
@@ -183,21 +178,16 @@ int basecaller_main(int argc, char* argv[]) {
             fp_help = stdout;
         } else if (c == 0 && longindex == 7) { // debug break
             opt.debug_break = atoi(optarg);
-        } else if (c == 0 && longindex == 8) { // sectional benchmark todo : warning for gpu mode
-            yes_or_no(&opt.flag, SLORADO_PRF, long_options[longindex].name, optarg, 1);
-        } else if (c == 0 && longindex == 14) { // emit fastq
+        } else if (c == 0 && longindex == 12) { // emit fastq
             opt.flag |= SLORADO_SAM;
-        } else if (c == 0 && longindex == 16) { // flash attention
+        } else if (c == 0 && longindex == 14) { // flash attention
             yes_or_no(&opt.flag, SLORADO_FLASH, long_options[longindex].name, optarg, 1);
-        } else if (c == 0 && longindex == 17) { // modbase detection
+        } else if (c == 0 && longindex == 15) { // modbase detection
             opt.mod = optarg;
-        } else if (c == 0 && longindex == 18) { // quantized inference mode
+        } else if (c == 0 && longindex == 16) { // quantized inference mode
             opt.quant = optarg;
-        } else if (c == 0 && longindex == 19) { // streaming pipeline
+        } else if (c == 0 && longindex == 17) { // streaming pipeline
             yes_or_no(&opt.flag, SLORADO_STREAM, long_options[longindex].name, optarg, 1);
-        } else if (c == 0 && longindex == 20) { // iGPU decode split (GPU scan + CPU beam)
-            yes_or_no(&opt.flag, SLORADO_CPU_BEAM, long_options[longindex].name, optarg, 1);
-            if (opt.flag & SLORADO_CPU_BEAM) opt.flag |= SLORADO_STREAM; // decode split lives in the stream pipeline
         }
     }
 
@@ -249,17 +239,6 @@ int basecaller_main(int argc, char* argv[]) {
             exit(EXIT_SUCCESS);
         }
         exit(EXIT_FAILURE);
-    }
-
-    if (opt.flag & SLORADO_CPU_BEAM) {
-#ifndef USE_GPU
-        ERROR("%s", "--cpu-beam requires a GPU build (make cuda=1 or rocm=1)");
-        exit(EXIT_FAILURE);
-#endif
-        if (opt.device != NULL && strcmp(opt.device, "cpu") == 0) {
-            ERROR("%s", "--cpu-beam splits decode onto the CPU but needs a GPU for inference/scan; do not use -x cpu");
-            exit(EXIT_FAILURE);
-        }
     }
 
 /////////////////////////////////////////////////////////////////////////////
