@@ -327,8 +327,13 @@ void init_runner(
 
     if (modbase) {
         const int channels = NUM_BASES * core->modbase_config->general.kmer_len;
+        // The signal chunk is at signal resolution; the sequence (kmer) chunk is at the sequence
+        // resolution = chunk_size / sequence_stride_ratio (ratio>1 for conv_lstm_v3 whose sequence
+        // convs are stride-1; ratio==1 for v1/v2 which downsample the sequence in-conv).
+        const int64_t seq_ratio = general_stride_ratio(core->modbase_config->general);
+        const int64_t seq_chunk = (int64_t)core->modbase_config->context.chunk_size / seq_ratio;
         runner->input_sigs = torch::zeros({batch_size, 1, (int64_t)core->modbase_config->context.chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
-        runner->input_seqs = torch::zeros({batch_size, (int64_t)core->modbase_config->context.chunk_size, channels}, torch::TensorOptions().dtype(torch::kInt8).device(torch::kCPU));
+        runner->input_seqs = torch::zeros({batch_size, seq_chunk, channels}, torch::TensorOptions().dtype(torch::kInt8).device(torch::kCPU));
     } else {
         runner->input_tensor = torch::zeros({batch_size, 1, (int64_t)core->chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     }
@@ -500,6 +505,21 @@ void preprocess_signal_db(core_t *core, db_t *db, int32_t i) {
     }
 }
 
+// Reverse a seq_to_sig_map for RNA modbase models (dorado utils::reverse_seq_to_sig_map): reverse
+// the order AND map each coord a -> signal_len - a, so the (unreversed 5'->3') sequence lines up
+// with the time-flipped RNA signal.
+static void reverse_seq_to_sig_map(std::vector<uint64_t>& m, size_t signal_len) {
+    const size_t n = m.size();
+    for (size_t l = 0; l < n / 2; ++l) {
+        const size_t r = n - l - 1;
+        uint64_t lv = signal_len - m[l];
+        uint64_t rv = signal_len - m[r];
+        m[l] = rv;
+        m[r] = lv;
+    }
+    if (n % 2 != 0) m[n / 2] = signal_len - m[n / 2];
+}
+
 // Per-read modbase preprocessing core. Assumes rec->len_raw_signal > 0. Fills mod_chunks (and the
 // modbase state in read_dat). seq is a borrowed pointer that must outlive postprocess_modbase.
 // Shared by the batch path (preprocess_modbase_db) and the streaming pipeline.
@@ -521,12 +541,13 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
     LOG_TRACE("%s", "initialise_base_mod_probs");
     initialise_base_mod_probs(core, read_dat, seq_mut);
 
-    // For RNA: Pad signal length to be evenly divisible by the canonical stride so that the
-    // sequence to signal mapping is always stride aligned and not offset by any remainder
-    // in the last move (which becomes the first move when reversed).
-    // const size_t signal_len =
-    //         m_is_rna_model ? utils::pad_to(signal.size(0), m_canonical_stride) : signal.size(0);
-    const size_t signal_len = read_dat->scaled_signal.size(0);
+    // RNA models process the signal 3'->5' (reverse_signal=true). Pad the signal length up to the
+    // canonical stride so the seq->sig map stays stride aligned after reversal, then flip the raw
+    // signal and reverse the map (dorado ModBaseChunkCallerNode: populate_signal / get_seq_to_sig_map).
+    const bool is_rna = core->modbase_config->context.reverse;
+    const int cstride = core->model_config->stride;
+    const size_t raw_len = read_dat->scaled_signal.size(0);
+    const size_t signal_len = is_rna ? ((raw_len + cstride - 1) / cstride) * cstride : raw_len;
 
     LOG_TRACE("%s", "populate_hits_seq");
     if (!populate_hits_seq(core, read_dat, seq_mut)) {
@@ -535,7 +556,10 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
     }
 
     LOG_TRACE("%s", "get_seq_to_sig_map");
-    std::vector<uint64_t> seq_to_sig_map = get_seq_to_sig_map(moves, signal_len, strlen(seq) + 1, core->model_config->stride);
+    std::vector<uint64_t> seq_to_sig_map = get_seq_to_sig_map(moves, signal_len, strlen(seq) + 1, cstride);
+    if (is_rna) {
+        reverse_seq_to_sig_map(seq_to_sig_map, signal_len);
+    }
 
     LOG_TRACE("%s", "sequence_to_ints");
     std::vector<int> int_seq = sequence_to_ints(seq);
@@ -544,6 +568,17 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
 
     LOG_TRACE("%s", "populate_hits_sig");
     populate_hits_sig(read_dat->per_base_hits_sig, read_dat->per_base_hits_seq, seq_to_sig_map, base_id);
+
+    if (is_rna) {
+        // Build [ raw[len-pad:len] , flip(raw) ] of length signal_len (raw int16, before scaling).
+        auto raw = read_dat->scaled_signal;
+        const int64_t len = raw.size(0);
+        const int64_t pad = (int64_t)signal_len - len;
+        at::Tensor sig = at::empty({(int64_t)signal_len}, raw.options());
+        sig.slice(0, pad, (int64_t)signal_len) = at::flip(raw, 0);
+        if (pad > 0) sig.slice(0, 0, pad) = raw.slice(0, len - pad, len);
+        read_dat->scaled_signal = sig;
+    }
 
     LOG_TRACE("%s", "populate_signal");
     populate_signal(core, read_dat->scaled_signal, seq_to_sig_map, int_seq);

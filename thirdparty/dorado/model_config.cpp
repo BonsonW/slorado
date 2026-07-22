@@ -674,11 +674,18 @@ lstm_config_params_t parse_lstm(toml_table_t *segment) {
     toml_datum_t lstm_size = toml_int_in(segment, "size");
     check_toml_datum(lstm_size);
 
-    toml_datum_t reverse = toml_bool_in(segment, "reverse");
-    check_toml_datum(reverse);
+    // v3 modbase configs write `reverse = 0/1` (int); accept bool too for robustness.
+    toml_datum_t reverse_i = toml_int_in(segment, "reverse");
+    toml_datum_t reverse_b = toml_bool_in(segment, "reverse");
+    if (reverse_i.ok) {
+        p.reverse = (reverse_i.u.i != 0);
+    } else if (reverse_b.ok) {
+        p.reverse = reverse_b.u.b;
+    } else {
+        check_toml_datum(reverse_i);  // report the missing/invalid field
+    }
 
     p.size = lstm_size.u.i;
-    p.reverse = reverse.u.b;
 
     return p;
 }
@@ -753,7 +760,7 @@ encoder_upsample_params_t parse_linear_upsample(const toml_table_t *segment) {
 modules_params_t parse_modules_params(const toml_table_t *config_toml) {
     modules_params_t m;
     m.sequence_convs = parse_convs(get_layers(config_toml, "sequence_encoder"));
-    m.sequence_convs = parse_convs(get_layers(config_toml, "signal_encoder"));
+    m.signal_convs = parse_convs(get_layers(config_toml, "signal_encoder"));
 
     auto layers = get_layers(config_toml, "encoder");
 
@@ -790,10 +797,11 @@ int crf_outsize(const crf_encoder_params_t &p) {
 int crf_out_features(const crf_encoder_params_t &p) { return static_cast<int>(pow(p.n_base, p.state_len + 1)); }
 
 int modules_stride_ratio(const modules_params_t &m) {
+    // Signal is downsampled more than the sequence (kmer) input; the ratio is how many signal
+    // samples map to one sequence position. e.g. RNA m6A v3: signal stride 6, sequence stride 1 -> 6.
     const int seq = stride_product(m.sequence_convs);
     const int sig = stride_product(m.signal_convs);
-    assert(sig < seq);
-    assert(sig % seq != 0);
+    assert(seq > 0 && sig >= seq && sig % seq == 0);
     return sig / seq;
 }
 int general_stride_ratio(const model_general_params_t &g) {
@@ -816,10 +824,37 @@ bool is_chunked_input_model(const modbase_model_config_t &config) {
 
 // --- modbase context (was the ModBaseContext class + MotifMatcher) ------------------------------
 
+// Expand an IUPAC nucleotide motif (e.g. "DRACH") into a POSIX ERE (e.g. "[AGT][AG]AC[ACT]").
+// Plain ACGT pass through so exact motifs ("CG", "A") are unchanged. Sequences use the DNA
+// alphabet (T, not U), matching the basecaller output.
+static std::string iupac_motif_to_regex(const std::string &motif) {
+    std::string re;
+    for (char c : motif) {
+        switch (c) {
+            case 'A': case 'C': case 'G': case 'T': re += c; break;
+            case 'U': re += 'T'; break;
+            case 'R': re += "[AG]";   break;
+            case 'Y': re += "[CT]";   break;
+            case 'S': re += "[GC]";   break;
+            case 'W': re += "[AT]";   break;
+            case 'K': re += "[GT]";   break;
+            case 'M': re += "[AC]";   break;
+            case 'B': re += "[CGT]";  break;
+            case 'D': re += "[AGT]";  break;
+            case 'H': re += "[ACT]";  break;
+            case 'V': re += "[ACG]";  break;
+            case 'N': re += "[ACGT]"; break;
+            default:  re += c;        break;  // pass through (already a regex char class, etc.)
+        }
+    }
+    return re;
+}
+
 std::vector<size_t> modbase_motif_hits(const std::string &motif, size_t offset, const char *seq, size_t seqlen) {
     std::vector<size_t> context_hits;
     regex_t compiled;
-    if (regcomp(&compiled, motif.c_str(), REG_EXTENDED) != 0) {
+    const std::string pattern = iupac_motif_to_regex(motif);
+    if (regcomp(&compiled, pattern.c_str(), REG_EXTENDED) != 0) {
         return context_hits;
     }
     size_t pos = 0;

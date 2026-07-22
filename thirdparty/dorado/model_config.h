@@ -225,6 +225,8 @@ typedef struct {
 } modbase_model_config_t;
 
 bool is_chunked_input_model(const modbase_model_config_t &config);
+// Read just the model type from a modbase model dir's config.toml (UNKNOWN if unrecognized).
+ModelType get_modbase_model_type(const char *path);
 
 typedef struct {
     std::vector<std::string> alphabet;

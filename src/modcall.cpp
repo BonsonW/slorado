@@ -133,9 +133,9 @@ void mod_basecall_chunks(
             signal_chunk = at::concat({signal_chunk.repeat({n_tiles}),
                                        signal_chunk.index({at::indexing::Slice(0, n_overhang)})},
                                       -1);
-            // tile the kmer vector
+            // tile the kmer vector (sequence resolution = chunk_size / sequence_stride_ratio)
             const int64_t original_size = static_cast<int64_t>(encoded_kmers_chunk.size());
-            const int64_t extended_size = chunk_size * kmer_size_per_sample;
+            const int64_t extended_size = (chunk_size / sequence_stride_ratio) * kmer_size_per_sample;
             encoded_kmers_chunk.resize(extended_size);
 
             for (int64_t i = original_size; i < extended_size; ++i) {

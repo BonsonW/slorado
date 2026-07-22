@@ -45,13 +45,14 @@ SOFTWARE.
 #include "error.h"
 #include "pipeline.h"
 
-// add supported modbase models here
-static const std::unordered_set<std::string> supported = std::unordered_set<std::string>({
-    "5mCG_5hmCG@v3",
-});
-
-static inline bool is_modbase_supported(const char *mod) {
-    return supported.find(std::string(mod)) != supported.end();
+// slorado's modbase pipeline requires a *chunked-input* model (conv_lstm_v2 / conv_lstm_v3).
+// Non-chunked v1 models (e.g. DNA 6mA@v1/@v2, RNA m6A@v1 on v5.0/5.1 bases) are not supported.
+// We gate on the actual model type read from <base_model>_<mod>/config.toml rather than a name
+// allowlist, because the same mod suffix (e.g. m6A_DRACH@v1) can be v1 or v3 depending on the base.
+static bool is_modbase_supported(const char *model, const char *mod) {
+    std::string path = std::string(model) + "_" + std::string(mod);
+    ModelType t = get_modbase_model_type(path.c_str());
+    return t == CONV_LSTM_V2 || t == CONV_LSTM_V3;
 }
 
 static struct option long_options[] = {
@@ -231,12 +232,10 @@ int basecaller_main(int argc, char* argv[]) {
 
     model = argv[optind++];
 
-    if (opt.mod != NULL && !is_modbase_supported(opt.mod)) {
-        std::string error_msg = "unsupported modbase model \"" + std::string(opt.mod) + "\"curent supported modbase models are: ";
-        for (const auto &s : supported) {
-            error_msg += s + ", ";
-        }
-        ERROR("%s", error_msg.c_str());
+    if (opt.mod != NULL && !is_modbase_supported(model, opt.mod)) {
+        ERROR("unsupported modbase model \"%s_%s\": slorado only supports chunked-input modbase "
+              "models (conv_lstm_v2 / conv_lstm_v3). Non-chunked v1 models are not supported.",
+              model, opt.mod);
         exit(EXIT_FAILURE);
     }
 

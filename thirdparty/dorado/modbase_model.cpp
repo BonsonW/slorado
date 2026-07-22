@@ -1,14 +1,20 @@
 #include "modbase_model.h"
 #include "tensor_chunk_utils.h"
+#include "error.h"
 
 #include <string>
 #include <vector>
 
 using namespace torch::indexing;
 
-// A modbase ConvLSTM conv is always SWISH (silu). x stays [N, C, T] (no transpose).
+// A modbase ConvLSTM conv applies its configured activation. x stays [N, C, T] (no transpose).
+// conv_lstm/v2 use SWISH (silu); conv_lstm_v3 uses TANH (per its config).
 static at::Tensor mods_conv(const conv_layer_t &c, at::Tensor x) {
-    return at::silu(at::conv1d(x, c.w, c.b, c.stride, c.padding));
+    x = at::conv1d(x, c.w, c.b, c.stride, c.padding);
+    switch (c.activation) {
+        case Activation::TANH: return at::tanh(x);
+        default:               return at::silu(x);   // SWISH / SWISH_CLAMP
+    }
 }
 
 // Default (batch_first=false) single-layer LSTM over [T, N, C].
@@ -35,8 +41,11 @@ at::Tensor modbase_model_forward(const modbase_model_t *m, at::Tensor sigs, at::
 
     auto z = torch::cat({sigs, seqs}, 1);   // NCT
     z = mods_conv(m->merge_conv, z).permute({2, 0, 1});  // NCT -> TNC
-    z = at::silu(mb_lstm(m->lstm1, z)).flip(0);
-    z = at::silu(mb_lstm(m->lstm2, z)).flip(0);
+    // v1/v2 apply SiLU after each LSTM; conv_lstm_v3 applies none (lstm1 -> flip -> lstm2 -> linear).
+    // flip after lstm2 (vs dorado's flip-after-linear) is equivalent: linear is pointwise over C.
+    auto lstm_act = [&](at::Tensor t) { return m->lstm_silu ? at::silu(t) : t; };
+    z = lstm_act(mb_lstm(m->lstm1, z)).flip(0);
+    z = lstm_act(mb_lstm(m->lstm2, z)).flip(0);
 
     if (m->chunked) {
         z = z.permute({1, 0, 2});  // TNC -> NTC
@@ -52,6 +61,7 @@ at::Tensor modbase_model_forward(const modbase_model_t *m, at::Tensor sigs, at::
 modbase_model_t *load_modbase_model_proc(const modbase_model_config_t &config, const at::TensorOptions &options, int /*batchsize*/) {
     modbase_model_t *m = new modbase_model_t();
     m->chunked = is_chunked_input_model(config);
+    m->lstm_silu = (config.general.model_type != ModelType::CONV_LSTM_V3);  // v3 has no post-LSTM act
     const auto &p = config.general;
     const int stride = p.stride;
     const bool v2 = m->chunked;
@@ -74,20 +84,39 @@ modbase_model_t *load_modbase_model_proc(const modbase_model_config_t &config, c
     const auto dev = options.device_opt().value();
     auto to_dev = [&](const at::Tensor &x) { return x.to(dtype).to(dev); };
 
-    // Conv strides/paddings match ModBaseConvLSTMModel (v2 pads to keep the stride indexable).
-    auto setconv = [&](conv_layer_t &c, int wi, int stride_, int pad) {
+    auto setconv = [&](conv_layer_t &c, int wi, int stride_, int pad, Activation act) {
         c.w = to_dev(t[wi]);
         c.b = to_dev(t[wi + 1]);
         c.stride = stride_;
         c.padding = pad;
-        c.activation = Activation::SWISH;
+        c.activation = act;
     };
-    setconv(m->sig_conv[0], 0, 1,      v2 ? 2 : 0);
-    setconv(m->sig_conv[1], 2, 1,      v2 ? 2 : 0);
-    setconv(m->sig_conv[2], 4, stride, v2 ? 4 : 0);
-    setconv(m->seq_conv[0], 6, 1,      v2 ? 2 : 0);
-    setconv(m->seq_conv[1], 8, stride, v2 ? 6 : 0);
-    setconv(m->merge_conv, 10, 1,      v2 ? 2 : 0);
+
+    if (p.model_type == ModelType::CONV_LSTM_V3) {
+        // v3: conv strides/activations come from the config's encoder sublayers (not hardcoded).
+        // Same tensor topology as v1/v2 (3 sig + 2 seq + merge). SAME ("winlen/2") padding, tanh acts.
+        if (!p.modules.has_value()) ERROR("%s", "conv_lstm_v3 modbase config missing modules block");
+        const auto &M = p.modules.value();
+        if (M.upsample.has_value()) ERROR("%s", "conv_lstm_v3 modbase with linear upsample not supported yet");
+        if (M.signal_convs.size() != 3 || M.sequence_convs.size() != 2)
+            ERROR("conv_lstm_v3 modbase expects 3 signal + 2 sequence convs, got %zu + %zu",
+                  M.signal_convs.size(), M.sequence_convs.size());
+        auto pad = [](const conv_params_t &c) { return c.winlen / 2; };  // "same" padding
+        setconv(m->sig_conv[0], 0, M.signal_convs[0].stride,   pad(M.signal_convs[0]),   M.signal_convs[0].activation);
+        setconv(m->sig_conv[1], 2, M.signal_convs[1].stride,   pad(M.signal_convs[1]),   M.signal_convs[1].activation);
+        setconv(m->sig_conv[2], 4, M.signal_convs[2].stride,   pad(M.signal_convs[2]),   M.signal_convs[2].activation);
+        setconv(m->seq_conv[0], 6, M.sequence_convs[0].stride, pad(M.sequence_convs[0]), M.sequence_convs[0].activation);
+        setconv(m->seq_conv[1], 8, M.sequence_convs[1].stride, pad(M.sequence_convs[1]), M.sequence_convs[1].activation);
+        setconv(m->merge_conv, 10, M.merge_conv.stride,        pad(M.merge_conv),        M.merge_conv.activation);
+    } else {
+        // Conv strides/paddings match ModBaseConvLSTMModel (v2 pads to keep the stride indexable).
+        setconv(m->sig_conv[0], 0, 1,      v2 ? 2 : 0, Activation::SWISH);
+        setconv(m->sig_conv[1], 2, 1,      v2 ? 2 : 0, Activation::SWISH);
+        setconv(m->sig_conv[2], 4, stride, v2 ? 4 : 0, Activation::SWISH);
+        setconv(m->seq_conv[0], 6, 1,      v2 ? 2 : 0, Activation::SWISH);
+        setconv(m->seq_conv[1], 8, stride, v2 ? 6 : 0, Activation::SWISH);
+        setconv(m->merge_conv, 10, 1,      v2 ? 2 : 0, Activation::SWISH);
+    }
 
     m->lstm1.w_ih = to_dev(t[12]); m->lstm1.w_hh = to_dev(t[13]);
     m->lstm1.b_ih = to_dev(t[14]); m->lstm1.b_hh = to_dev(t[15]);

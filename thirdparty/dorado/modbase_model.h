@@ -14,7 +14,8 @@ typedef struct {
     conv_layer_t merge_conv;
     lstm_layer_t lstm1, lstm2;   // default (batch_first=false) LSTMs over [T, N, C]
     at::Tensor linear_w, linear_b;
-    bool chunked;                // v2 (per-timestep output) vs v1 (final timestep only)
+    bool chunked;                // v2/v3 (per-timestep output) vs v1 (final timestep only)
+    bool lstm_silu;              // v1/v2 apply SiLU after each LSTM; conv_lstm_v3 does NOT
 } modbase_model_t;
 
 modbase_model_t *load_modbase_model_proc(const modbase_model_config_t &config, const at::TensorOptions &options, int batchsize);
