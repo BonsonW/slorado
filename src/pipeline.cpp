@@ -165,12 +165,21 @@ static void stitch_stage(pipeline_ctx_t *ctx) {
 
     while (ctx->stitch_q->pop(rs)) {
         if (!rs->chunks.empty()) {
+            // Bound the single-chunk stitch by the basecalled (front-trimmed) length so it doesn't emit
+            // spurious trailing bases that desync moves from the modbase signal (mirrors the batch path
+            // stitch_chunks). Applies to DNA and RNA, matching dorado.
+            size_t basecalled_len = 0;
+            if (rs->read_dat && rs->read_dat->basecall_trim_start > 0 &&
+                (size_t)rs->read_dat->basecall_trim_start < rs->rec->len_raw_signal) {
+                basecalled_len = rs->rec->len_raw_signal - (size_t)rs->read_dat->basecall_trim_start;
+            }
             stitch_chunks_vec(rs->chunks, rs->sequence, rs->qstring, rs->moves,
-                              rs->rec->len_raw_signal, (int)core->model_stride);
+                              rs->rec->len_raw_signal, (int)core->model_stride, basecalled_len);
             if (rna) {
+                // Reverse seq + qstring to 5'->3'. Leave moves in signal (3'->5')
+                // order -- the only consumer, preprocess_modbase, needs signal-order moves for the map.
                 std::reverse(rs->sequence.begin(), rs->sequence.end());
                 std::reverse(rs->qstring.begin(), rs->qstring.end());
-                std::reverse(rs->moves.begin(), rs->moves.end());
             }
         }
         if (ctx->mod && read_is_valid(rs)) {

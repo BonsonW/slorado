@@ -338,12 +338,17 @@ void postprocess_signal_db(core_t* core, db_t* db, int32_t i) {
         auto& moves = (*db->moves)[i];
         moves.clear();
 
+        // Bound the single-chunk stitch by the basecalled (front-trimmed) signal length so it doesn't
+        // emit spurious trailing bases from the chunk-padding region -- these desync the modbase signal
+        // from the sequence (see preprocess_modbase). Applies to DNA and RNA, matching dorado.
         stitch_chunks(db, i, sequence, qstring, moves, len_raw_signal, core->model_stride);
-        
+
         if (is_rna(core->model_config->sample_type)) {
+            // Reverse seq + qstring to 5'->3'. Leave moves in signal
+            // (3'->5') order -- dorado never reverses the move table for RNA, and the only consumer,
+            // preprocess_modbase, needs signal-order moves to build the seq->sig map.
             std::reverse(sequence.begin(), sequence.end());
             std::reverse(qstring.begin(), qstring.end());
-            std::reverse(moves.begin(), moves.end()); // might not need this, no idea
         }
 
     }

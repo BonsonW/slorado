@@ -487,6 +487,10 @@ void preprocess_signal(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std
     scale_signal(core, read_dat->scaled_signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
     LOG_TRACE("%s", "scaled signal");
 
+    // scale_signal front-trims the signal (RNA adapter / DNA pore-open). Record how much so the
+    // modbase path can trim the raw signal identically and stay aligned with the moves/sequence.
+    read_dat->basecall_trim_start = (int64_t)rec->len_raw_signal - read_dat->scaled_signal.size(0);
+
     create_basecall_chunks(chunks, read_dat->scaled_signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
 }
 
@@ -505,7 +509,7 @@ void preprocess_signal_db(core_t *core, db_t *db, int32_t i) {
     }
 }
 
-// Reverse a seq_to_sig_map for RNA modbase models (dorado utils::reverse_seq_to_sig_map): reverse
+// Reverse a seq_to_sig_map for RNA modbase models: reverse
 // the order AND map each coord a -> signal_len - a, so the (unreversed 5'->3') sequence lines up
 // with the time-flipped RNA signal.
 static void reverse_seq_to_sig_map(std::vector<uint64_t>& m, size_t signal_len) {
@@ -535,16 +539,24 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
     char *seq_mut = const_cast<char*>(seq);
     read_dat->seq = seq;
 
-    LOG_TRACE("%s", "tensor_from_record");
-    read_dat->scaled_signal = tensor_from_record(rec);
-
-    LOG_TRACE("%s", "initialise_base_mod_probs");
-    initialise_base_mod_probs(core, read_dat, seq_mut);
-
     // RNA models process the signal 3'->5' (reverse_signal=true). Pad the signal length up to the
     // canonical stride so the seq->sig map stays stride aligned after reversal, then flip the raw
     // signal and reverse the map (dorado ModBaseChunkCallerNode: populate_signal / get_seq_to_sig_map).
     const bool is_rna = core->modbase_config->context.reverse;
+
+    LOG_TRACE("%s", "tensor_from_record");
+    // Trim the raw signal by the same front-trim the basecall scaler applied (RNA adapter / DNA
+    // pore-open), matching dorado (its modbase raw_data is the trimmed signal). Without this the
+    // modbase signal keeps samples the moves/sequence do not account for, shifting signal vs sequence
+    // by the trim length (catastrophic for RNA's large adapter; small but real for DNA).
+    at::Tensor raw_full = tensor_from_record(rec);
+    const int64_t trim = read_dat->basecall_trim_start;
+    read_dat->scaled_signal = (trim > 0 && trim < raw_full.size(0))
+        ? raw_full.slice(0, trim, raw_full.size(0)).contiguous()
+        : raw_full;
+
+    LOG_TRACE("%s", "initialise_base_mod_probs");
+    initialise_base_mod_probs(core, read_dat, seq_mut);
     const int cstride = core->model_config->stride;
     const size_t raw_len = read_dat->scaled_signal.size(0);
     const size_t signal_len = is_rna ? ((raw_len + cstride - 1) / cstride) * cstride : raw_len;
@@ -556,6 +568,18 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
     }
 
     LOG_TRACE("%s", "get_seq_to_sig_map");
+    // moves arrive in signal (3'->5') order for RNA,
+    // The map is built in signal order here and reoriented by reverse_seq_to_sig_map below to line up with the 5'->3' sequence.
+    if (is_rna) {
+        // Defensive check: stitch_chunks (RNA path) bounds moves by the adapter-trimmed length so they
+        // span exactly signal_len/cstride blocks with one 1 per base. If that invariant ever breaks
+        // (e.g. an untrimmed read), a move block past signal_len would underflow reverse_seq_to_sig_map,
+        // so skip modbase (leave default probs) rather than emit a misaligned map.
+        size_t move_ones = 0; for (uint8_t m : moves) move_ones += (m != 0);
+        if (moves.size() > signal_len / cstride || move_ones != strlen(seq)) {
+            return;
+        }
+    }
     std::vector<uint64_t> seq_to_sig_map = get_seq_to_sig_map(moves, signal_len, strlen(seq) + 1, cstride);
     if (is_rna) {
         reverse_seq_to_sig_map(seq_to_sig_map, signal_len);
@@ -570,7 +594,8 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
     populate_hits_sig(read_dat->per_base_hits_sig, read_dat->per_base_hits_seq, seq_to_sig_map, base_id);
 
     if (is_rna) {
-        // Build [ raw[len-pad:len] , flip(raw) ] of length signal_len (raw int16, before scaling).
+        // RNA models process the signal 3'->5', so flip it and prepend a short mirrored pad up to the
+        // stride-aligned signal_len: sig = [ raw[len-pad:len] , flip(raw) ] (dorado populate_signal).
         auto raw = read_dat->scaled_signal;
         const int64_t len = raw.size(0);
         const int64_t pad = (int64_t)signal_len - len;

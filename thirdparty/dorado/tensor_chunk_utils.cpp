@@ -232,10 +232,18 @@ int div_round_closest(const int n, const int d) {
 
 
 void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride) {
-    stitch_chunks_vec((*db->basecall_chunks)[i], sequence, qstring, moves, len_raw_signal, model_stride);
+    // Pass the basecalled (front-trimmed) signal length so the single-chunk stitch drops chunk-padding
+    // moves past the real signal (see stitch_chunks_vec), matching dorado for both DNA and RNA.
+    size_t basecalled_len = 0;
+    read_dat_t *read_dat = (*db->read_dats)[i];
+    if (read_dat && read_dat->basecall_trim_start > 0 &&
+        (size_t)read_dat->basecall_trim_start < len_raw_signal) {
+        basecalled_len = len_raw_signal - (size_t)read_dat->basecall_trim_start;
+    }
+    stitch_chunks_vec((*db->basecall_chunks)[i], sequence, qstring, moves, len_raw_signal, model_stride, basecalled_len);
 }
 
-void stitch_chunks_vec(std::vector<basecall_chunk_t> &chunks, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride) {
+void stitch_chunks_vec(std::vector<basecall_chunk_t> &chunks, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride, size_t basecalled_len) {
     assert(static_cast<int>(div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size())) == model_stride);
 
 
@@ -287,8 +295,18 @@ void stitch_chunks_vec(std::vector<basecall_chunk_t> &chunks, std::string &seque
     moves.insert(moves.end(), std::next(last_chunk.moves.begin(), mid_point_front), last_chunk.moves.end());
 
     if (chunks.size() == 1) {
-        // shorten the sequence, qstring & moves where the read is shorter than chunksize
-        const int last_index_in_moves_to_keep = int(len_raw_signal / model_stride);
+        // shorten the sequence, qstring & moves where the read is shorter than chunksize. When the
+        // basecalled (front-trimmed) length is known, bound by min(basecalled_len, chunk) with
+        // div_round_up -- matching dorado stitch (get_raw_data_samples()). This drops chunk-padding
+        // move blocks past the real signal that would otherwise emit spurious trailing bases and
+        // desync moves from the signal (breaks RNA modbase). basecalled_len==0 -> legacy behaviour.
+        int last_index_in_moves_to_keep;
+        if (basecalled_len > 0) {
+            const size_t signal_size = std::min(basecalled_len, last_chunk.raw_chunk_size);
+            last_index_in_moves_to_keep = div_round_up((int)signal_size, model_stride);
+        } else {
+            last_index_in_moves_to_keep = int(len_raw_signal / model_stride);
+        }
         moves = std::vector<uint8_t>(moves.begin(), moves.begin() + last_index_in_moves_to_keep);
         const int end = std::accumulate(moves.begin(), moves.end(), 0);
         sequences.push_back(last_chunk.seq.substr(start_pos, end));
