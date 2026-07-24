@@ -25,6 +25,7 @@ jobs:
         apt-get install -y wget xz-utils
         wget https://unofficial-builds.nodejs.org/download/release/v24.9.0/node-v24.9.0-linux-x64-musl.tar.xz
         tar -xf node-v24.9.0-linux-x64-musl.tar.xz --strip-components 1 -C /node20217
+        ldd /__e/node24/bin/node
     - uses: actions/checkout@v2
       with:
         submodules: recursive
