@@ -23,8 +23,8 @@ jobs:
     - name: nodejs
       run: |
         apt-get install -y wget xz-utils
-        wget https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
-        tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
+        wget https://unofficial-builds.nodejs.org/download/release/v24.9.0/node-v24.9.0-linux-x64-musl.tar.xz
+        tar -xf node-v24.9.0-linux-x64-musl.tar.xz --strip-components 1 -C /node20217
     - uses: actions/checkout@v2
       with:
         submodules: recursive
@@ -143,7 +143,7 @@ jobs:
     - name: torch
       run: scripts/install-torch2.sh cpu
     - name: build
-      run: make -j2 
+      run: make -j2
     - name: test
       run: export DEVICE=cpu && make test
   ubuntu_20:
