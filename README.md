@@ -82,6 +82,17 @@ scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
 # SUP v5.0.0:  0.988194
 ```
 
+The repo also includes a minimal test that runs FAST v4.2.0 in [test.sh](test/test.sh), which will automatically install minimap2 and run on a single small dataset and reference included in the repo.
+```
+# run on a single read:
+./test/test.sh
+# accuracy: 0.944928
+
+# run on 1k reads mapped to chr22:
+./test/test.sh chr22
+# accuracy: 0.939607
+```
+
 For a more exhaustive test of slorado's features (on GPU setups), we have provided an [extensive test script](test/extensive.sh). This will automatically download the requisite test data and tools to test DNA/RNA basecalling, methylation detection, and flash attention support on your device. We highly recommend running this to ensure basecalling works on your machine. Excluding the automated binary release test mode, this script is meant to work on both ARM and x86 architectures.
 
 Here is an example of how to run it:
