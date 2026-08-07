@@ -17,6 +17,7 @@ jobs:
       volumes:
         - /node20217:/node20217:rw,rshared
         - /node20217:/__e/node24:ro,rshared
+        - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
@@ -45,6 +46,7 @@ jobs:
       volumes:
         - /node20217:/node20217:rw,rshared
         - /node20217:/__e/node20:ro,rshared
+        - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
@@ -79,6 +81,7 @@ jobs:
       volumes:
         - /node20217:/node20217:rw,rshared
         - /node20217:/__e/node20:ro,rshared
+        - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
@@ -128,6 +131,7 @@ jobs:
       volumes:
         - /node20217:/node20217:rw,rshared
         - /node20217:/__e/node20:ro,rshared
+        - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
       run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
