@@ -31,9 +31,8 @@ Binaries for the CPU-only version are not provided as basecalling on the CPU is 
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
 
-## Compilation and running
 
-### Compilation
+## Compilation
 
 Compilation instructions differ based on the system. Please pick one of the following that matches your system:
 
@@ -44,9 +43,9 @@ Compilation instructions differ based on the system. Please pick one of the foll
 
 Note: building from source will first require downloading and extracting Libtorch, which may take up to an hour depending on your network speed. Compilation should only take up to several minutes.
 
-### Running
+## Running
 
-We have tested slorado on a limited number of basecalling models listed [below](#tested-model). You can download them using the provided script (the binary releases already include these):
+We have tested slorado on a limited number of basecalling models listed [below](#tested-models). You can download them using the provided script (the binary releases already include these):
 
 ```
 scripts/download-models.sh
