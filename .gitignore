@@ -77,3 +77,7 @@ pyvenv
 *.svg
 *.png
 *.json
+
+beam_exp
+fluke
+minimap2
