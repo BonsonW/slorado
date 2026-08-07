@@ -1,6 +1,7 @@
 #include "quant.h"
 
 #include <cstdio>
+#include <torch/version.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -108,10 +109,23 @@ static at::Tensor apply_fp6e2m3_grid(const at::Tensor &x_scaled) {
     return q * sign;
 }
 
-// Apply FP8 E4M3FN rounding via native dtype cast.
+// Apply FP8 E4M3FN rounding.
 static at::Tensor apply_fp8e4m3_grid(const at::Tensor &x_scaled) {
     static constexpr float fp8_max = 448.f;
-    return x_scaled.clamp_(-fp8_max, fp8_max).to(torch::kFloat8_e4m3fn).to(torch::kFloat32);
+    auto x = x_scaled.clamp(-fp8_max, fp8_max);
+#if (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 1) || TORCH_VERSION_MAJOR >= 3
+    return x.to(torch::kFloat8_e4m3fn).to(torch::kFloat32);
+#else
+    // torch < 2.1: kFloat8_e4m3fn dtype unavailable — simulate via ATen ops.
+    static constexpr float norm_min = 1.f / 64.f;   // 2^-6, smallest normal
+    static constexpr float sub_step = 1.f / 512.f;  // 2^-9, subnormal step
+    auto a    = x.abs();
+    auto step = torch::where(
+        a.ge(norm_min),
+        (a.clamp_min(1e-38f).log2().floor() - 3.f).exp2(),
+        torch::full_like(a, sub_step));
+    return x.sign() * ((a / step).round() * step).clamp_max_(fp8_max);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +172,7 @@ static at::Tensor quant_fp8e4m3_2d(const at::Tensor &x, bool per_row) {
         if (amax == 0.f) return x;
         scale = torch::full({1}, amax / fp8_max, x.options());
     }
-    return (x / scale).clamp_(-fp8_max, fp8_max).to(torch::kFloat8_e4m3fn).to(torch::kFloat32).mul_(scale);
+    return apply_fp8e4m3_grid(x / scale).mul_(scale);
 }
 
 static at::Tensor quant_fp4_2d(const at::Tensor &x, bool per_row) {
