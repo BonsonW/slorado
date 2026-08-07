@@ -9,11 +9,23 @@ die() {
 	exit 1
 }
 
-if [ "$1" = 'mem' ]; then
-    mem=1
-else
-    mem=0
-fi
+usage() {
+    echo "usage: $0 [mem] [chr22]"
+    echo "  mem    run the basecaller under valgrind"
+    echo "  chr22     also run the chr22 1k read test (hg38 chr22 reference)"
+    exit 1
+}
+
+mem=0
+chr22=0
+
+for arg in "$@"; do
+    case $arg in
+        mem ) mem=1 ;;
+        chr22 ) chr22=1 ;;
+        * ) usage ;;
+    esac
+done
 
 ex() {
     if [ $mem -eq 1 ]; then
@@ -61,19 +73,41 @@ download_minimap2 () {
 }
 
 check_accuracy () {
-    if (( $(echo "$1 >= 0.8" | bc -l) ));
+    if (( $(echo "$1 >= $2" | bc -l) ));
     then
         return 0
     fi
 
-    die "Failed accuracy test with value of $2"
+    die "Failed accuracy test with value of $1 (expected >= $2)"
+}
+
+# basecall a BLOW5 file, map it against a reference and check the median identity
+# usage: basecall_and_check <blow5> <reference.fa> <min_accuracy> [extra slorado args...]
+basecall_and_check () {
+    BLOW5=$1
+    REF=$2
+    MIN_ACC=$3
+    shift 3
+
+    test -e $BLOW5 || die "Missing test data $BLOW5"
+    test -e $REF || die "Missing reference $REF"
+
+    ex ./slorado basecaller models/$FAST $BLOW5 "$@" --device $DEVICE -v 6 > test/tmp.fastq || die "Running the tool failed"
+    minimap2/minimap2 -cx map-ont $REF test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
+    MEDIAN=$(awk '{print $10/$11}' test/tmp.paf | datamash median 1)
+    echo "accuracy: $MEDIAN"
+    check_accuracy $MEDIAN $MIN_ACC
 }
 
 test -d models/$FAST || download_model $FAST
 test -e minimap2/minimap2 || download_minimap2
 
-ex  ./slorado basecaller models/$FAST test/PGXXXX230339/reads_1.blow5 -c 1000 -C 1 --device $DEVICE -v 6 > test/tmp.fastq  || die "Running the tool failed"
-minimap2/minimap2 -cx map-ont test/chr3_34011000_34012000.fa test/tmp.fastq --secondary=no > test/tmp.paf || die "minimap2 failed"
-check_accuracy $(awk '{print $10/$11}' test/tmp.paf | datamash median 1)
+echo "test: PGXXXX230339 reads_1 vs chr3:34011000-34012000"
+basecall_and_check test/PGXXXX230339/reads_1.blow5 test/chr3_34011000_34012000.fa 0.8 -c 1000 -C 1
+
+if [ $chr22 -eq 1 ]; then
+    echo "test: HG2 PGXXXX230339 chr22:23700000-23900000 1k reads vs hg38 chr22"
+    basecall_and_check test/hg2_PGXXXX230339_chr22_23700000_23900000_1k_reads.blow5 test/hg38_chr22.fa 0.9
+fi
 
 echo "tests passed!"
