@@ -74,7 +74,7 @@ wget -O hg38noAlt.fa.gz seq.bioinf.science/hg38noAlt && gunzip hg38noAlt.fa.gz
 
 # set environment variable MINIMAP2, if minimap2 is not in PATH (export MINIMAP2=/path/to/minimap2).
 # set environment variable DATAMASH, if datamash is not in PATH (export DATAMASH=/path/to/datamash).
-scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
+scripts/calculate_basecalling_accuracy.sh hg38noAlt.fa reads.fastq
 
 # expected median identity scores for test/PGXXXX230339/reads_1k.blow5:
 # FAST v5.0.0: 0.940696
