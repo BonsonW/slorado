@@ -27,8 +27,11 @@ test -z $2 || VER=$2
 
 
 test -e torch.zip && rm torch.zip
-test -d torch && rm -r torch
-mkdir thirdparty/torch || die "Could not create directory thirdparty/torch"
+if [ -d thirdparty/torch ]; then
+    echo "Removing existing thirdparty/torch ..."
+    rm -r thirdparty/torch || die "Could not remove existing thirdparty/torch"
+fi
+mkdir -p thirdparty/torch || die "Could not create directory thirdparty/torch"
 
 if [ ${DEV} = "cpu" ]; then
     if [ ${VER} != "2.0.0" ] ; then
