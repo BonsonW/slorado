@@ -61,6 +61,29 @@ Now run on a test dataset:
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
 
+### Basecalling POD5 files
+
+Slorado reads signal data in S/BLOW5 format. POD5 files from ONT sequencers can be converted to BLOW5 using [blue-crab](https://github.com/Psy-Fer/blue-crab):
+
+```
+# install blue-crab
+pip install blue-crab
+
+# convert a pod5 file (or a directory of pod5 files) to blow5
+blue-crab p2s reads.pod5 -o reads.blow5
+blue-crab p2s pod5_dir/ -o reads.blow5
+
+# then basecall as usual
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5 -o reads.fastq -x cuda:all
+```
+
+For convenience, we also provide a wrapper script [pod5-slorado](scripts/pod5-slorado) that converts a POD5 file to a temporary BLOW5 file and then invokes slorado on it. It takes the same arguments as `slorado basecaller`, but with a POD5 file as input:
+
+```
+# set environment variable SLORADO, if slorado is not in PATH (export SLORADO=/path/to/slorado).
+# set environment variable BLUECRAB, if blue-crab is not in PATH (export BLUECRAB=/path/to/blue-crab).
+scripts/pod5-slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 reads.pod5 -o reads.fastq
+```
 
 ## Testing
 
