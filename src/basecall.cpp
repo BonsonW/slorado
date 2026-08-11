@@ -56,6 +56,16 @@ typedef struct {
     int32_t end;
 } model_thread_arg_t;
 
+#if defined(HAVE_METAL)
+// Batch/no-stream decode backend, selected per RUN (so CPU and GPU beam are never mixed in one run):
+//   default          -> full GPU decode (openfish_decode_gpu): scan + beam + quality + seq on GPU
+//   SLORADO_CPU_BEAM -> GPU forward/backward scan, then CPU beam search (openfish_decode_cpu_beam):
+//                       beam + quality + seq on the CPU over the GPU-scanned posteriors.
+// The per-stage times (backward/beam/forward+posterior/quality/seq-gen) are gated by
+// OPENFISH_DECODE_PROFILE inside openfish and printed nested under the "- decode:" line (basecaller_main).
+static const bool g_cpu_beam = getenv("SLORADO_CPU_BEAM") != nullptr;
+#endif
+
 static void accept_chunk(const int num_chunks, const basecall_chunk_t *chunk, runner_t *runner, int chunk_size) {
     ASSERT(chunk->read_dat->scaled_signal.size(0) > 0);
     torch::Tensor input_slice = (chunk->read_dat->scaled_signal).index({torch::indexing::Ellipsis, torch::indexing::Slice(chunk->input_offset, chunk->input_offset + chunk_size)});
@@ -184,7 +194,18 @@ static void decode_chunks(
             auto sc = sub_NTC.contiguous();
             if (sc.storage_offset() != 0) sc = sc.clone();
             torch::mps::synchronize();
-            openfish_decode_gpu(T, nt, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+            if (g_cpu_beam) {
+                // GPU forward/backward scan, then beam+quality+seq on the CPU over the shared posteriors.
+                openfish_decode_gpu_scan(T, nt, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf);
+                torch::mps::synchronize();
+                // CPU beam reads raw scores as F16==fp32 on the CPU path (int8 stays int8).
+                at::Tensor host = (sdt == OPENFISH_SCORE_I8) ? sc.to(torch::kCPU).contiguous()
+                                                             : sc.to(torch::kCPU).to(torch::kFloat32).contiguous();
+                openfish_decode_cpu_beam(T, nt, C, nthreads, host.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+            } else {
+                // Full GPU decode: scan + beam + quality + seq all on the GPU.
+                openfish_decode_gpu(T, nt, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+            }
 #elif defined(USE_GPU)
             openfish_decode_gpu(T, nt, C, sub_NTC.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
 #else

@@ -44,6 +44,7 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 #include "pipeline.h"
+#include "basecall.h"
 
 // add supported modbase models here
 static const std::unordered_set<std::string> supported = std::unordered_set<std::string>({
@@ -336,7 +337,7 @@ int basecaller_main(int argc, char* argv[]) {
 
     fprintf(stderr, "[%s] total entries: %ld", __func__, (long)core->total_reads);
     fprintf(stderr, "\n[%s] total bytes: %.1f M", __func__, core->sum_bytes/(float)(1000*1000));
-    
+
     if (!(opt.flag & SLORADO_STREAM)) {
         double total_time = realtime() - realtime0;
         double pct_denom = total_time > 0.0 ? total_time : 1.0;
@@ -389,6 +390,28 @@ int basecaller_main(int argc, char* argv[]) {
                 fprintf(stderr, "\n[%s]                     - clamp: %.3f sec (%.1f%% util)", __func__, model_stats->time_clamp, PCT(model_stats->time_clamp));
             }
             fprintf(stderr, "\n[%s]                 - decode: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_decode, PCT(runner_stats[i]->time_decode));
+#if defined(HAVE_METAL)
+            // Per-stage decode breakdown (aggregate across decode calls; enabled by OPENFISH_DECODE_PROFILE).
+            // GPU scan stages (backward, forward+posterior) come from the GPU getter in both backends; the
+            // beam/quality/seq-gen come from GPU (default) or CPU (SLORADO_CPU_BEAM) whichever ran this run.
+            {
+                double g_bwd=0, g_beam=0, g_fwd=0, g_qual=0, g_gen=0;
+                double c_beam=0, c_qual=0, c_gen=0;
+                openfish_decode_prof_get_gpu(&g_bwd, &g_beam, &g_fwd, &g_qual, &g_gen);
+                openfish_decode_prof_get_cpu(&c_beam, &c_qual, &c_gen);
+                const bool cpu = (c_beam + c_qual + c_gen) > 0.0;
+                const double beam = cpu ? c_beam : g_beam;
+                const double qual = cpu ? c_qual : g_qual;
+                const double gen  = cpu ? c_gen  : g_gen;
+                if (g_bwd + g_fwd + beam + qual + gen > 0.0) {
+                    fprintf(stderr, "\n[%s]                     - backward scan (GPU): %.3f sec (%.1f%% util)", __func__, g_bwd, PCT(g_bwd));
+                    fprintf(stderr, "\n[%s]                     - forward+posterior scan (GPU): %.3f sec (%.1f%% util)", __func__, g_fwd, PCT(g_fwd));
+                    fprintf(stderr, "\n[%s]                     - beam search (%s): %.3f sec (%.1f%% util)", __func__, cpu ? "CPU" : "GPU", beam, PCT(beam));
+                    fprintf(stderr, "\n[%s]                     - quality scores (%s): %.3f sec (%.1f%% util)", __func__, cpu ? "CPU" : "GPU", qual, PCT(qual));
+                    fprintf(stderr, "\n[%s]                     - sequence generation (%s): %.3f sec (%.1f%% util)", __func__, cpu ? "CPU" : "GPU", gen, PCT(gen));
+                }
+            }
+#endif
             fprintf(stderr, "\n[%s]             - modcall: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_modcall, PCT(runner_stats[i]->time_modcall));
             // fprintf(stderr, "\n[%s]             - total data points copied: %lu", __func__, runner_stats[i]->total_dp);
         }
