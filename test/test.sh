@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FAST="dna_r10.4.1_e8.2_400bps_fast@v4.2.0"
+FAST="dna_r10.4.1_e8.2_400bps_fast@v5.0.0"
 
 # terminate script
 die() {
@@ -103,7 +103,7 @@ test -d models/$FAST || download_model $FAST
 test -e minimap2/minimap2 || download_minimap2
 
 echo "test: PGXXXX230339 reads_1 vs chr3:34011000-34012000"
-basecall_and_check test/PGXXXX230339/reads_1.blow5 test/chr3_34011000_34012000.fa 0.8 -c 1000 -C 1
+basecall_and_check test/PGXXXX230339/reads_1.blow5 test/chr3_34011000_34012000.fa 0.93 -c 1000 -C 1
 
 if [ $chr22 -eq 1 ]; then
     echo "test: HG2 PGXXXX230339 chr22:23700000-23900000 1k reads vs hg38 chr22"
