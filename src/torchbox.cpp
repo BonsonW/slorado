@@ -31,7 +31,6 @@ SOFTWARE.
 ******************************************************************************/
 #include "error.h"
 #include "misc.h"
-#include "calib.h"
 #include "torchbox.h"
 #include "dorado/tensor_chunk_utils.h"
 #include "dorado/CRFModel.h"
@@ -135,15 +134,11 @@ void init_runner(
         if (core->model_config->tx != NULL) {
             LOG_TRACE("%s", "loading tx model");
             tx_stats_t *model_stats = init_tx_stats();
-            model_stats->calib_stats = core->calib_stats;
-            model_stats->quant_config = core->quant_config;
             runner->module = load_tx_model(*core->model_config, runner->tensor_opts, model_stats, (core->opt.flag & SLORADO_FLASH) != 0, core->opt.num_thread);
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         } else {
             LOG_TRACE("%s", "loading lstm model");
             lstm_stats_t *model_stats = init_lstm_stats();
-            model_stats->calib_stats = core->calib_stats;
-            model_stats->quant_config = core->quant_config;
             runner->module = load_lstm_model(*core->model_config, runner->tensor_opts, model_stats);
             (*core->runner_stats)[runner_idx]->model_stats = model_stats;
         }

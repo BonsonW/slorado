@@ -7,8 +7,6 @@
 
 #include "model_config.h"
 #include "tensor_chunk_utils.h"
-#include "calib.h"
-#include "quant.h"
 
 using namespace torch::nn;
 
@@ -46,21 +44,14 @@ struct LSTMStackImpl : torch::nn::Module {
 };
 
 struct FLSTMLayerImpl : torch::nn::Module {
-    FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats, const std::string &name_prefix = "");
+    FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats);
     torch::Tensor forward(torch::Tensor x);
-    void update_calib_weights();
 private:
     int C_, K_;
     lstm_stats_t *model_stats_;
     torch::Tensor dn_weight_ih_, dn_weight_hh_;
     torch::Tensor up_weight_ih_, up_weight_hh_;
     torch::Tensor up_bias_ih_,   up_bias_hh_;
-
-    // calibration (null when --calibrate not set)
-    calib_stats_t *calib_stats_ = nullptr;
-    std::string calib_prefix_;
-    calib_layer_t *cl_dn_ih_ = nullptr, *cl_up_ih_ = nullptr;
-    calib_layer_t *cl_dn_hh_ = nullptr, *cl_up_hh_ = nullptr;
 };
 
 struct FLSTMStackImpl : torch::nn::Module {

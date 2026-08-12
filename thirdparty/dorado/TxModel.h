@@ -1,9 +1,7 @@
 #pragma once
 
 #include "CRFModel.h"
-#include "calib.h"
 #include "error.h"
-#include "quant.h"
 #include "misc.h"
 #include "tensor_chunk_utils.h"
 
@@ -40,20 +38,14 @@ struct RMSNormImpl : torch::nn::Module {
 TORCH_MODULE(RMSNorm);
 
 struct GatedMLPImpl : torch::nn::Module {
-    GatedMLPImpl(int in_features, int hidden_features,
-                 tx_stats_t *stats = nullptr, const std::string &name_prefix = "");
+    GatedMLPImpl(int in_features, int hidden_features);
 
     torch::Tensor forward(const torch::Tensor &x);
-    void update_calib_weights();
 
     bool features_interleaved = false;
     int in_features;
     int hidden_features;
     torch::nn::Linear fc1{nullptr}, fc2{nullptr};
-
-    tx_stats_t *stats_ = nullptr;
-    std::string prefix_;
-    calib_layer_t *cl_fc1_ = nullptr, *cl_fc2_ = nullptr;
 };
 
 TORCH_MODULE(GatedMLP);
@@ -100,12 +92,10 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
         bool out_bias_,
         const std::pair<int, int> &attn_window_,
         const torch::TensorOptions &options_,
-        tx_stats_t *_model_stats,
-        int layer_idx = -1
+        tx_stats_t *_model_stats
     );
 
     torch::Tensor forward(torch::Tensor x);
-    void update_calib_weights();
 
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;
@@ -121,15 +111,12 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
     RotaryEmbedding rotary_emb{nullptr};
 
     tx_stats_t *model_stats;
-
-    std::string attn_prefix_;
-    calib_layer_t *cl_wqkv_ = nullptr, *cl_out_proj_ = nullptr;
 };
 
 TORCH_MODULE(MultiHeadAttention);
 
 struct TxEncoderImpl : torch::nn::Module {
-    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, int layer_idx = -1);
+    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
     torch::Tensor forward(torch::Tensor x);
 
@@ -152,7 +139,6 @@ struct TxEncoderStackImpl : torch::nn::Module {
     torch::Tensor forward(const torch::Tensor &x);
     
     torch::nn::Sequential stack{nullptr};
-    std::vector<TxEncoder> layer_vec;
 };
 
 TORCH_MODULE(TxEncoderStack);

@@ -36,8 +36,6 @@ SOFTWARE.
 #include "basecall.h"
 #include "misc.h"
 #include "error.h"
-#include "quant.h"
-#include "sensitivity.h"
 
 #ifdef USE_GPU
 #include <c10/core/DeviceGuard.h>
@@ -194,22 +192,11 @@ static void call_chunks(
     auto input = runner->input_tensor.to(runner->tensor_opts.device());
 
     ts->time_infer -= realtime();
-    at::Tensor fp16_scores;
-    if (core->sensitivity_stats) {
-        // Sensitivity mode: run fp16 baseline first, then quantized pass.
-        g_quant_active = false;
-        fp16_scores = runner->module->forward(input);
-        g_quant_active = true;
-    }
     auto scores = runner->module->forward(input);
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
     ts->time_infer += realtime();
-
-    if (core->sensitivity_stats) {
-        core->sensitivity_stats->accumulate(fp16_scores, scores);
-    }
 
     auto scores_TNC = scores;
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();

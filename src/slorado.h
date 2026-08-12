@@ -42,12 +42,6 @@ SOFTWARE.
 #include <string>
 
 #include "dorado/model_config.h"
-#include "quant.h"
-
-// Forward declarations — full definitions in calib.h (requires torch headers).
-struct calib_stats_t;
-struct calib_layer_t;
-struct sensitivity_stats_t;
 
 #define SLORADO_VERSION "0.5.0-beta"
 
@@ -89,9 +83,6 @@ typedef struct {
     int32_t overlap;            // overlap: p
 
     const char *mod;         // specified modbase: x
-    const char *calibrate_out;   // path for calibration JSON output (NULL = disabled)
-    const char *quant_config_path; // path for per-layer quant config JSON (NULL = disabled)
-    const char *sensitivity_out;   // path for sensitivity KL output JSON (NULL = disabled)
 } opt_t;
 
 typedef struct read_dat read_dat_t;
@@ -167,10 +158,6 @@ typedef struct {
     // FLSTM timings (accumulated across all layers)
     double time_flstm_precompute;   // batched ih = x @ W_ih_fused + bias_ih (before loop)
     double time_flstm_recurrence;   // full per-step loop: addmm(W_hh_fused) + gate update
-
-    calib_stats_t *calib_stats = nullptr;
-    const std::unordered_map<std::string, std::string> *quant_config = nullptr;
-    std::unordered_map<std::string, layer_quant_t> quant_methods;
 } lstm_stats_t;
 
 typedef struct {
@@ -189,9 +176,6 @@ typedef struct {
     double time_sdp_attn;
     double time_out_proj;
 
-    calib_stats_t *calib_stats = nullptr;
-    const std::unordered_map<std::string, std::string> *quant_config = nullptr;
-    std::unordered_map<std::string, layer_quant_t> quant_methods;
     bool use_flash = false;
     int nthreads = 1;
 } tx_stats_t;
@@ -262,15 +246,6 @@ typedef struct {
     // stats, set by output_db
     int64_t sum_bytes;
     int64_t total_reads; // total number mapped entries in the bam file (after filtering based on flags, mapq etc)
-
-    // calibration stats (NULL unless --calibrate is set)
-    calib_stats_t *calib_stats = nullptr;
-
-    // quantization config (NULL unless --quant-config is set)
-    std::unordered_map<std::string, std::string> *quant_config = nullptr;
-
-    // sensitivity stats (NULL unless --sensitivity is set)
-    sensitivity_stats_t *sensitivity_stats = nullptr;
 } core_t;
 
 /* argument wrapper for the multithreaded framework used for data processing */

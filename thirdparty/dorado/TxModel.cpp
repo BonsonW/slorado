@@ -1,5 +1,4 @@
 #include "TxModel.h"
-#include "quant.h"
 
 #include <ATen/Functions.h>
 #include <ATen/TensorIndexing.h>
@@ -55,36 +54,15 @@ torch::Tensor RMSNormImpl::forward(torch::Tensor x) {
     return x;
 }
 
-GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_,
-                           tx_stats_t *stats, const std::string &name_prefix)
+GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_)
     : in_features(in_features_), hidden_features(hidden_features_) {
     fc1 = register_module("fc1", Linear(LinearOptions(in_features, 2 * hidden_features).bias(false)));
     fc2 = register_module("fc2", Linear(LinearOptions(hidden_features, in_features).bias(false)));
-
-    if (!name_prefix.empty() && stats) {
-        stats_ = stats;
-        prefix_ = name_prefix;
-        if (stats->calib_stats) {
-            cl_fc1_ = stats->calib_stats->register_layer(name_prefix + ".fc1", fc1->weight);
-            cl_fc2_ = stats->calib_stats->register_layer(name_prefix + ".fc2", fc2->weight);
-        }
-    }
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
-    if (cl_fc1_) stats_->calib_stats->accumulate(cl_fc1_, x);
-    static const layer_quant_t k_empty_lq;
-    auto lq = [&](const char *suffix) -> const layer_quant_t& {
-        if (stats_ && !stats_->quant_methods.empty()) {
-            auto it = stats_->quant_methods.find(prefix_ + suffix);
-            if (it != stats_->quant_methods.end()) return it->second;
-        }
-        return k_empty_lq;
-    };
-    const auto &lq_fc1 = lq(".fc1");
-    const auto &lq_fc2 = lq(".fc2");
-    t = at::linear(fake_quant(x, lq_fc1.act), fake_quant(fc1->weight, lq_fc1.weight), fc1->bias);
+    t = at::linear(x, fc1->weight, fc1->bias);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -97,14 +75,7 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     const auto &gate = chunks[1];
     t = functional::silu(gate).mul_(y);
 #endif
-    if (cl_fc2_) stats_->calib_stats->accumulate(cl_fc2_, t);
-    return at::linear(fake_quant(t, lq_fc2.act), fake_quant(fc2->weight, lq_fc2.weight), fc2->bias);
-}
-
-void GatedMLPImpl::update_calib_weights() {
-    if (!stats_ || !stats_->calib_stats) return;
-    stats_->calib_stats->update_weight(cl_fc1_, fc1->weight);
-    stats_->calib_stats->update_weight(cl_fc2_, fc2->weight);
+    return at::linear(t, fc2->weight, fc2->bias);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -239,8 +210,7 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     bool out_bias_,
     const std::pair<int, int> &attn_window_,
     const torch::TensorOptions &options_,
-    tx_stats_t *_model_stats,
-    int layer_idx
+    tx_stats_t *_model_stats
 ) :
     d_model(d_model_),
     nhead(nhead_),
@@ -256,14 +226,6 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     const int64_t max_seq_len = 2048;
     rotary_emb = register_module("rotary_emb", RotaryEmbedding(head_dim, theta, max_seq_len, options, _model_stats));
     model_stats = _model_stats;
-
-    if (layer_idx >= 0 && _model_stats) {
-        attn_prefix_ = "transformer_encoder." + std::to_string(layer_idx) + ".self_attn";
-        if (_model_stats->calib_stats) {
-            cl_wqkv_     = _model_stats->calib_stats->register_layer(attn_prefix_ + ".wqkv",     wqkv->weight);
-            cl_out_proj_ = _model_stats->calib_stats->register_layer(attn_prefix_ + ".out_proj", out_proj->weight);
-        }
-    }
 };
 
 
@@ -292,19 +254,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     double a, b;
     
     a = realtime();
-    static const layer_quant_t k_empty_lq;
-    auto lq = [&](const char *suffix) -> const layer_quant_t& {
-        if (model_stats && !attn_prefix_.empty() && !model_stats->quant_methods.empty()) {
-            auto it = model_stats->quant_methods.find(attn_prefix_ + suffix);
-            if (it != model_stats->quant_methods.end()) return it->second;
-        }
-        return k_empty_lq;
-    };
-    const auto &lq_wqkv = lq(".wqkv");
-    const auto &lq_op   = lq(".out_proj");
-
-    if (cl_wqkv_) model_stats->calib_stats->accumulate(cl_wqkv_, x);
-    auto qkv = at::linear(fake_quant(x, lq_wqkv.act), fake_quant(wqkv->weight, lq_wqkv.weight), wqkv->bias)
+    auto qkv = at::linear(x, wqkv->weight, wqkv->bias)
                    .view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
@@ -379,27 +329,17 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_sdp_attn += b-a;
 
     a = realtime();
-    if (cl_out_proj_) model_stats->calib_stats->accumulate(cl_out_proj_, attn_output_ntc);
-    x = at::linear(fake_quant(attn_output_ntc, lq_op.act), fake_quant(out_proj->weight, lq_op.weight), out_proj->bias);
+    x = at::linear(attn_output_ntc, out_proj->weight, out_proj->bias);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_out_proj += b-a;
-    
+
     return x;
 };
 
-void MultiHeadAttentionImpl::update_calib_weights() {
-    if (!model_stats || !model_stats->calib_stats) return;
-    model_stats->calib_stats->update_weight(cl_wqkv_, wqkv->weight);
-    model_stats->calib_stats->update_weight(cl_out_proj_, out_proj->weight);
-}
-
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, int layer_idx) : params(params_) {
-    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats, layer_idx));
-    const std::string ff_prefix = layer_idx >= 0
-        ? "transformer_encoder." + std::to_string(layer_idx) + ".ff"
-        : "";
-    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward, _model_stats, ff_prefix));
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats) : params(params_) {
+    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats));
+    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
     model_stats = _model_stats;
@@ -467,9 +407,8 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
 TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
-        TxEncoder encoder(params, options, model_stats, i);
+        TxEncoder encoder(params, options, model_stats);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
-        layer_vec.push_back(encoder);
     }
 };
 
@@ -734,9 +673,6 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
     if (model_stats) {
         model_stats->use_flash = use_flash;
         model_stats->nthreads = nthreads;
-        if (model_stats->quant_config) {
-            build_quant_methods(model_stats->quant_methods, *model_stats->quant_config);
-        }
     }
     auto model = TxModel(model_config, options, model_stats);
     auto state_dict = load_tx_model_weights(model_config.model_path);
@@ -744,15 +680,6 @@ ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const 
     model->to(options.dtype().toScalarType());
     model->to(options.device());
     model->eval();
-
-    // Update calib weight stats now that real weights are loaded.
-    // (register_layer is called during construction with initial/empty weight tensors.)
-    if (model_stats && model_stats->calib_stats && model->tx_encoder) {
-        for (auto &enc : model->tx_encoder->layer_vec) {
-            enc->self_attn->update_calib_weights();
-            enc->ff->update_calib_weights();
-        }
-    }
 
     if (use_flash) {
         INFO("%s", "flash attention enabled");
