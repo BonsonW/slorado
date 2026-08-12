@@ -20,7 +20,21 @@ jobs:
         - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
-      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+      run: |
+        set -e
+        apt-get update
+        apt-get install -y software-properties-common wget ca-certificates
+        . /etc/os-release
+        # add-apt-repository fetches PPA keys on port 11371 which times out on the
+        # runners, so pull the git-core PPA key over https and add the repo by hand
+        for i in 1 2 3; do
+          wget -qO /tmp/git-core.key 'https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0xA1715D88E1DF1F24' && break
+          sleep 5
+        done
+        apt-key add /tmp/git-core.key
+        echo "deb http://ppa.launchpad.net/git-core/ppa/ubuntu $UBUNTU_CODENAME main" > /etc/apt/sources.list.d/git-core.list
+        apt-get update -y
+        apt-get install git -y
     - name: nodejs
       run: |
         apt-get install -y wget xz-utils
@@ -49,7 +63,21 @@ jobs:
         - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
-      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+      run: |
+        set -e
+        apt-get update
+        apt-get install -y software-properties-common wget ca-certificates
+        . /etc/os-release
+        # add-apt-repository fetches PPA keys on port 11371 which times out on the
+        # runners, so pull the git-core PPA key over https and add the repo by hand
+        for i in 1 2 3; do
+          wget -qO /tmp/git-core.key 'https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0xA1715D88E1DF1F24' && break
+          sleep 5
+        done
+        apt-key add /tmp/git-core.key
+        echo "deb http://ppa.launchpad.net/git-core/ppa/ubuntu $UBUNTU_CODENAME main" > /etc/apt/sources.list.d/git-core.list
+        apt-get update -y
+        apt-get install git -y
     - name: nodejs
       run: |
         apt-get install -y wget xz-utils
@@ -84,7 +112,21 @@ jobs:
         - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
-      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+      run: |
+        set -e
+        apt-get update
+        apt-get install -y software-properties-common wget ca-certificates
+        . /etc/os-release
+        # add-apt-repository fetches PPA keys on port 11371 which times out on the
+        # runners, so pull the git-core PPA key over https and add the repo by hand
+        for i in 1 2 3; do
+          wget -qO /tmp/git-core.key 'https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0xA1715D88E1DF1F24' && break
+          sleep 5
+        done
+        apt-key add /tmp/git-core.key
+        echo "deb http://ppa.launchpad.net/git-core/ppa/ubuntu $UBUNTU_CODENAME main" > /etc/apt/sources.list.d/git-core.list
+        apt-get update -y
+        apt-get install git -y
     - name: nodejs
       run: |
         apt-get install -y wget xz-utils
@@ -99,7 +141,14 @@ jobs:
     - name: install gcc
       run: |
         set -xe
-        add-apt-repository ppa:ubuntu-toolchain-r/test -y
+        . /etc/os-release
+        # same keyserver timeout as above: fetch the toolchain PPA key over https
+        for i in 1 2 3; do
+          wget -qO /tmp/toolchain-r.key 'https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0x1E9377A2BA9EF27F' && break
+          sleep 5
+        done
+        apt-key add /tmp/toolchain-r.key
+        echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $UBUNTU_CODENAME main" > /etc/apt/sources.list.d/ubuntu-toolchain-r.list
         apt-get update
         apt-get install gcc-11 g++-11 -y
     - name: cuda
@@ -134,7 +183,21 @@ jobs:
         - /node20217:/__e/node24:ro,rshared
     steps:
     - name: install git
-      run: apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:git-core/ppa && apt-get update -y && apt-get install git -y
+      run: |
+        set -e
+        apt-get update
+        apt-get install -y software-properties-common wget ca-certificates
+        . /etc/os-release
+        # add-apt-repository fetches PPA keys on port 11371 which times out on the
+        # runners, so pull the git-core PPA key over https and add the repo by hand
+        for i in 1 2 3; do
+          wget -qO /tmp/git-core.key 'https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0xA1715D88E1DF1F24' && break
+          sleep 5
+        done
+        apt-key add /tmp/git-core.key
+        echo "deb http://ppa.launchpad.net/git-core/ppa/ubuntu $UBUNTU_CODENAME main" > /etc/apt/sources.list.d/git-core.list
+        apt-get update -y
+        apt-get install git -y
     - name: nodejs
       run: |
         apt-get install -y wget xz-utils
