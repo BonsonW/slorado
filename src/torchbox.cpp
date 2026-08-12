@@ -284,8 +284,13 @@ void init_runner(
 
     if (modbase) {
         const int channels = NUM_BASES * core->modbase_config->general.kmer_len;
+        // The signal chunk is at signal resolution; the sequence (kmer) chunk is at the sequence
+        // resolution = chunk_size / stride_ratio (ratio > 1 for conv_lstm_v3, whose sequence convs
+        // are stride-1; ratio == 1 for v1/v2, which downsample the sequence in-conv).
+        const int64_t seq_ratio = core->modbase_config->general.stride_ratio();
+        const int64_t seq_chunk = (int64_t)core->modbase_config->context.chunk_size / seq_ratio;
         runner->input_sigs = torch::zeros({batch_size, 1, (int64_t)core->modbase_config->context.chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
-        runner->input_seqs = torch::zeros({batch_size, (int64_t)core->modbase_config->context.chunk_size, channels}, torch::TensorOptions().dtype(torch::kInt8).device(torch::kCPU));
+        runner->input_seqs = torch::zeros({batch_size, seq_chunk, channels}, torch::TensorOptions().dtype(torch::kInt8).device(torch::kCPU));
     } else {
         runner->input_tensor = torch::zeros({batch_size, 1, (int64_t)core->chunk_size}, torch::TensorOptions().dtype(dtype).device(torch::kCPU));
     }
@@ -437,8 +442,26 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         scale_signal(core, read_dat->scaled_signal, rec->range / rec->digitisation, rec->offset, signal_norm_params);
         LOG_TRACE("%s", "scaled signal");
 
+        // scale_signal front-trims the signal (RNA adapter / DNA pore-open). Record how much so the
+        // modbase path can trim the raw signal identically and stay aligned with the moves/sequence.
+        read_dat->basecall_trim_start = (int64_t)len_raw_signal - read_dat->scaled_signal.size(0);
+
         create_basecall_chunks((*db->basecall_chunks)[i], read_dat->scaled_signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
     }
+}
+
+// Reverse a seq_to_sig_map for RNA modbase models: reverse the order AND map each coord
+// a -> signal_len - a, so the (unreversed 5'->3') sequence lines up with the time-flipped RNA signal.
+static void reverse_seq_to_sig_map(std::vector<uint64_t>& m, size_t signal_len) {
+    const size_t n = m.size();
+    for (size_t l = 0; l < n / 2; ++l) {
+        const size_t r = n - l - 1;
+        uint64_t lv = signal_len - m[l];
+        uint64_t rv = signal_len - m[r];
+        m[l] = rv;
+        m[r] = lv;
+    }
+    if (n % 2 != 0) m[n / 2] = signal_len - m[n / 2];
 }
 
 void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
@@ -464,13 +487,24 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
 
         std::vector<uint8_t> &moves = (*db->moves)[i];
 
+        // RNA models process the signal 3'->5' (reverse_signal=true).
+        const bool is_rna_mod = core->modbase_config->context.reverse;
+
         LOG_TRACE("%s", "tensor_from_record");
 
         // a = realtime();
-        read_dat->scaled_signal = tensor_from_record(rec);
+        // Trim the raw signal by the same front-trim the basecall scaler applied (RNA adapter / DNA
+        // pore-open), matching dorado (its modbase raw_data is the trimmed signal). Without this the
+        // modbase signal keeps samples the moves/sequence do not account for, shifting signal vs
+        // sequence by the trim length (catastrophic for RNA's large adapter; small but real for DNA).
+        at::Tensor raw_full = tensor_from_record(rec);
+        const int64_t trim = read_dat->basecall_trim_start;
+        read_dat->scaled_signal = (trim > 0 && trim < raw_full.size(0))
+            ? raw_full.slice(0, trim, raw_full.size(0)).contiguous()
+            : raw_full;
         // b = realtime();
         // if (core->opt.num_thread == 1) core->time_tens_from_rec += (b-a);
-        
+
         LOG_TRACE("%s", "initialise_base_mod_probs");
 
         // a = realtime();
@@ -481,9 +515,9 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
         // For RNA: Pad signal length to be evenly divisible by the canonical stride so that the
         // sequence to signal mapping is always stride aligned and not offset by any remainder
         // in the last move (which becomes the first move when reversed).
-        // const size_t signal_len =
-        //         m_is_rna_model ? utils::pad_to(signal.size(0), m_canonical_stride) : signal.size(0);
-        const size_t signal_len = read_dat->scaled_signal.size(0);
+        const int cstride = core->model_config->stride;
+        const size_t raw_len = read_dat->scaled_signal.size(0);
+        const size_t signal_len = is_rna_mod ? ((raw_len + cstride - 1) / cstride) * cstride : raw_len;
 
         LOG_TRACE("%s", "populate_hits_seq");
 
@@ -494,8 +528,26 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
 
         LOG_TRACE("%s", "get_seq_to_sig_map");
 
+        // moves arrive in signal (3'->5') order for RNA. The map is built in signal order here and
+        // reoriented by reverse_seq_to_sig_map below to line up with the 5'->3' sequence.
+        if (is_rna_mod) {
+            // Defensive check: stitch_chunks bounds moves by the adapter-trimmed length so they span
+            // exactly signal_len/cstride blocks with one 1 per base. If that invariant ever breaks
+            // (e.g. an untrimmed read), a move block past signal_len would underflow
+            // reverse_seq_to_sig_map, so skip modbase (leave default probs) rather than emit a
+            // misaligned map.
+            size_t move_ones = 0;
+            for (uint8_t m : moves) move_ones += (m != 0);
+            if (moves.size() > signal_len / cstride || move_ones != strlen(seq)) {
+                return;
+            }
+        }
+
         // a = realtime();
-        std::vector<uint64_t> seq_to_sig_map = get_seq_to_sig_map(moves, signal_len, strlen(seq) + 1, core->model_config->stride);
+        std::vector<uint64_t> seq_to_sig_map = get_seq_to_sig_map(moves, signal_len, strlen(seq) + 1, cstride);
+        if (is_rna_mod) {
+            reverse_seq_to_sig_map(seq_to_sig_map, signal_len);
+        }
         // b = realtime();
         // if (core->opt.num_thread == 1) core->time_seq_to_sig_map += (b-a);
 
@@ -513,6 +565,23 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
         populate_hits_sig(read_dat->per_base_hits_sig, read_dat->per_base_hits_seq, seq_to_sig_map, base_id);
         // b = realtime();
         // if (core->opt.num_thread == 1) core->time_populate_hits_sig += (b-a);
+
+        if (is_rna_mod) {
+            // RNA models process the signal 3'->5', so flip it and prepend a short mirrored pad up to
+            // the stride-aligned signal_len: sig = [ raw[len-pad:len] , flip(raw) ]
+            // (dorado ModBaseChunkCallerNode::populate_signal).
+            auto raw = read_dat->scaled_signal;
+            const int64_t len = raw.size(0);
+            const int64_t pad = (int64_t)signal_len - len;
+            at::Tensor sig = at::empty({(int64_t)signal_len}, raw.options());
+            sig.slice(0, pad, (int64_t)signal_len) = at::flip(raw, 0);
+            if (pad > 0) {
+                // pad < cstride, so it only exceeds len for pathologically short reads.
+                if (pad <= len) sig.slice(0, 0, pad) = raw.slice(0, len - pad, len);
+                else sig.slice(0, 0, pad).zero_();
+            }
+            read_dat->scaled_signal = sig;
+        }
 
         LOG_TRACE("%s", "populate_signal");
 

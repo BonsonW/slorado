@@ -243,8 +243,30 @@ void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstri
     moves.insert(moves.end(), std::next(last_chunk.moves.begin(), mid_point_front), last_chunk.moves.end());
 
     if (chunks.size() == 1) {
-        // shorten the sequence, qstring & moves where the read is shorter than chunksize
-        const int last_index_in_moves_to_keep = int(len_raw_signal / model_stride);
+        // shorten the sequence, qstring & moves where the read is shorter than chunksize. When the
+        // basecalled (front-trimmed) length is known, bound by min(basecalled_len, chunk) with
+        // div_round_up -- matching dorado stitch (get_raw_data_samples()). This drops chunk-padding
+        // move blocks past the real signal that would otherwise emit spurious trailing bases and
+        // desync moves from the signal (breaks RNA modbase). basecalled_len == 0 -> legacy behaviour.
+        read_dat_t *read_dat = last_chunk.read_dat;
+        size_t basecalled_len = 0;
+        if (read_dat && read_dat->basecall_trim_start > 0 &&
+            (size_t)read_dat->basecall_trim_start < len_raw_signal) {
+            basecalled_len = len_raw_signal - (size_t)read_dat->basecall_trim_start;
+        }
+
+        int last_index_in_moves_to_keep;
+        if (basecalled_len > 0) {
+            const size_t signal_size = std::min(basecalled_len, last_chunk.raw_chunk_size);
+            last_index_in_moves_to_keep = div_round_up((int)signal_size, model_stride);
+        } else {
+            last_index_in_moves_to_keep = int(len_raw_signal / model_stride);
+        }
+        // len_raw_signal is the UNTRIMMED length, but moves only span the trimmed basecalled signal,
+        // so the legacy expression above can exceed moves.size() when the front trim is large (RNA
+        // adapters especially) -- which read out of bounds below. Clamp on every path.
+        last_index_in_moves_to_keep =
+            std::min<int>(last_index_in_moves_to_keep, (int)moves.size());
         moves = std::vector<uint8_t>(moves.begin(), moves.begin() + last_index_in_moves_to_keep);
         const int end = std::accumulate(moves.begin(), moves.end(), 0);
         sequences.push_back(last_chunk.seq.substr(start_pos, end));

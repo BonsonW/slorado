@@ -9,6 +9,12 @@
 struct read_dat {
     torch::Tensor scaled_signal;
 
+    // Number of samples trimmed from the FRONT of the raw signal by the basecall scaler
+    // (RNA adapter / DNA pore-open trim). The modbase path must trim the raw signal by the
+    // same amount so its signal stays aligned with the moves/sequence (which are derived from
+    // the trimmed basecall signal). Set in preprocess_signal, consumed in preprocess_modbase.
+    int64_t basecall_trim_start = 0;
+
     // mod data
     const char *seq;
 

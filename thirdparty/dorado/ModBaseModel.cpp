@@ -333,7 +333,11 @@ struct ModBaseConvLSTMV3ModelImpl : Module {
         z = std::get<0>(lstm1(z)).flip(0);  // TNC -> T'NC
         z = std::get<0>(lstm2(z));  // T'NC
         z = linear(z).flip(0).permute({1, 0, 2});  // T'NC -> NTC
-        z = upsample->forward(z);  // NTC -> N(sf*T)C
+        // The 6mA / m6A_DRACH v3 models have no upsample sublayer; their output is already at
+        // sequence resolution.
+        if (!upsample.is_empty()) {
+            z = upsample->forward(z);  // NTC -> N(sf*T)C
+        }
         // NTC -> N(TC)
         return z.softmax(2).flatten(1);
     }

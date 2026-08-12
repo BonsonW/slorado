@@ -766,11 +766,18 @@ LSTMConfigParams parse_lstm(toml_table_t *segment) {
     toml_datum_t lstm_size = toml_int_in(segment, "size");
     check_toml_datum(lstm_size);
 
-    toml_datum_t reverse = toml_bool_in(segment, "reverse");
-    check_toml_datum(reverse);
+    // v3 modbase configs write `reverse = 0/1` (int); accept bool too for robustness.
+    toml_datum_t reverse_i = toml_int_in(segment, "reverse");
+    toml_datum_t reverse_b = toml_bool_in(segment, "reverse");
+    if (reverse_i.ok) {
+        p.reverse = (reverse_i.u.i != 0);
+    } else if (reverse_b.ok) {
+        p.reverse = reverse_b.u.b;
+    } else {
+        check_toml_datum(reverse_i);  // report the missing/invalid field
+    }
 
     p.size = lstm_size.u.i;
-    p.reverse = reverse.u.b;
 
     return p;
 }
@@ -845,7 +852,7 @@ EncoderUpsampleParams parse_linear_upsample(const toml_table_t *segment) {
 ModulesParams parse_modules_params(const toml_table_t *config_toml) {
     ModulesParams m;
     m.sequence_convs = parse_convs(get_layers(config_toml, "sequence_encoder"));
-    m.sequence_convs = parse_convs(get_layers(config_toml, "signal_encoder"));
+    m.signal_convs = parse_convs(get_layers(config_toml, "signal_encoder"));
 
     auto layers = get_layers(config_toml, "encoder");
 

@@ -18,9 +18,9 @@ download_model () {
     rm -f $1.zip || die "Removing the model failed"
 }
 
-# download_model dna_r10.4.1_e8.2_400bps_fast@v5.2.0
-# download_model dna_r10.4.1_e8.2_400bps_hac@v5.2.0
-# download_model dna_r10.4.1_e8.2_400bps_sup@v5.2.0
+download_model dna_r10.4.1_e8.2_400bps_fast@v5.2.0
+download_model dna_r10.4.1_e8.2_400bps_hac@v5.2.0
+download_model dna_r10.4.1_e8.2_400bps_sup@v5.2.0
 
 download_model dna_r10.4.1_e8.2_400bps_fast@v5.0.0
 download_model dna_r10.4.1_e8.2_400bps_hac@v5.0.0
@@ -33,6 +33,12 @@ download_model dna_r10.4.1_e8.2_400bps_hac@v6.0.0
 download_model dna_r10.4.1_e8.2_400bps_hac@v5.0.0_5mCG_5hmCG@v3
 download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0_5mCG_5hmCG@v3
 
+# latest DNA 6mA (all-context) modification models -- conv_lstm_v3 (chunked)
+#   hac: pairs with hac@v6.0.0 (latest DNA base). sup: latest is v5.2.0 (no v6 sup DNA base exists),
+#   so its v5.2.0 base is fetched above.
+download_model dna_r10.4.1_e8.2_400bps_hac@v6.0.0_6mA@v1
+download_model dna_r10.4.1_e8.2_400bps_sup@v5.2.0_6mA@v1
+
 # download_model dna_r10.4.1_e8.2_400bps_fast@v4.2.0
 # download_model dna_r10.4.1_e8.2_400bps_hac@v4.2.0
 # download_model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
@@ -41,6 +47,10 @@ download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0_5mCG_5hmCG@v3
 download_model rna004_fast@v6.0.0
 download_model rna004_hac@v6.0.0
 download_model rna004_sup@v6.0.0
+
+# latest RNA m6A (DRACH-context) modification models -- conv_lstm_v3 (chunked), pair with v6.0.0 bases
+download_model rna004_hac@v6.0.0_m6A_DRACH@v1
+download_model rna004_sup@v6.0.0_m6A_DRACH@v1
 
 download_model rna004_130bps_fast@v5.1.0
 download_model rna004_130bps_hac@v5.1.0
