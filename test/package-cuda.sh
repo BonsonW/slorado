@@ -26,6 +26,7 @@ make clean
 make cuda=1 zstd_local=../zstd/lib || die "Build failed"
 cp -r thirdparty/torch/libtorch/* slorado-$VERSION/|| die "Copy failed"
 mv  ./slorado slorado-$VERSION/bin/ || die "Copy failed"
+cp scripts/pod5-slorado slorado-$VERSION/bin/ || die "Copy failed"
 cp -r models/ slorado-$VERSION/ || die "Copy failed"
 
 # clean up

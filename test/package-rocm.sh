@@ -34,6 +34,7 @@ cp -r thirdparty/torch/libtorch/lib/* slorado-$VERSION/lib/ || die "Copy failed"
 cp -r thirdparty/torch/libtorch/share/* slorado-$VERSION/share/ || die "Copy failed"
 cp -r thirdparty/torch/torch-2.9.0+rocm6.4.dist-info/ slorado-$VERSION/share/ || die "Copy failed"
 mv  ./slorado slorado-$VERSION/bin/ || die "Copy failed"
+cp scripts/pod5-slorado slorado-$VERSION/bin/ || die "Copy failed"
 cp -r models/ slorado-$VERSION/ || die "Copy failed"
 
 cp /lib64/libzstd.so.1 slorado-$VERSION/lib/libzstd.so.1
