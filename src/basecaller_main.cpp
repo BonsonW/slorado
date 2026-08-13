@@ -409,6 +409,14 @@ int basecaller_main(int argc, char* argv[]) {
                     fprintf(stderr, "\n[%s]                     - beam search (%s): %.3f sec (%.1f%% util)", __func__, cpu ? "CPU" : "GPU", beam, PCT(beam));
                     fprintf(stderr, "\n[%s]                     - quality scores (%s): %.3f sec (%.1f%% util)", __func__, cpu ? "CPU" : "GPU", qual, PCT(qual));
                     fprintf(stderr, "\n[%s]                     - sequence generation (%s): %.3f sec (%.1f%% util)", __func__, cpu ? "CPU" : "GPU", gen, PCT(gen));
+                    // slorado-side decode stages: GPU int8 quant + scores device->host copy, then
+                    // whatever the itemised stages do not cover (dispatch/setup/result marshalling).
+                    double quant = 0, copy = 0;
+                    basecall_decode_prof_get(&quant, &copy);
+                    fprintf(stderr, "\n[%s]                     - int8 quant (GPU): %.3f sec (%.1f%% util)", __func__, quant, PCT(quant));
+                    fprintf(stderr, "\n[%s]                     - scores device->host copy: %.3f sec (%.1f%% util)", __func__, copy, PCT(copy));
+                    const double unacc = runner_stats[i]->time_decode - (g_bwd + g_fwd + beam + qual + gen + quant + copy);
+                    fprintf(stderr, "\n[%s]                     - unaccounted: %.3f sec (%.1f%% util)", __func__, unacc, PCT(unacc));
                 }
             }
 #endif

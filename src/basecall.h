@@ -36,6 +36,9 @@ void basecall_beam_host(const core_t* core, const int runner_idx, at::Tensor hos
 // TEMPORARY (benchmark, SLORADO_GPU_BEAM): full GPU decode (scan+beam+qual+gen on GPU) as a drop-in
 // alternative to basecall_scan_gpu + basecall_beam_host, to A/B the beam search on GPU vs CPU.
 void basecall_decode_gpu_full(const core_t* core, const int runner_idx, at::Tensor dev_scores, openfish_gpubuf_t *gpubuf, const std::vector<basecall_chunk_t *> &chunks);
+// Slorado-side decode stage timings (OPENFISH_DECODE_PROF): GPU int8 quant of the scores, and the
+// scores device->host copy. Zero when not profiling. Either pointer may be NULL.
+void basecall_decode_prof_get(double *quant, double *copy);
 #endif
 
 #endif

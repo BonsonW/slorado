@@ -64,6 +64,18 @@ typedef struct {
 // The per-stage times (backward/beam/forward+posterior/quality/seq-gen) are gated by
 // OPENFISH_DECODE_PROF inside openfish and printed nested under the "- decode:" line (basecaller_main).
 static const bool g_cpu_beam = getenv("SLORADO_CPU_BEAM") != nullptr;
+
+// Decode-stage timings owned by slorado (openfish times its own scan/beam/quality/seq-gen stages):
+// the GPU int8 quantization of the scores and the scores device->host copy. Gated by
+// OPENFISH_DECODE_PROF so unprofiled runs pay nothing (the quant needs an extra MPS sync to be
+// measured in isolation). Printed under the "- decode:" line by basecaller_main.
+static const bool g_dec_prof = getenv("OPENFISH_DECODE_PROF") != nullptr;
+static double g_dec_quant = 0.0, g_dec_copy = 0.0;
+
+void basecall_decode_prof_get(double *quant, double *copy) {
+    if (quant) *quant = g_dec_quant;
+    if (copy)  *copy  = g_dec_copy;
+}
 #endif
 
 static void accept_chunk(const int num_chunks, const basecall_chunk_t *chunk, runner_t *runner, int chunk_size) {
@@ -204,7 +216,9 @@ static void decode_chunks(
                 openfish_score_dtype_t use_sdt = sdt;
                 float use_scale = sscale;
                 if (core->model_config->clamp && sdt != OPENFISH_SCORE_I8) {
+                    const double t_q = g_dec_prof ? realtime() : 0.0;
                     sc = (sc * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).contiguous();
+                    if (g_dec_prof) { torch::mps::synchronize(); g_dec_quant += realtime() - t_q; }
                     use_sdt = OPENFISH_SCORE_I8;
                     use_scale = SCORES_I8_SCALE;
                 }
@@ -218,9 +232,11 @@ static void decode_chunks(
                 // that is the part the CUDA/HIP zero-copy note refers to.) fp16 is widened to fp32
                 // because the CPU beam's fp16 read path is unverified -- see basecall_finalize_host
                 // in the stream path, which does the same for the same reason.
+                const double t_cp = g_dec_prof ? realtime() : 0.0;
                 at::Tensor host_copy = (use_sdt == OPENFISH_SCORE_I8)
                     ? sc.to(torch::kCPU).contiguous()
                     : sc.to(torch::kCPU).to(torch::kFloat32).contiguous();
+                if (g_dec_prof) g_dec_copy += realtime() - t_cp;
                 const openfish_score_dtype_t cpu_sdt =
                     (use_sdt == OPENFISH_SCORE_I8) ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F32;
                 openfish_decode_cpu_beam(T, nt, C, nthreads, host_copy.data_ptr(), cpu_sdt, use_scale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
