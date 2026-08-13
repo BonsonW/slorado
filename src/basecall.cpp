@@ -62,7 +62,7 @@ typedef struct {
 //   SLORADO_CPU_BEAM -> GPU forward/backward scan, then CPU beam search (openfish_decode_cpu_beam):
 //                       beam + quality + seq on the CPU over the GPU-scanned posteriors.
 // The per-stage times (backward/beam/forward+posterior/quality/seq-gen) are gated by
-// OPENFISH_DECODE_PROFILE inside openfish and printed nested under the "- decode:" line (basecaller_main).
+// OPENFISH_DECODE_PROF inside openfish and printed nested under the "- decode:" line (basecaller_main).
 static const bool g_cpu_beam = getenv("SLORADO_CPU_BEAM") != nullptr;
 #endif
 
@@ -180,7 +180,9 @@ static void decode_chunks(
         // Score dtype is carried by the tensor: int8 CRF output (round(tanh*127) / clamp±5·127/5)
         // dequants by 5/127; fp16 output uses 1.0. Runtime dispatch works for any model/mode.
         const bool i8 = sub_NTC.scalar_type() == at::kChar;
-        const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F16;
+        const openfish_score_dtype_t sdt = i8 ? OPENFISH_SCORE_I8
+                                          : (sub_NTC.scalar_type() == at::kHalf ? OPENFISH_SCORE_F16
+                                                                               : OPENFISH_SCORE_F32);
         const float sscale = i8 ? SCORES_I8_SCALE : 1.0f;
         if (runner->device == "cpu") {
             openfish_decode_cpu(T, nt, C, nthreads, sub_NTC.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, &moves, &sequence, &qstring);
@@ -195,13 +197,33 @@ static void decode_chunks(
             if (sc.storage_offset() != 0) sc = sc.clone();
             torch::mps::synchronize();
             if (g_cpu_beam) {
+                // Quantize the scores to int8 on the GPU before the scan, exactly as the streaming
+                // path does in basecall_infer_host: int8 reads identically on the GPU (scan) and the
+                // CPU (beam), so the host copy is 1 byte/element with no widening pass -- 4x less DMA
+                // than fp32 and no conversion. Only for clamp models (scores bounded to [-5,5]).
+                openfish_score_dtype_t use_sdt = sdt;
+                float use_scale = sscale;
+                if (core->model_config->clamp && sdt != OPENFISH_SCORE_I8) {
+                    sc = (sc * (127.0f / 5.0f)).round().clamp_(-127.0f, 127.0f).to(torch::kChar).contiguous();
+                    use_sdt = OPENFISH_SCORE_I8;
+                    use_scale = SCORES_I8_SCALE;
+                }
                 // GPU forward/backward scan, then beam+quality+seq on the CPU over the shared posteriors.
-                openfish_decode_gpu_scan(T, nt, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf);
+                openfish_decode_gpu_scan(T, nt, C, sc.storage().data(), use_sdt, use_scale, state_len, &core->decoder_opts, runner->gpubuf);
                 torch::mps::synchronize();
-                // CPU beam reads raw scores as F16==fp32 on the CPU path (int8 stays int8).
-                at::Tensor host = (sdt == OPENFISH_SCORE_I8) ? sc.to(torch::kCPU).contiguous()
-                                                             : sc.to(torch::kCPU).to(torch::kFloat32).contiguous();
-                openfish_decode_cpu_beam(T, nt, C, nthreads, host.data_ptr(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
+                // The scores must be copied to host: torch's MPS allocator hands out
+                // MTLStorageModePrivate buffers, so [buf contents] is NULL and the CPU cannot read
+                // the tensor in place -- unified memory notwithstanding. (gpubuf's bwd_NTC/post_NTC
+                // ARE openfish-allocated shared buffers, so the posteriors are already zero-copy;
+                // that is the part the CUDA/HIP zero-copy note refers to.) fp16 is widened to fp32
+                // because the CPU beam's fp16 read path is unverified -- see basecall_finalize_host
+                // in the stream path, which does the same for the same reason.
+                at::Tensor host_copy = (use_sdt == OPENFISH_SCORE_I8)
+                    ? sc.to(torch::kCPU).contiguous()
+                    : sc.to(torch::kCPU).to(torch::kFloat32).contiguous();
+                const openfish_score_dtype_t cpu_sdt =
+                    (use_sdt == OPENFISH_SCORE_I8) ? OPENFISH_SCORE_I8 : OPENFISH_SCORE_F32;
+                openfish_decode_cpu_beam(T, nt, C, nthreads, host_copy.data_ptr(), cpu_sdt, use_scale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);
             } else {
                 // Full GPU decode: scan + beam + quality + seq all on the GPU.
                 openfish_decode_gpu(T, nt, C, sc.storage().data(), sdt, sscale, state_len, &core->decoder_opts, runner->gpubuf, &moves, &sequence, &qstring);

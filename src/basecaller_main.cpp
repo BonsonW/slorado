@@ -391,7 +391,7 @@ int basecaller_main(int argc, char* argv[]) {
             }
             fprintf(stderr, "\n[%s]                 - decode: %.3f sec (%.1f%% util)", __func__, runner_stats[i]->time_decode, PCT(runner_stats[i]->time_decode));
 #if defined(HAVE_METAL)
-            // Per-stage decode breakdown (aggregate across decode calls; enabled by OPENFISH_DECODE_PROFILE).
+            // Per-stage decode breakdown (aggregate across decode calls; enabled by OPENFISH_DECODE_PROF).
             // GPU scan stages (backward, forward+posterior) come from the GPU getter in both backends; the
             // beam/quality/seq-gen come from GPU (default) or CPU (SLORADO_CPU_BEAM) whichever ran this run.
             {

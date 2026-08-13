@@ -23,6 +23,25 @@ extern "C" void *slorado_metal_upload_scores_f16(int n_timesteps, int batch_size
     return (void *)CFBridgingRetain(buf);
 }
 
+extern "C" void *slorado_metal_buffer_contents(const void *mtl_buffer_handle) {
+    if (mtl_buffer_handle == NULL) {
+        return NULL;
+    }
+    id<MTLBuffer> buf = (__bridge id<MTLBuffer>)mtl_buffer_handle;
+    if (buf.storageMode == MTLStorageModePrivate) {
+        return NULL;   // GPU-only memory; caller must copy
+    }
+    return [buf contents];
+}
+
+extern "C" size_t slorado_metal_buffer_length(const void *mtl_buffer_handle) {
+    if (mtl_buffer_handle == NULL) {
+        return 0;
+    }
+    id<MTLBuffer> buf = (__bridge id<MTLBuffer>)mtl_buffer_handle;
+    return (size_t)[buf length];
+}
+
 extern "C" void slorado_metal_free_scores(void *handle) {
     if (handle) {
         CFBridgingRelease(handle);

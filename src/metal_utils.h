@@ -19,6 +19,15 @@ void *slorado_metal_upload_scores_f16(int n_timesteps, int batch_size, int n_cha
 
 void slorado_metal_free_scores(void *handle);
 
+// Host-visible base address of an MTLBuffer (an MPS tensor's storage().data() bit-cast to void*).
+// On Apple Silicon MPS allocates shared-storage buffers, so this is the same unified memory the
+// GPU just wrote -- letting the CPU beam read the scores in place with no copy. Returns NULL if
+// the buffer has no CPU-accessible contents (private storage), so callers can fall back to a copy.
+void *slorado_metal_buffer_contents(const void *mtl_buffer_handle);
+
+// Byte length of an MTLBuffer, so callers can bounds-check a zero-copy read.
+size_t slorado_metal_buffer_length(const void *mtl_buffer_handle);
+
 #ifdef __cplusplus
 }
 #endif
