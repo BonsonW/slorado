@@ -43,7 +43,7 @@ SOFTWARE.
 
 #include "dorado/model_config.h"
 
-#define SLORADO_VERSION "0.5.0-beta"
+#define SLORADO_VERSION "0.6.0"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *
@@ -111,7 +111,7 @@ struct mod_chunk {
     size_t hit_offset;      // starting offset of the context hits
 
     int64_t num_states;   // number of states predicted by the modbase model `num_mods + 1`
-    
+
     std::vector<float> scores;  // model predictions for this chunk arranged in `[canonical, mod1, .., modN, canonical, mod1, ..]`
 };
 typedef struct mod_chunk mod_chunk_t;
