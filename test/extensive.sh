@@ -10,8 +10,8 @@
 # =========================================================================================================
 # change these
 
-SLORADO_CUDA_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQBksuPWnfpaTbnkIC9k05I3AY_Dhe1uz_Rj5sO9JxT2n64?download=1"
-SLORADO_ROCM_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQC0nnJ4s3foSJDd8Qaw7124AX_STnHRsg0bZaZ7zSeEcgk?download=1"
+SLORADO_CUDA_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQD481W5UKy1TIHE2ON3W0-wAdp_Ye0GOPzUtYps35SA1YY?download=1"
+SLORADO_ROCM_URL="https://unsw-my.sharepoint.com/:u:/g/personal/z5136909_ad_unsw_edu_au/IQA87pA4ADnVRLX_KSKJzwC_AQ42zZY49MLosXdr1BFk4GQ?download=1"
 
 # gpu batch size per model (empty = let slorado auto-detect)
 FAST_BATCH="${FAST_BATCH:-}"
