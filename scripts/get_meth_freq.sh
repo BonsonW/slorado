@@ -1,6 +1,7 @@
 #!/bin/bash
 
 NTHREADS="${NTHREADS:-32}"
+MODCODES="${MODCODES:-m}"
 
 die() {
     echo "$@" >&2
@@ -16,11 +17,15 @@ map() {
 }
 
 if [ $# -lt 2 ]; then
-	die "Usage: $0 <reference genome>.fa <fastq/sam/bam file>"
+	die "Usage: $0 <reference genome>.fa <fastq/sam/bam file> [mod codes]"
 fi
 
 GENOME=$1 # path to reference genome
 BAM=$2 # path to unmapped sam/bam output
+
+# modification code(s) for minimod freq -c, e.g. m (5mC), h (5hmC), mh (both), a (m6A).
+# The third argument takes precedence over the MODCODES environment variable.
+[ $# -ge 3 ] && MODCODES=$3
 
 $SAMTOOLS --version > /dev/null 2>&1 || die "samtools not found! Either put samtools under path or set SAMTOOLS variable, e.g.,export SAMTOOLS=/path/to/samtools"
 $MINIMOD --version > /dev/null 2>&1 || die "minimod not found! Either put minimod under path or set MINIMOD variable, e.g.,export MINIMOD=/path/to/minimod"
@@ -33,6 +38,6 @@ map "$BAM" "$GENOME" > "$BAM_MAP" || die "mapping failed"
 $SAMTOOLS index "$BAM_MAP" || die "indexing failed"
 
 # get meth freq
-$MINIMOD freq "$GENOME" "$BAM_MAP" -b || die "mod freq failed"
+$MINIMOD freq "$GENOME" "$BAM_MAP" -b -c "$MODCODES" || die "mod freq failed"
 
 rm $BAM_MAP
