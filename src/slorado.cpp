@@ -58,11 +58,40 @@ void free_read_dat(read_dat_t *read_dat);
 void preprocess_modbase(core_t *core, db_t *db, int32_t i);
 void postprocess_modbase(core_t *core, db_t *db, int32_t i);
 
+static size_t estimate_bytes_per_read(const char *slow5file) {
+    slow5_file_t *sp = slow5_open(slow5file, "r");
+    if (!sp) return 0;
+
+    size_t total_bytes = 0;
+    int n = 0;
+    char *mem = NULL;
+    size_t bytes = 0;
+
+    while (n < BATCH_SIZE_SAMPLE_READS) {
+        if (slow5_get_next_bytes(&mem, &bytes, sp) < 0) break;
+        total_bytes += bytes;
+        free(mem);
+        mem = NULL;
+        n++;
+    }
+
+    slow5_close(sp);
+    return n > 0 ? total_bytes / n : 0;
+}
+
 /* initialise the core data structure */
 core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core_t* core = (core_t*)calloc(1, sizeof(core_t));
     MALLOC_CHK(core);
     core->opt = opt;
+
+    if (opt.batch_size == 0) {
+        size_t avg_bytes = estimate_bytes_per_read(slow5file);
+        core->opt.batch_size = avg_bytes > 0
+            ? (int32_t)(opt.batch_size_bytes / avg_bytes)
+            : DEFAULT_BATCH_SIZE;
+        if (core->opt.batch_size < 1) core->opt.batch_size = 1;
+    }
 
     core->realtime0 = realtime0;
 
@@ -101,9 +130,22 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     model_config.sample_type = get_sample_type_from_model_name(model_config.model_path);
 
     core->model_stride = static_cast<size_t>(model_config.stride);
-    core->chunk_size = opt.chunk_size - (opt.chunk_size % core->model_stride);
 
-    core->decoder_opts = DECODER_INIT;
+    size_t resolved_chunk_size = opt.chunk_size > 0 ? opt.chunk_size
+                                 : model_config.chunk_size > 0 ? (size_t)model_config.chunk_size
+                                 : DEFAULT_CHUNK_SIZE;
+    int32_t resolved_overlap = opt.overlap > 0 ? opt.overlap
+                               : model_config.overlap > 0 ? model_config.overlap
+                               : DEFAULT_OVERLAP;
+
+    core->chunk_size = resolved_chunk_size - (resolved_chunk_size % core->model_stride);
+    core->opt.overlap = resolved_overlap - (resolved_overlap % (int32_t)core->model_stride);
+    // Overlap must be strictly less than chunk_size (model default can exceed a user-specified -c).
+    if ((size_t)core->opt.overlap >= core->chunk_size) {
+        core->opt.overlap = (int32_t)(core->chunk_size - (int32_t)core->model_stride);
+    }
+
+    core->decoder_opts = openfish_decoder_default_opts();
     core->decoder_opts.q_shift = model_config.qbias;
     core->decoder_opts.q_scale = model_config.qscale;
 
@@ -112,6 +154,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
+    core->opt.gpu_batch_size = opt.gpu_batch_size; // sync auto-detected value back to core
     core->time_init_runners += realtime();
     LOG_DEBUG("%s", "successfully initialized runners");
 
@@ -233,12 +276,17 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
         auto& moves = (*db->moves)[i];
         moves.clear();
 
+        // The single-chunk stitch is bounded by the basecalled (front-trimmed) signal length so it
+        // doesn't emit spurious trailing bases from the chunk-padding region -- these desync the
+        // modbase signal from the sequence (see preprocess_modbase). DNA and RNA, matching dorado.
         stitch_chunks(db, i, sequence, qstring, moves, len_raw_signal, core->model_stride);
-        
+
         if (is_rna(core->model_config->sample_type)) {
+            // Reverse seq + qstring to 5'->3'. Leave moves in signal (3'->5') order -- dorado never
+            // reverses the move table for RNA, and the only consumer, preprocess_modbase, needs
+            // signal-order moves to build the seq->sig map.
             std::reverse(sequence.begin(), sequence.end());
             std::reverse(qstring.begin(), qstring.end());
-            std::reverse(moves.begin(), moves.end()); // might not need this, no idea
         }
 
     }
@@ -354,8 +402,7 @@ void free_db(db_t* db) {
 /* initialise user specified options */
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
-    opt->batch_size = 4096;
-    opt->gpu_batch_size = 512;
+    opt->gpu_batch_size = 0; // 0 = auto
     opt->batch_size_bytes = 512*1000*1000;
     opt->num_thread = 8;
 
@@ -366,9 +413,6 @@ void init_opt(opt_t* opt) {
 #else
     opt->device = "cpu";
 #endif
-
-    opt->chunk_size = 12288;
-    opt->overlap = 150;
 
     opt->out = stdout;
 

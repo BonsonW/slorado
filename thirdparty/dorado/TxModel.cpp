@@ -54,14 +54,15 @@ torch::Tensor RMSNormImpl::forward(torch::Tensor x) {
     return x;
 }
 
-GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_) : in_features(in_features_), hidden_features(hidden_features_) {
+GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_)
+    : in_features(in_features_), hidden_features(hidden_features_) {
     fc1 = register_module("fc1", Linear(LinearOptions(in_features, 2 * hidden_features).bias(false)));
     fc2 = register_module("fc2", Linear(LinearOptions(hidden_features, in_features).bias(false)));
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
-    t = fc1(x);
+    t = at::linear(x, fc1->weight, fc1->bias);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -74,7 +75,7 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     const auto &gate = chunks[1];
     t = functional::silu(gate).mul_(y);
 #endif
-    return fc2(t);
+    return at::linear(t, fc2->weight, fc2->bias);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -82,14 +83,14 @@ RotaryEmbeddingImpl::RotaryEmbeddingImpl(
     float theta_,
     int max_seq_len_,
     const torch::TensorOptions &options_,
-    int nthreads_
+    tx_stats_t *stats
 ) :
     dim(dim_),
     max_seq_len(max_seq_len_),
     theta(theta_),
-    options(options_),
-    nthreads(nthreads_)
+    options(options_)
 {
+    stats_ = stats;
     auto inv_freq = torch::pow(theta, torch::arange(0, dim, 2, options) / dim).reciprocal();
     torch::Tensor freqs = torch::arange(max_seq_len, options).outer(inv_freq);
 
@@ -112,37 +113,8 @@ torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
 
     auto qkv_chunks = qkv.chunk(3, 2);
 
-    if (qkv.device().is_cpu()) {
-        openfish_rotary_emb_cpu(
-            qkv_chunks[0].data_ptr(),
-            sin_buf.data_ptr(),
-            cos_buf.data_ptr(),
-            batch_size,
-            seqlen,
-            nheads,
-            head_dim,
-            rotary_dim,
-            stride_batch,
-            stride_seq,
-            stride_head,
-            nthreads
-        );
-
-        openfish_rotary_emb_cpu(
-            qkv_chunks[1].data_ptr(),
-            sin_buf.data_ptr(),
-            cos_buf.data_ptr(),
-            batch_size,
-            seqlen,
-            nheads,
-            head_dim,
-            rotary_dim,
-            stride_batch,
-            stride_seq,
-            stride_head,
-            nthreads
-        );
-    } else {
+#ifdef USE_GPU
+    if (!qkv.device().is_cpu()) {
         openfish_rotary_emb_gpu(
             qkv_chunks[0].data_ptr(),
             sin_buf.data_ptr(),
@@ -169,6 +141,38 @@ torch::Tensor RotaryEmbeddingImpl::forward(torch::Tensor &qkv) {
             stride_batch,
             stride_seq,
             stride_head
+        );
+    } else
+#endif
+    {
+        openfish_rotary_emb_cpu(
+            qkv_chunks[0].data_ptr(),
+            sin_buf.data_ptr(),
+            cos_buf.data_ptr(),
+            batch_size,
+            seqlen,
+            nheads,
+            head_dim,
+            rotary_dim,
+            stride_batch,
+            stride_seq,
+            stride_head,
+            stats_->nthreads
+        );
+
+        openfish_rotary_emb_cpu(
+            qkv_chunks[1].data_ptr(),
+            sin_buf.data_ptr(),
+            cos_buf.data_ptr(),
+            batch_size,
+            seqlen,
+            nheads,
+            head_dim,
+            rotary_dim,
+            stride_batch,
+            stride_seq,
+            stride_head,
+            stats_->nthreads
         );
     }
     
@@ -206,11 +210,8 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     bool out_bias_,
     const std::pair<int, int> &attn_window_,
     const torch::TensorOptions &options_,
-    tx_stats_t *_model_stats,
-    bool use_flash_,
-    int nthreads
+    tx_stats_t *_model_stats
 ) :
-    use_flash(use_flash_),
     d_model(d_model_),
     nhead(nhead_),
     head_dim(d_model_ / nhead_),
@@ -223,9 +224,10 @@ MultiHeadAttentionImpl::MultiHeadAttentionImpl(
     out_proj = register_module("out_proj", Linear(LinearOptions(d_model, d_model).bias(out_bias_)));
     const float theta = 10000.0f;
     const int64_t max_seq_len = 2048;
-    rotary_emb = register_module("rotary_emb", RotaryEmbedding(head_dim, theta, max_seq_len, options, nthreads));
+    rotary_emb = register_module("rotary_emb", RotaryEmbedding(head_dim, theta, max_seq_len, options, _model_stats));
     model_stats = _model_stats;
 };
+
 
 torch::Tensor MultiHeadAttentionImpl::get_attn_window_mask(const int64_t size) {
     const auto key = MaskKey{size, options.device()};
@@ -252,7 +254,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     double a, b;
     
     a = realtime();
-    auto qkv = wqkv(x).view({N, T, 3, nhead, head_dim});
+    auto qkv = at::linear(x, wqkv->weight, wqkv->bias)
+                   .view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_mm += b-a;
@@ -269,13 +272,13 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     torch::Tensor attn_output_ntc;
 #if defined USE_GPU && ((TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 4) || TORCH_VERSION_MAJOR >= 3)
-    if (use_flash) {
+    if (model_stats->use_flash) {
         float softmax_scale = 1.0 / std::sqrt(head_dim);
 
         auto qkv_chunks = qkv.chunk(3, 2);
-        auto q = qkv_chunks[0].squeeze();
-        auto k = qkv_chunks[1].squeeze();
-        auto v = qkv_chunks[2].squeeze();
+        auto q = qkv_chunks[0].squeeze(2);
+        auto k = qkv_chunks[1].squeeze(2);
+        auto v = qkv_chunks[2].squeeze(2);
         
         auto flash_res = at::_flash_attention_forward(
             q, k, v,
@@ -326,20 +329,19 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_sdp_attn += b-a;
 
     a = realtime();
-    x = out_proj(attn_output_ntc);
+    x = at::linear(attn_output_ntc, out_proj->weight, out_proj->bias);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_out_proj += b-a;
-    
+
     return x;
 };
 
-TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash, int nthreads) : params(params_) {
-    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats, use_flash, nthreads));
+TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats) : params(params_) {
+    self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats));
     ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
-    device_idx = options.device_index();
     model_stats = _model_stats;
 
     const torch::Tensor deepnorm_alpha = torch::tensor(params.deepnorm_alpha);
@@ -402,14 +404,12 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     return x;
 }
 
-TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads) {
+TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats) {
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
-        TxEncoder encoder(params, options, model_stats, use_flash, nthreads);
+        TxEncoder encoder(params, options, model_stats);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
-        layer_vec.push_back(encoder);
     }
-    use_i8 = false;
 };
 
 torch::Tensor TxEncoderStackImpl::forward(const torch::Tensor &x) {
@@ -441,12 +441,13 @@ torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
     return linear(x);
 }
 
-TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash, int nthreads) : m_options(options) {
+TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats) : m_options(options) {
     convs = register_module("convs", ::ConvStack(config.convs));
-    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats, use_flash, nthreads));
+    tx_encoder = register_module("transformer_encoder", TxEncoderStack(config.tx->tx, m_options, _model_stats));
     tx_decoder = register_module("transformer_decoder", LinearUpsample(config.tx->upsample));
     crf = register_module("crf", LinearScaledCRF(config.tx->crf));
     model_stats = _model_stats;
+
 }
 
 torch::Tensor TxModelImpl::forward(const torch::Tensor &x) {
@@ -669,7 +670,11 @@ std::vector<torch::Tensor> load_tx_model_weights(const std::string &dir) {
 }
 
 ModuleHolder<AnyModule> load_tx_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads) {
-    auto model = TxModel(model_config, options, model_stats, use_flash, nthreads);
+    if (model_stats) {
+        model_stats->use_flash = use_flash;
+        model_stats->nthreads = nthreads;
+    }
+    auto model = TxModel(model_config, options, model_stats);
     auto state_dict = load_tx_model_weights(model_config.model_path);
     model->load_state_dict(state_dict);
     model->to(options.dtype().toScalarType());

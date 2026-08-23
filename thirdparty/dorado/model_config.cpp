@@ -21,10 +21,11 @@ static const std::string ERR_STR = "Invalid modbase model parameter in ";
 // Indicates that a value has no default and is therefore required
 static constexpr std_optional<int> REQUIRED = STD_NULLOPT;
 
-enum SublayerType { CLAMP, CONVOLUTION, LINEAR, LINEAR_CRF_ENCODER, LSTM, PERMUTE, UPSAMPLE, UNRECOGNISED };
+enum SublayerType { CLAMP, CONVOLUTION, FLSTM_SOFTOUT, LINEAR, LINEAR_CRF_ENCODER, LSTM, PERMUTE, UPSAMPLE, UNRECOGNISED };
 static const std::unordered_map<std::string, SublayerType> sublayer_map = {
     {"clamp", SublayerType::CLAMP},
     {"convolution", SublayerType::CONVOLUTION},
+    {"flstm_softout", SublayerType::FLSTM_SOFTOUT},
     {"linear", SublayerType::LINEAR},
     {"linearcrfencoder", SublayerType::LINEAR_CRF_ENCODER},
     {"lstm", SublayerType::LSTM},
@@ -101,6 +102,15 @@ toml_datum_t toml_string_fallback(const toml_table_t *config_toml, std::vector<s
     toml_datum_t ret = toml_string_in(prereq, fallback);
     check_toml_datum(ret);
     return ret;
+}
+
+static void parse_basecaller_params(CRFModelConfig &config, toml_table_t *config_toml) {
+    toml_table_t *basecaller = toml_table_in(config_toml, "basecaller");
+    if (!basecaller) return;
+    toml_datum_t chunksize = toml_int_in(basecaller, "chunksize");
+    if (chunksize.ok) config.chunk_size = (int)chunksize.u.i;
+    toml_datum_t overlap = toml_int_in(basecaller, "overlap");
+    if (overlap.ok) config.overlap = (int)overlap.u.i;
 }
 
 bool toml_key_fallback(toml_table_t *config_toml, std::vector<std::string> fallbacks) {
@@ -450,20 +460,32 @@ CRFModelConfig load_lstm_model_config(const char *path) {
         }
         config.lstm_size = config.convs.back().size;
 
+        config.lstm_layers = 0;
         for (const auto &segment : sublayers) {
             const auto type = sublayer_type(segment);
-            if (type == SublayerType::LINEAR) {
-                // Specifying out_features implies a decomposition of the linear layer matrix
-                // multiply with a bottleneck before the final feature size.
+            if (type == SublayerType::LSTM) {
+                config.lstm_layers++;
+            } else if (type == SublayerType::FLSTM_SOFTOUT) {
+                config.lstm_layers++;
+                toml_datum_t inner_dim = toml_int_in(segment, "inner_dim");
+                check_toml_datum(inner_dim);
+                config.lstm_inner_dim = inner_dim.u.i;
+            } else if (type == SublayerType::LINEAR) {
                 toml_datum_t out_features = toml_int_in(segment, "out_features");
                 check_toml_datum(out_features);
                 config.out_features = out_features.u.i;
                 config.has_out_features = true;
-                config.bias = config.lstm_size > 128;
+                toml_datum_t bias_d = toml_bool_in(segment, "bias");
+                config.bias = bias_d.ok ? (bool)bias_d.u.b : (config.lstm_size > 128);
             } else if (type == SublayerType::LINEAR_CRF_ENCODER) {
                 toml_datum_t blank_score = toml_double_in(segment, "blank_score");
                 check_toml_datum(blank_score);
                 config.blank_score = blank_score.u.d;
+                toml_datum_t activation = toml_string_in(segment, "activation");
+                if (activation.ok) {
+                    config.crf_encoder_has_tanh = (strcmp(activation.u.s, "tanh") == 0);
+                    free(activation.u.s);
+                }
             }
         }
         
@@ -517,6 +539,8 @@ CRFModelConfig load_lstm_model_config(const char *path) {
         ERROR("Invalid CRF model configuration - first convolution layer must be size 4 or 16. Got: %u", config.convs[0].size);
         exit(EXIT_FAILURE);
     }
+
+    parse_basecaller_params(config, config_toml);
 
     toml_free(config_toml);
 
@@ -597,6 +621,8 @@ CRFModelConfig load_tx_model_config(const char *path) {
     // Force downstream issue (negative lstm size) if a tx model config is incorrectly
     // used to define an LSTM model. Incorrect use should be guarded against by using is_tx_model()
     config.lstm_size = -1;
+
+    parse_basecaller_params(config, config_toml);
 
     toml_free(config_toml);
 
@@ -740,11 +766,18 @@ LSTMConfigParams parse_lstm(toml_table_t *segment) {
     toml_datum_t lstm_size = toml_int_in(segment, "size");
     check_toml_datum(lstm_size);
 
-    toml_datum_t reverse = toml_bool_in(segment, "reverse");
-    check_toml_datum(reverse);
+    // v3 modbase configs write `reverse = 0/1` (int); accept bool too for robustness.
+    toml_datum_t reverse_i = toml_int_in(segment, "reverse");
+    toml_datum_t reverse_b = toml_bool_in(segment, "reverse");
+    if (reverse_i.ok) {
+        p.reverse = (reverse_i.u.i != 0);
+    } else if (reverse_b.ok) {
+        p.reverse = reverse_b.u.b;
+    } else {
+        check_toml_datum(reverse_i);  // report the missing/invalid field
+    }
 
     p.size = lstm_size.u.i;
-    p.reverse = reverse.u.b;
 
     return p;
 }
@@ -819,7 +852,7 @@ EncoderUpsampleParams parse_linear_upsample(const toml_table_t *segment) {
 ModulesParams parse_modules_params(const toml_table_t *config_toml) {
     ModulesParams m;
     m.sequence_convs = parse_convs(get_layers(config_toml, "sequence_encoder"));
-    m.sequence_convs = parse_convs(get_layers(config_toml, "signal_encoder"));
+    m.signal_convs = parse_convs(get_layers(config_toml, "signal_encoder"));
 
     auto layers = get_layers(config_toml, "encoder");
 

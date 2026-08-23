@@ -148,6 +148,17 @@ struct CRFModelConfig {
     std::string model_path;
 
     SampleType sample_type;
+
+    // Optional basecaller chunk/overlap from config.toml; -1 means not present
+    int chunk_size = -1;
+    int overlap = -1;
+
+    // Number of RNN layers (LSTM or FLSTM)
+    int lstm_layers = 5;
+    // FLSTM inner (down-projection) dimension K; -1 means standard LSTM
+    int lstm_inner_dim = -1;
+    // linearcrfencoder uses tanh activation (v6.0+ FLSTM models)
+    bool crf_encoder_has_tanh = false;
 };
 
 enum ModelType { CONV_LSTM_V1, CONV_LSTM_V2, CONV_LSTM_V3, CONV_V1, UNKNOWN };
@@ -176,11 +187,12 @@ struct ModulesParams {
 
     int sequence_stride() { return stride_product(sequence_convs); };
     int signal_stride() { return stride_product(signal_convs); };
+    // Signal is downsampled more than the sequence (kmer) input; the ratio is how many signal
+    // samples map to one sequence position. e.g. RNA m6A v3: signal stride 6, sequence stride 1 -> 6.
     int stride_ratio() {
         const auto seq = sequence_stride();
         const auto sig = signal_stride();
-        assert(sig < seq);
-        assert(sig % seq != 0);
+        assert(seq > 0 && sig >= seq && sig % seq == 0);
         return sig / seq;
     };
 };
@@ -328,7 +340,9 @@ struct MotifMatcher {
     std::string expand_motif_regex(const std::string& motif) {
         std::string motif_regex = "(";
         for (auto base : motif) {
-            motif_regex += IUPAC_CODES.at(base);
+            auto it = IUPAC_CODES.find(base);
+            // Pass unrecognised characters through (already a regex char class, etc.)
+            motif_regex += (it != IUPAC_CODES.end()) ? it->second : std::string(1, base);
         }
         motif_regex += ")";
         return motif_regex;
@@ -337,7 +351,10 @@ struct MotifMatcher {
     std::vector<size_t> get_motif_hits(const char *seq, size_t seqlen) {
         std::vector<size_t> context_hits;
         regex_t compiled;
-        if (regcomp(&compiled, motif.c_str(), REG_EXTENDED) != 0) {
+        // Expand IUPAC codes (e.g. "DRACH" -> "([AGT][AG]AC[ACT])") before compiling. Plain ACGT
+        // motifs pass through unchanged, so exact motifs like "CG" behave as before.
+        const std::string pattern = expand_motif_regex(motif);
+        if (regcomp(&compiled, pattern.c_str(), REG_EXTENDED) != 0) {
             return context_hits;
         }
 
@@ -519,6 +536,8 @@ private:
 
 ModBaseInfo get_modbase_info(std::vector<ModBaseModelConfig>& base_mod_params);
 ModBaseModelConfig load_modbase_model_config(const char *model_path);
+// Read just the model type from a modbase model dir's config.toml (UNKNOWN if unrecognized).
+ModelType get_modbase_model_type(const char *path);
 CRFModelConfig load_lstm_model_config(const char *path);
 CRFModelConfig load_tx_model_config(const char *path);
 SampleType get_sample_type_from_model_name(const std::string& model_name);

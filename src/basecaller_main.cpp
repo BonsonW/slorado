@@ -44,13 +44,14 @@ SOFTWARE.
 #include "misc.h"
 #include "error.h"
 
-// add supported modbase models here
-static const std::unordered_set<std::string> supported = std::unordered_set<std::string>({
-    "5mCG_5hmCG@v3",
-});
-
-static inline bool is_modbase_supported(const char *mod) {
-    return supported.find(std::string(mod)) != supported.end();
+// slorado's modbase pipeline requires a *chunked-input* model (conv_lstm_v2 / conv_lstm_v3).
+// Non-chunked v1 models (e.g. DNA 6mA@v1/@v2, RNA m6A@v1 on v5.0/5.1 bases) are not supported.
+// We gate on the actual model type read from <base_model>_<mod>/config.toml rather than a name
+// allowlist, because the same mod suffix (e.g. m6A_DRACH@v1) can be v1 or v3 depending on the base.
+static bool is_modbase_supported(const char *model, const char *mod) {
+    std::string path = std::string(model) + "_" + std::string(mod);
+    ModelType t = get_modbase_model_type(path.c_str());
+    return t == ModelType::CONV_LSTM_V2 || t == ModelType::CONV_LSTM_V3;
 }
 
 static struct option long_options[] = {
@@ -82,12 +83,12 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  data FILE                   the data directory.\n");
     fprintf(fp_help, "\nbasic options:\n");
     fprintf(fp_help, "  -t INT                      number of processing threads [%d]\n", opt.num_thread);
-    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [%d]\n", opt.batch_size);
-    fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [%d]\n", opt.gpu_batch_size);
+    fprintf(fp_help, "  -K INT                      batch size (max number of reads loaded at once) [auto]\n");
+    fprintf(fp_help, "  -C INT                      gpu batch size (max number of chunks loaded at once) [auto]\n");
     fprintf(fp_help, "  -B FLOAT[K/M/G]             max number of bytes loaded at once [%.1fM]\n", opt.batch_size_bytes/(float)(1000*1000));
     fprintf(fp_help, "  -o FILE                     output to file [%s]\n", opt.out_path);
-    fprintf(fp_help, "  -c INT                      chunk size [%zu]\n", opt.chunk_size);
-    fprintf(fp_help, "  -p INT                      overlap [%d]\n", opt.overlap);
+    fprintf(fp_help, "  -c INT                      chunk size [model config or %d]\n", DEFAULT_CHUNK_SIZE);
+    fprintf(fp_help, "  -p INT                      overlap [model config or %d]\n", DEFAULT_OVERLAP);
     fprintf(fp_help, "  -x DEVICE                   specify device [%s]\n", opt.device);
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
@@ -188,12 +189,12 @@ int basecaller_main(int argc, char* argv[]) {
 
     size_t max_input_tensor_len = 10000 * 6000; // 10k chunk len, 6k gpu batch size
 
-    if ((size_t)opt.chunk_size * opt.gpu_batch_size > max_input_tensor_len) {
+    if (opt.chunk_size > 0 && (size_t)opt.chunk_size * opt.gpu_batch_size > max_input_tensor_len) {
         ERROR("Your input tensor size: %zu (chunk_size * gpu_batch_size) exceeds maximum allowed size: %zu", (size_t)opt.chunk_size * opt.gpu_batch_size, max_input_tensor_len);
         exit(EXIT_FAILURE);
     }
 
-    if ((size_t)opt.overlap >= opt.chunk_size) {
+    if (opt.chunk_size > 0 && opt.overlap > 0 && (size_t)opt.overlap >= opt.chunk_size) {
         ERROR("Your overlap: %d should be lesser than chunk size: %ld", opt.overlap, opt.chunk_size);
         exit(EXIT_FAILURE);
     }
@@ -209,12 +210,10 @@ int basecaller_main(int argc, char* argv[]) {
 
     model = argv[optind++];
 
-    if (opt.mod != NULL && !is_modbase_supported(opt.mod)) {
-        std::string error_msg = "unsupported modbase model \"" + std::string(opt.mod) + "\"curent supported modbase models are: ";
-        for (const auto &s : supported) {
-            error_msg += s + ", ";
-        }
-        ERROR("%s", error_msg.c_str());
+    if (opt.mod != NULL && !is_modbase_supported(model, opt.mod)) {
+        ERROR("unsupported modbase model \"%s_%s\": slorado only supports chunked-input modbase "
+              "models (conv_lstm_v2 / conv_lstm_v3). Non-chunked v1 models are not supported.",
+              model, opt.mod);
         exit(EXIT_FAILURE);
     }
 
@@ -236,23 +235,23 @@ int basecaller_main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // print summary
+/////////////////////////////////////////////////////////////////////////////
+
+    // initialise the core data structure
+    core_t* core = init_core(data, opt, model, realtime0);
+
+    // print summary (after init_core so chunk_size/overlap reflect resolved values)
     fprintf(stderr,"\nslorado base-caller version %s\n", SLORADO_VERSION);
     fprintf(stderr,"model path:         %s\n", model);
     fprintf(stderr,"input path:         %s\n", data);
     fprintf(stderr,"output path:        %s\n", opt.out_path == NULL ? "stdout" : opt.out_path);
     fprintf(stderr,"device:             %s\n", opt.device);
-    fprintf(stderr,"chunk size:         %zu\n", opt.chunk_size);
-    fprintf(stderr,"read batch size:    %d\n", opt.batch_size);
-    fprintf(stderr,"gpu batch size:     %d\n", opt.gpu_batch_size);
+    fprintf(stderr,"chunk size:         %zu\n", core->chunk_size);
+    fprintf(stderr,"read batch size:    %d\n", core->opt.batch_size);
+    fprintf(stderr,"gpu batch size:     %d\n", core->opt.gpu_batch_size);
     fprintf(stderr,"no. threads:        %d\n", opt.num_thread);
-    fprintf(stderr,"overlap:            %d\n", opt.overlap);
+    fprintf(stderr,"overlap:            %d\n", core->opt.overlap);
     fprintf(stderr, "\n");
-
-/////////////////////////////////////////////////////////////////////////////
-
-    // initialise the core data structure
-    core_t* core = init_core(data, opt, model, realtime0);
 
     int32_t counter = 0;
 
@@ -333,12 +332,15 @@ int basecaller_main(int argc, char* argv[]) {
             fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
         } else { // lstm
             lstm_stats_t *model_stats = (lstm_stats_t *)runner_stats[i]->model_stats;
-            (void)model_stats;
-            // fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
-            // fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
-            // fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
-            // fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
-            // fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
+            fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
+            fprintf(stderr, "\n[%s]                     - rnns: %.3f sec", __func__, model_stats->time_rnns);
+            if (core->model_config->lstm_inner_dim >= 0) {
+                fprintf(stderr, "\n[%s]                         - precompute: %.3f sec", __func__, model_stats->time_flstm_precompute);
+                fprintf(stderr, "\n[%s]                         - recurrence: %.3f sec", __func__, model_stats->time_flstm_recurrence);
+            }
+            fprintf(stderr, "\n[%s]                     - crf_1: %.3f sec", __func__, model_stats->time_crf_1);
+            fprintf(stderr, "\n[%s]                     - crf_2: %.3f sec", __func__, model_stats->time_crf_2);
+            fprintf(stderr, "\n[%s]                     - clamp: %.3f sec", __func__, model_stats->time_clamp);
         }
         fprintf(stderr, "\n[%s]                 - decode: %.3f sec", __func__, runner_stats[i]->time_decode);
         fprintf(stderr, "\n[%s]             - modcall: %.3f sec", __func__, runner_stats[i]->time_modcall);

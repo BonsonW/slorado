@@ -42,6 +42,9 @@ Thumbs.db
 /.vscode
 .idea/
 
+# Local Claude Code instructions (kept locally, not in repo)
+CLAUDE.md
+
 # binaries
 /slorado
 /thirdparty/torch
@@ -68,3 +71,13 @@ test/slorado*
 *.bedmethyl
 *.pdf
 *.temp*
+
+tmp/*
+pyvenv
+*.svg
+*.png
+*.json
+
+beam_exp
+fluke
+minimap2

@@ -31,9 +31,8 @@ Binaries for the CPU-only version are not provided as basecalling on the CPU is 
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
 
-## Compilation and running
 
-### Compilation
+## Compilation
 
 Compilation instructions differ based on the system. Please pick one of the following that matches your system:
 
@@ -44,9 +43,9 @@ Compilation instructions differ based on the system. Please pick one of the foll
 
 Note: building from source will first require downloading and extracting Libtorch, which may take up to an hour depending on your network speed. Compilation should only take up to several minutes.
 
-### Running
+## Running
 
-We have tested slorado on a limited number of basecalling models listed [below](#tested-model). You can download them using the provided script (the binary releases already include these):
+We have tested slorado on a limited number of basecalling models listed [below](#tested-models). You can download them using the provided script (the binary releases already include these):
 
 ```
 scripts/download-models.sh
@@ -62,6 +61,33 @@ Now run on a test dataset:
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
 
+### Basecalling POD5 files
+
+Slorado reads signal data in S/BLOW5 format. POD5 files from ONT sequencers can be converted to BLOW5 using [blue-crab](https://github.com/Psy-Fer/blue-crab):
+
+```
+# install blue-crab
+pip install blue-crab
+
+# convert a pod5 file (or a directory of pod5 files) to blow5
+blue-crab p2s reads.pod5 -o reads.blow5
+blue-crab p2s pod5_dir/ -o reads.blow5
+
+# then basecall as usual
+./slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5 -o reads.fastq -x cuda:all
+```
+
+For convenience, we also provide a wrapper script [pod5-slorado](scripts/pod5-slorado) that converts a POD5 file to a temporary BLOW5 file and then invokes slorado on it. It takes the same arguments as `slorado basecaller`, but with a POD5 file as input:
+
+```
+# set environment variable SLORADO, if slorado is not in PATH (export SLORADO=/path/to/slorado).
+# set environment variable BLUECRAB, if blue-crab is not in PATH (export BLUECRAB=/path/to/blue-crab).
+scripts/pod5-slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 reads.pod5 -o reads.fastq
+```
+
+### Docker
+
+Pre-built image are available on [Docker Hub](https://hub.docker.com/r/hasindu2008/slorado). Refer to [here](docs/docker.md) for detailed instructions.
 
 ## Testing
 
@@ -74,12 +100,23 @@ wget -O hg38noAlt.fa.gz seq.bioinf.science/hg38noAlt && gunzip hg38noAlt.fa.gz
 
 # set environment variable MINIMAP2, if minimap2 is not in PATH (export MINIMAP2=/path/to/minimap2).
 # set environment variable DATAMASH, if datamash is not in PATH (export DATAMASH=/path/to/datamash).
-scripts/calculate_basecalling_accuarcy.sh hg38noAlt.fa reads.fastq
+scripts/calculate_basecalling_accuracy.sh hg38noAlt.fa reads.fastq
 
 # expected median identity scores for test/PGXXXX230339/reads_1k.blow5:
 # FAST v5.0.0: 0.940696
 # HAC v5.0.0:  0.976852
 # SUP v5.0.0:  0.988194
+```
+
+The repo also includes a minimal test that runs FAST v4.2.0 in [test.sh](test/test.sh), which will automatically install minimap2 and run on a single small dataset and reference included in the repo.
+```
+# run on a single read:
+./test/test.sh
+# accuracy: 0.944928
+
+# run on 1k reads mapped to chr22:
+./test/test.sh chr22
+# accuracy: 0.939607
 ```
 
 For a more exhaustive test of slorado's features (on GPU setups), we have provided an [extensive test script](test/extensive.sh). This will automatically download the requisite test data and tools to test DNA/RNA basecalling, methylation detection, and flash attention support on your device. We highly recommend running this to ensure basecalling works on your machine. Excluding the automated binary release test mode, this script is meant to work on both ARM and x86 architectures.
@@ -111,6 +148,7 @@ cd slorado
 ./test/extensive rocm build
 
 ```
+
 ## Known issues
 
 As of May 1st 2026, LSTM models (HAC and FAST or SUP < v5.0.0) on the 9700 AI Pro (and possibly other newer AMD GPUs) produce incorrect outputs (Transformer models unaffected). This issue is known and can be tracked [here](https://github.com/pytorch/pytorch/issues/177834).

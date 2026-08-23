@@ -187,10 +187,12 @@ static void call_chunks(
     c10::DeviceGuard device_guard(runner->tensor_opts.device());
 #endif
     torch::InferenceMode guard;
-    
+
     LOG_DEBUG("%s", "basecalling chunks");
+    auto input = runner->input_tensor.to(runner->tensor_opts.device());
+
     ts->time_infer -= realtime();
-    auto scores = runner->module->forward(runner->input_tensor.to(runner->tensor_opts.device()));
+    auto scores = runner->module->forward(input);
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
@@ -481,9 +483,9 @@ static void mod_basecall_chunks(
             signal_chunk = at::concat({signal_chunk.repeat({n_tiles}),
                                        signal_chunk.index({at::indexing::Slice(0, n_overhang)})},
                                       -1);
-            // Tile the kmer vector
+            // Tile the kmer vector (sequence resolution = chunk_size / sequence_stride_ratio)
             const int64_t original_size = static_cast<int64_t>(encoded_kmers_chunk.size());
-            const int64_t extended_size = chunk_size * kmer_size_per_sample;
+            const int64_t extended_size = (chunk_size / sequence_stride_ratio) * kmer_size_per_sample;
             encoded_kmers_chunk.resize(extended_size);
 
             for (int64_t i = original_size; i < extended_size; ++i) {

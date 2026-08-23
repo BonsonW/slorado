@@ -56,7 +56,7 @@ struct RotaryEmbeddingImpl : torch::nn::Module {
         float theta_,
         int max_seq_len_,
         const torch::TensorOptions &options_,
-        int nthreads_
+        tx_stats_t *stats
     );
 
     torch::Tensor forward(torch::Tensor &qkv);
@@ -68,7 +68,7 @@ struct RotaryEmbeddingImpl : torch::nn::Module {
     const int64_t dim, max_seq_len;
     const float theta;
     const torch::TensorOptions options;
-    const int nthreads;
+    tx_stats_t *stats_ = nullptr;
 };
 
 TORCH_MODULE(RotaryEmbedding);
@@ -92,17 +92,13 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
         bool out_bias_,
         const std::pair<int, int> &attn_window_,
         const torch::TensorOptions &options_,
-        tx_stats_t *_model_stats,
-        bool use_flash_,
-        int nthreads
+        tx_stats_t *_model_stats
     );
 
     torch::Tensor forward(torch::Tensor x);
 
     torch::Tensor get_attn_window_mask(const int64_t size);
     torch::Tensor build_attn_window_mask(const int64_t size) const;
-
-    bool use_flash;
 
     const int d_model, nhead, head_dim, num_splits;
     const std::pair<int, int> attn_window;
@@ -120,7 +116,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 TORCH_MODULE(MultiHeadAttention);
 
 struct TxEncoderImpl : torch::nn::Module {
-    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads);
+    TxEncoderImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
     torch::Tensor forward(torch::Tensor x);
 
@@ -133,19 +129,16 @@ struct TxEncoderImpl : torch::nn::Module {
     RMSNorm norm1{nullptr}, norm2{nullptr};
 
     tx_stats_t *model_stats;
-    int device_idx;
 };
 
 TORCH_MODULE(TxEncoder);
 
 struct TxEncoderStackImpl : torch::nn::Module {
-    TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats, bool use_flash, int nthreads);
+    TxEncoderStackImpl(const TxEncoderParams &params, const torch::TensorOptions &options, tx_stats_t *model_stats);
 
     torch::Tensor forward(const torch::Tensor &x);
     
-    bool use_i8{false};
     torch::nn::Sequential stack{nullptr};
-    std::vector<TxEncoder> layer_vec;
 };
 
 TORCH_MODULE(TxEncoderStack);
@@ -174,7 +167,7 @@ struct LinearScaledCRFImpl : torch::nn::Module {
 TORCH_MODULE(LinearScaledCRF);
 
 struct TxModelImpl : torch::nn::Module {
-    explicit TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats, bool use_flash, int nthreads);
+    explicit TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats);
 
     void load_state_dict(const std::vector<torch::Tensor> &weights) {
         module_load_state_dict(*this, weights);

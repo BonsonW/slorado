@@ -6,10 +6,11 @@
 #include <vector>
 
 #include "model_config.h"
+#include "tensor_chunk_utils.h"
 
 using namespace torch::nn;
 
-ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const torch::TensorOptions &options);
+ModuleHolder<AnyModule> load_lstm_model(const CRFModelConfig &model_config, const torch::TensorOptions &options, lstm_stats_t *model_stats);
 
 struct ConvStackImpl : torch::nn::Module {
     explicit ConvStackImpl(const std::vector<ConvParams> &layer_params);
@@ -42,6 +43,23 @@ struct LSTMStackImpl : torch::nn::Module {
     std::vector<torch::nn::LSTM> rnns;
 };
 
+struct FLSTMLayerImpl : torch::nn::Module {
+    FLSTMLayerImpl(int C, int K, lstm_stats_t *model_stats);
+    torch::Tensor forward(torch::Tensor x);
+private:
+    int C_, K_;
+    lstm_stats_t *model_stats_;
+    torch::Tensor dn_weight_ih_, dn_weight_hh_;
+    torch::Tensor up_weight_ih_, up_weight_hh_;
+    torch::Tensor up_bias_ih_,   up_bias_hh_;
+};
+
+struct FLSTMStackImpl : torch::nn::Module {
+    FLSTMStackImpl(int num_layers, int C, int K, lstm_stats_t *model_stats);
+    torch::Tensor forward(torch::Tensor x);
+    std::vector<torch::nn::ModuleHolder<FLSTMLayerImpl>> layers_;
+};
+
 struct ClampImpl : torch::nn::Module {
     ClampImpl(float _min, float _max, bool _active);
     torch::Tensor forward(torch::Tensor x);
@@ -50,20 +68,23 @@ struct ClampImpl : torch::nn::Module {
 };
 
 TORCH_MODULE(LSTMStack);
+TORCH_MODULE(FLSTMLayer);
+TORCH_MODULE(FLSTMStack);
 TORCH_MODULE(LinearCRF);
 TORCH_MODULE(ConvStack);
 TORCH_MODULE(Clamp);
 
 struct CRFModelImpl : torch::nn::Module {
-    explicit CRFModelImpl(const CRFModelConfig &config);
+    explicit CRFModelImpl(const CRFModelConfig &config, lstm_stats_t *model_stats);
     void load_state_dict(const std::vector<torch::Tensor> &weights);
 
     torch::Tensor forward(const torch::Tensor &x);
     ConvStack convs{nullptr};
     LSTMStack rnns{nullptr};
+    FLSTMStack flstm_rnns{nullptr};
     LinearCRF linear1{nullptr}, linear2{nullptr};
     Clamp clamp1{nullptr};
-    torch::nn::Sequential encoder{nullptr};
+    lstm_stats_t *model_stats_;
 };
 
 TORCH_MODULE(CRFModel);

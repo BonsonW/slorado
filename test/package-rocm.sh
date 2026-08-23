@@ -26,7 +26,7 @@ mkdir -p slorado-$VERSION/bin slorado-$VERSION/lib slorado-$VERSION/share
 # https://github.com/pytorch/pytorch/blob/89a1835a782b4053422a37274e0e873069cc3cbd/.ci/docker/manywheel/build.sh#L94
 
 make clean
-make cxx11_abi=1 rocm=1 -j zstd_local=../zstd/lib ROCM_ARCH='"--offload-arch=gfx900 --offload-arch=gfx906 --offload-arch=gfx908 --offload-arch=gfx90a --offload-arch=gfx942 --offload-arch=gfx1030 --offload-arch=gfx1100 --offload-arch=gfx1101 --offload-arch=gfx1102 --offload-arch=gfx1200 --offload-arch=gfx1201 --offload-arch=gfx950 --offload-arch=gfx1150 --offload-arch=gfx1151"' || die "Build failed"
+make cxx11_abi=1 rocm=1 -j zstd_local=../zstd/lib ROCM_ARCH="--offload-arch=gfx900 --offload-arch=gfx906 --offload-arch=gfx908 --offload-arch=gfx90a --offload-arch=gfx942 --offload-arch=gfx1030 --offload-arch=gfx1100 --offload-arch=gfx1101 --offload-arch=gfx1102 --offload-arch=gfx1200 --offload-arch=gfx1201 --offload-arch=gfx950 --offload-arch=gfx1150 --offload-arch=gfx1151" || die "Build failed"
 
 rm -f thirdparty/torch/libtorch/lib/libamdhip64.so.6
 ln -s libamdhip64.so thirdparty/torch/libtorch/lib/libamdhip64.so.6 || die "Link failed"
@@ -34,6 +34,7 @@ cp -r thirdparty/torch/libtorch/lib/* slorado-$VERSION/lib/ || die "Copy failed"
 cp -r thirdparty/torch/libtorch/share/* slorado-$VERSION/share/ || die "Copy failed"
 cp -r thirdparty/torch/torch-2.9.0+rocm6.4.dist-info/ slorado-$VERSION/share/ || die "Copy failed"
 mv  ./slorado slorado-$VERSION/bin/ || die "Copy failed"
+cp scripts/pod5-slorado slorado-$VERSION/bin/ || die "Copy failed"
 cp -r models/ slorado-$VERSION/ || die "Copy failed"
 
 cp /lib64/libzstd.so.1 slorado-$VERSION/lib/libzstd.so.1

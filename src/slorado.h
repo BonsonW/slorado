@@ -37,12 +37,13 @@ SOFTWARE.
 #include <stdint.h>
 #include <slow5/slow5.h>
 #include <openfish/openfish.h>
+#include <unordered_map>
 #include <vector>
 #include <string>
 
 #include "dorado/model_config.h"
 
-#define SLORADO_VERSION "0.5.0-beta"
+#define SLORADO_VERSION "0.6.0"
 
 /*******************************************************
  * flags related to the user specified options (opt_t) *
@@ -57,6 +58,12 @@ SOFTWARE.
 #define STEAL_THRESH 1 // stealing threshold
 
 #define NUM_BASES (4)
+
+#define DEFAULT_CHUNK_SIZE (10000)
+#define DEFAULT_OVERLAP (500)
+#define DEFAULT_BATCH_SIZE (4096)
+#define DEFAULT_GPU_BATCH_SIZE (512)
+#define BATCH_SIZE_SAMPLE_READS (256)
 
 /* user specified options */
 typedef struct {
@@ -104,7 +111,7 @@ struct mod_chunk {
     size_t hit_offset;      // starting offset of the context hits
 
     int64_t num_states;   // number of states predicted by the modbase model `num_mods + 1`
-    
+
     std::vector<float> scores;  // model predictions for this chunk arranged in `[canonical, mod1, .., modN, canonical, mod1, ..]`
 };
 typedef struct mod_chunk mod_chunk_t;
@@ -148,6 +155,9 @@ typedef struct {
     double time_crf_1;
     double time_crf_2;
     double time_clamp;
+    // FLSTM timings (accumulated across all layers)
+    double time_flstm_precompute;   // batched ih = x @ W_ih_fused + bias_ih (before loop)
+    double time_flstm_recurrence;   // full per-step loop: addmm(W_hh_fused) + gate update
 } lstm_stats_t;
 
 typedef struct {
@@ -165,6 +175,9 @@ typedef struct {
     double time_rotary_emb;
     double time_sdp_attn;
     double time_out_proj;
+
+    bool use_flash = false;
+    int nthreads = 1;
 } tx_stats_t;
 
 /* time stamps */
