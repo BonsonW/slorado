@@ -7,7 +7,7 @@ With slorado, now you can do some nanopore basecalling on AMD GPUs. We have some
 First, download and extract the slorado rocm Linux binaries tarball.
 
 ```
-VERSION=v0.5.0-beta
+VERSION=v0.6.0
 wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-rocm-linux-binaries.tar.xz"
 tar xvf slorado-$VERSION-x86_64-rocm-linux-binaries.tar.xz
 cd slorado-$VERSION

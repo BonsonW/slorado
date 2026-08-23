@@ -11,7 +11,7 @@ Slorado is mainly for our research and educational purposes. Thus, only a minima
 We provide compiled binaries for [NVIDIA (cuda)](https://docs.nvidia.com/cuda) and [AMD (rocm)](https://rocm.docs.amd.com/en/latest) GPU accelerators on x86_64 CPUs for Linux. You can download the latest relevant binary release that includes the most recent supported basecalling models from [releases](https://github.com/BonsonW/slorado/releases) as below:
 
 ```
-VERSION=v0.5.0-beta
+VERSION=v0.6.0
 GPU=cuda   # GPU=rocm for AMD GPUs
 wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz"
 tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz
