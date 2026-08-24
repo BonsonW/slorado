@@ -27,7 +27,7 @@ Detailed instructions are available at:
 
 Basecalling on Australia's [Pawsey](https://pawsey.org.au/) supercomputer: [Pawsey Guide](docs/pawsey.md)
 
-Binaries for the CPU-only version are not provided as basecalling on the CPU is impractically slow. Nevertheless, the CPU-only version is easier to build compared to the GPU version (see [below](#compilation-and-running)).
+Binaries for the CPU-only version are not provided as basecalling on the CPU is impractically slow. Nevertheless, the CPU-only version is easier to build compared to the GPU version (see [below](#compilation)).
 
 Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems.
 

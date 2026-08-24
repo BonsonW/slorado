@@ -9,7 +9,7 @@ Builds for both AMD (rocm) and NVIDIA (cuda) are available.
 ## For AMD (rocm)
 
 ```
-docker pull slorado:0.6.0-rocm
+docker pull hasindu2008/slorado:0.6.0-rocm
 ```
 
 Print the help message to check the image works:
