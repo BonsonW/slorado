@@ -22,8 +22,8 @@ cd slorado-$VERSION
 This may take up to several minutes to download and extract.
 
 Detailed instructions are available at:
-- [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-bin.md)
-- [AMD GPUs (rocm) on x84_64 systems](docs/rocm-bin.md)
+- [NVIDIA GPUs (cuda) on x86_64 systems](docs/cuda-bin.md)
+- [AMD GPUs (rocm) on x86_64 systems](docs/rocm-bin.md)
 
 Basecalling on Australia's [Pawsey](https://pawsey.org.au/) supercomputer: [Pawsey Guide](docs/pawsey.md)
 
@@ -36,9 +36,9 @@ Refer to [troubleshoot](docs/troubleshoot.md) for help resolving common problems
 
 Compilation instructions differ based on the system. Please pick one of the following that matches your system:
 
-- [x84_64 CPU-only (basecalling will be horribly slow)](docs/cpu-build.md)
-- [NVIDIA GPUs (cuda) on x84_64 systems](docs/cuda-build.md)
-- [AMD GPUs (rocm) on x84_64 systems](docs/rocm-build.md)
+- [x86_64 CPU-only (basecalling will be horribly slow)](docs/cpu-build.md)
+- [NVIDIA GPUs (cuda) on x86_64 systems](docs/cuda-build.md)
+- [AMD GPUs (rocm) on x86_64 systems](docs/rocm-build.md)
 - [ARM-based NVIDIA Jetson (cuda) systems](docs/jetson-build.md)
 
 Note: building from source will first require downloading and extracting Libtorch, which may take up to an hour depending on your network speed. Compilation should only take up to several minutes.
@@ -87,7 +87,7 @@ scripts/pod5-slorado basecaller models/dna_r10.4.1_e8.2_400bps_fast@v5.0.0 reads
 
 ### Docker
 
-Pre-built image are available on [Docker Hub](https://hub.docker.com/r/hasindu2008/slorado). Refer to [here](docs/docker.md) for detailed instructions.
+Pre-built images are available on [Docker Hub](https://hub.docker.com/r/hasindu2008/slorado). Refer to [here](docs/docker.md) for detailed instructions.
 
 ## Testing
 
@@ -135,17 +135,17 @@ export READ_BATCH=2048  # max number of reads loaded into host memory
 cd slorado
 
 # test an existing slorado binary by providing the path
-./test/extensive /path/to/slorado
+./test/extensive.sh /path/to/slorado
 
 # test the latest binary (x86) release on your machine
-./test/extensive cuda bin
+./test/extensive.sh cuda bin
 # OR
-./test/extensive rocm bin
+./test/extensive.sh rocm bin
 
 # build and test from the repo (after installing the appropriate torch version)
-./test/extensive cuda build
+./test/extensive.sh cuda build
 # OR
-./test/extensive rocm build
+./test/extensive.sh rocm build
 
 ```
 
@@ -168,8 +168,8 @@ Slorado does not currently support demultiplexing. You can demultiplex reads gen
 
 Slorado (from v0.5.0-beta) supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Slorado (from v0.6.0) supports m6A_DRACH for RNA HAC v6.0.0, which can be specified as `--mod m6A_DRACH@v1`.
 Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
-```
 
+```
 # example modification calling
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5 --mod 5mCG_5hmCG@v3 -xcuda:all -o reads.fastq
 ```
@@ -178,7 +178,7 @@ Adding modification detection will automatically output in [SAM](https://samtool
 
 All options supported by slorado basecaller are detailed below:
 
-| Option:           | Decription:                                           | Default Value: |
+| Option:           | Description:                                           | Default Value: |
 |-------------------|-------------------------------------------------------|----------------|
 | -t INT            | number of processing threads                          | 8              |
 | -K INT            | batch size (max number of reads loaded at once)       | 4096           |

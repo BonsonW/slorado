@@ -1,6 +1,6 @@
 # Basecalling on NVIDIA GPUs
 
-We have some compiled binaries which should work On Linux if you have at least the minimum GLIBC listed [below](#tested-versions-and-requirements). Invoke `ldd --version` to check your GLIB version. You should also have the GPU driver installed. Also, note that we have done testing on limited number of GPU systems listed [below](#tested-versions-and-requirements). If you encounter a problem feel free to open an [issue]([issue](https://github.com/BonsonW/slorado/issues)).
+We have some compiled binaries which should work On Linux if you have at least the minimum GLIBC listed [below](#tested-versions-and-requirements). Invoke `ldd --version` to check your GLIBC version. You should also have the GPU driver installed. Also, note that we have done testing on limited number of GPU systems listed [below](#tested-versions-and-requirements). If you encounter a problem feel free to open an [issue](https://github.com/BonsonW/slorado/issues).
 
 
 ## Getting Started
@@ -21,11 +21,11 @@ wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_
 ./bin/slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 PGXXXX230339_reads_20k.blow5  -o out.fastq -x cuda:all
 ```
 
-Refer to [troubleshoot](docs/troubleshoot.md) for help on resolving common problems.
+Refer to [troubleshoot](troubleshoot.md) for help on resolving common problems.
 
 ## Optional Testing
 
-Test if the output maps and identity scores are good (required  minimap2, the human genome and datamash):
+Test if the output maps and identity scores are good (requires  minimap2, the human genome and datamash):
 ```
 # Download the reference
 wget -O hg38noAlt.fa.gz seq.bioinf.science/hg38noAlt && gunzip hg38noAlt.fa.gz

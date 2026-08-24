@@ -2,7 +2,7 @@
 
 
 With slorado, now you can do some basecalling of your nanopore data on [Australia's Pawsey supercomputer](https://pawsey.org.au/). The [Setonix cluster](https://pawsey.org.au/systems/setonix/) in Pawsey has several hundred AMD Instinct MI250X GPUs.
-For those who have access to Pawsey, this post will show how you can do this. 
+For those who have access to Pawsey, this post will show how you can do this.
 
 ## Getting started
 
@@ -25,7 +25,7 @@ Path to example dataset on Pawsey: `/scratch/references/slorado/slorado-v0.2.0-b
 Or you may download a 20k dataset with: `wget -O PGXXXX230339_reads_20k.blow5 https://slow5.bioinf.science/hg2_prom_5khz_subsubsample`
 
 ### Example Slurm Script
-Copy the example slurm script in [Note 1](#note-1) in to a file called `example.sh`. Change the line `SLORADO_DIR=/path/to/slorado-v0.2.0-beta` to your extracted package location. Then simply call `sbatch --account=${PAWSEY_PROJECT}-gpu example.sh` to submit the test job. 
+Copy the example slurm script in [Note 1](#note-1) in to a file called `example.sh`. Change the line `SLORADO_DIR=/path/to/slorado-v0.2.0-beta` to your extracted package location. Then simply call `sbatch --account=${PAWSEY_PROJECT}-gpu example.sh` to submit the test job.
 This script will basecall the above test dataset using the `dna_r10.4.1_e8.2_400bps_hac@v4.2.0` model and generate a fastq file in the current directory called `reads.fastq`.
 
 ## Running on your own data
@@ -88,7 +88,7 @@ SLORADO=${SLORADO_DIR}/bin/slorado
 srun /usr/bin/time -v ${SLORADO} basecaller ${SLORADO_DIR}/models/${MODEL} ${BLOW5} -o ${FASTQ_OUT} -t64 -C ${BATCH_SIZE}
 ```
 
-See the [Pawsey GPU documentation](https://pawsey.atlassian.net/wiki/spaces/US/pages/51928618/Setonix+GPU+Partition+Quick+Start) for best practices on using GPUs effectively. 
+See the [Pawsey GPU documentation](https://pawsey.atlassian.net/wiki/spaces/US/pages/51928618/Setonix+GPU+Partition+Quick+Start) for best practices on using GPUs effectively.
 
 ### Note 2
 
@@ -107,7 +107,7 @@ Alternatively, [@gbouras13](https://github.com/gbouras13) has created a docker i
 ```
 module  load pawseyenv/2023.08
 module load singularity/3.11.4-slurm
- 
+
 singularity pull --dir $PWD docker://quay.io/gbouras13/blue_crab:0.2.0
 singularity exec blue_crab_0.2.0.sif blue-crab p2s pod5_dir/ -o merged.blow5
 ```
@@ -125,7 +125,7 @@ wget "https://github.com/hasindu2008/slow5tools/releases/download/$VERSION/slow5
 Advanced users can launch array jobs to basecall multiple BLOW5 files at once on Pawsey. We've provided two scripts that automatically configure these jobs for you:
 
 This is a helper script that you can simply copy into a file called `slorado_arr.sh`. You should not edit anything in this script unless you know what you are doing.
-You will also need to keep this script in the same directory you are running `slorado_arr_launch.sh` (the scecond script provided) from.
+You will also need to keep this script in the same directory you are running `slorado_arr_launch.sh` (the second script provided) from.
 ```
 #!/bin/bash --login
 #SBATCH --job-name=slorado_batch
@@ -153,7 +153,7 @@ srun -N 1 -n 1 -c 64 /usr/bin/time --verbose ${SLORADO} basecaller -K20000 -B1G 
 ```
 
 This is the actual script you will be running to launch the array job. You can copy this into a file called `slorado_arr_launch.sh` and run it like: `./slorado_arr_launch.sh`.
-Remember to edit the parameters in the top section to suit you job.
+Remember to edit the parameters in the top section to suit your job.
 ```
 #!/bin/bash --login
 

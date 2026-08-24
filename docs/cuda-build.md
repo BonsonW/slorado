@@ -1,8 +1,8 @@
-# Building CUDA version of slorado on x84_64
+# Building CUDA version of slorado on x86_64
 
 1. To build for the NVIDIA GPU, you need to have the CUDA toolkit installed. See [below](#tested-versions-and-requirements) for the CUDA toolkit versions we have tested.
 
-2. A minimum g++ version as listed [below](#tested-versions-and-requirements) is required due to libtorch. You check check your g++ version by invoking `g++ --version`.
+2. A minimum g++ version as listed [below](#tested-versions-and-requirements) is required due to libtorch. You check your g++ version by invoking `g++ --version`.
 
 3. Install zlib development files needed for slow5lib:
 
@@ -27,7 +27,7 @@
     This will download the torch version marked default in table [below](#tested-versions-and-requirements).
     You can specify a different torch version in this table, for example `scripts/install-torch2.sh cuda 2.0.0`.
 
-5. Invoke make
+6. Invoke make
 
     ```
     make cuda=1 -j
@@ -35,7 +35,7 @@
 
     Note that if the particular torch version in table [below](#tested-versions-and-requirements) states "yes" for cxx11_abi, you should invoke as `make cuda=1 -j cxx11_abi=1`
 
-6. See the slorado version
+7. See the slorado version
 
     ```
     ./slorado --version
