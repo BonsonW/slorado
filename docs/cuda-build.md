@@ -70,9 +70,9 @@ Note that we have tested compilation on a limited number of combinations and the
 
 | Slorado version | tested libtorch | tested CUDA | minimum g++ (approximate) | cxx11_abi | comments |
 |---              | ---             | ---         | ---          | ---      | ---      |
-| 0.4.0-beta,0.5.0-beta            | 2.0.0           | 11        | 5.4          | no | Flash Attention unsupported for SUP >= v5.0.0         |
-| 0.4.0-beta,0.5.0-beta            | 2.4.0 (default)           | 11        | 9            | no | Fused RMSNorm unsupported for SUP >= v5.0.0           |
-| 0.4.0-beta,0.5.0-beta            | 2.9.0           | 12        | 9            | yes |           |
+| 0.4.0-beta,0.5.0-beta,0.6.0            | 2.0.0           | 11        | 5.4          | no | Flash Attention unsupported for SUP >= v5.0.0         |
+| 0.4.0-beta,0.5.0-beta,0.6.0             | 2.4.0 (default)           | 11        | 9            | no | Fused RMSNorm unsupported for SUP >= v5.0.0           |
+| 0.4.0-beta,0.5.0-beta,0.6.0             | 2.9.0           | 12        | 9            | yes |           |
 ||||
 | 0.2.0-beta,0.3.0-beta     | 2.0.0           | 10,11,12    | 5.4         | no |  |
 

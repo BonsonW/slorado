@@ -44,7 +44,7 @@ It should print the mean identity score, median identity score and the number of
 
 | Slorado binary version | minimum GLIBC | tested systems |
 |---             | ---             | ---         |
-| 0.5.0-beta     | 2.17           | Ubuntu 22 - Tesla V100,A100;  Rocky 8 - Tesla H200          |
+| 0.5.0-beta,0.6.0     | 2.17           | Ubuntu 22 - Tesla V100,A100;  Rocky 8 - Tesla H200          |
 | 0.4.0-beta     | 2.17           | Ubuntu 22 - Tesla V100,A100,L4        |
 ||||
 | 0.3.0-beta     | 2.17          | Ubuntu 22 - Tesla V100,A100    |

@@ -108,7 +108,7 @@ scripts/calculate_basecalling_accuracy.sh hg38noAlt.fa reads.fastq
 # SUP v5.0.0:  0.988194
 ```
 
-The repo also includes a minimal test that runs FAST v4.2.0 in [test.sh](test/test.sh), which will automatically install minimap2 and run on a single small dataset and reference included in the repo.
+The repo also includes a minimal test that runs FAST v5.0.0 in [test.sh](test/test.sh), which will automatically install minimap2 and run on a single small dataset and reference included in the repo.
 ```
 # run on a single read:
 ./test/test.sh
@@ -166,8 +166,10 @@ Slorado does not currently support demultiplexing. You can demultiplex reads gen
 
 ## Modification Detection (experimental)
 
-Slorado (from v0.5.0-beta) supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
+Slorado (from v0.5.0-beta) supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Slorado (from v0.6.0) supports m6A_DRACH for RNA HAC v6.0.0, which can be specified as `--mod m6A_DRACH@v1`.
+Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
 ```
+
 # example modification calling
 ./slorado basecaller models/dna_r10.4.1_e8.2_400bps_hac@v5.0.0 reads.blow5 --mod 5mCG_5hmCG@v3 -xcuda:all -o reads.fastq
 ```
@@ -204,7 +206,8 @@ Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v
 
 | slorado version | Tested models |
 | ---             | ---           |
-| 0.5.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; dna_r10.4.1_e8.2_400bps_5mCG_5hmCG@v3 v5.0.0; rna004_130bps v5.1.0 |
+| 0.6.0           | dna_r10.4.1_e8.2_400bps v5.0.0 (5mCG_5hmCG@v3); rna004_130bps v5.1.0; rna004_hac v6.0.0 (m6A_DRACH@v1) |
+| 0.5.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0 (5mCG_5hmCG@v3); rna004_130bps v5.1.0 |
 | 0.4.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; rna004_130bps v5.1.0 |
 | 0.3.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 and v5.0.0 |
 | 0.2.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 |
