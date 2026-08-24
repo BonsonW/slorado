@@ -103,20 +103,20 @@ wget -O hg38noAlt.fa.gz seq.bioinf.science/hg38noAlt && gunzip hg38noAlt.fa.gz
 scripts/calculate_basecalling_accuracy.sh hg38noAlt.fa reads.fastq
 
 # expected median identity scores for test/PGXXXX230339/reads_1k.blow5:
-# FAST v5.0.0: 0.940696
-# HAC v5.0.0:  0.976852
-# SUP v5.0.0:  0.988194
+# FAST v5.0.0: 0.940374
+# HAC v5.0.0:  0.977594
+# SUP v5.0.0:  0.988561
 ```
 
 The repo also includes a minimal test that runs FAST v5.0.0 in [test.sh](test/test.sh), which will automatically install minimap2 and run on a single small dataset and reference included in the repo.
 ```
 # run on a single read:
 ./test/test.sh
-# accuracy: 0.944928
+# accuracy: 0.967836
 
 # run on 1k reads mapped to chr22:
 ./test/test.sh chr22
-# accuracy: 0.939607
+# accuracy: 0.941745
 ```
 
 For a more exhaustive test of slorado's features (on GPU setups), we have provided an [extensive test script](test/extensive.sh). This will automatically download the requisite test data and tools to test DNA/RNA basecalling, methylation detection, and flash attention support on your device. We highly recommend running this to ensure basecalling works on your machine. Excluding the automated binary release test mode, this script is meant to work on both ARM and x86 architectures.
