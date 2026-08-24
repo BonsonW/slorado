@@ -181,12 +181,12 @@ All options supported by slorado basecaller are detailed below:
 | Option:           | Description:                                           | Default Value: |
 |-------------------|-------------------------------------------------------|----------------|
 | -t INT            | number of processing threads                          | 8              |
-| -K INT            | batch size (max number of reads loaded at once)       | 4096           |
+| -K INT            | batch size (max number of reads loaded at once)       | auto           |
 | -C INT            | gpu batch size (max number of chunks loaded at once)  | 512            |
 | -B FLOAT[K/M/G]   | max number of bytes loaded at once                    | 512M           |
 | -o FILE           | output to file                                        | stdout         |
-| -c INT            | chunk size                                            | 12288          |
-| -p INT            | overlap                                               | 150            |
+| -c INT            | chunk size                                            | model config   |
+| -p INT            | overlap                                               | model config   |
 | -x DEVICE         | specify device (e.g., cpu; cuda:0; cuda:1,2; cuda:all)| cuda:all (GPU build) or cpu (CPU build)         |
 | -h                | shows help message and exits                          | -              |
 | --verbose INT     | verbosity level                                       | 4              |
