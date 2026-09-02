@@ -1,3 +1,6 @@
+🟥Do NOT delete this *metal* branch:
+- used for benchmarks in slorado preprint
+
 # Slorado
 
 This is an experimental branch for Apple Silicon. To build on Apple: 
