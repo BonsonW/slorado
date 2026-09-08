@@ -58,6 +58,12 @@ typedef struct {
     std::vector<uint8_t> mod_prob;           // ML tag
 } read_state_t;
 
+// undecoded record as read off disk. preprocess_stage is responsible for freeing it.
+typedef struct {
+    char *mem;
+    size_t bytes;
+} raw_rec_t;
+
 // One chunk of a read queued for the runner stage. Holds a shared_ptr so the
 // read (and its chunk vector) stays alive across the GPU forward pass.
 typedef struct {
@@ -123,7 +129,7 @@ typedef struct {
     core_t *core;
     bool mod;
 
-    BoundedQueue<std::shared_ptr<read_state_t>> *read_q;
+    BoundedQueue<raw_rec_t> *read_q;
     BoundedQueue<chunk_item_t> *chunk_q;
     BoundedQueue<std::shared_ptr<read_state_t>> *stitch_q;
 
@@ -142,44 +148,40 @@ static inline bool read_has_signal(const std::shared_ptr<read_state_t> &rs) {
     return rs->rec->len_raw_signal > 0;
 }
 
-// Stage 1: read raw records from the slow5 file, decode them, emit read_state_t.
+// Stage 1: pull raw (still compressed) records off the slow5 file.
 static void loader_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
 
     while (true) {
-        char *mem = NULL;
-        size_t bytes = 0;
-        if (slow5_get_next_bytes(&mem, &bytes, core->sp) < 0) {
+        raw_rec_t raw = {NULL, 0};
+        if (slow5_get_next_bytes(&raw.mem, &raw.bytes, core->sp) < 0) {
             if (slow5_errno != SLOW5_ERR_EOF) {
                 ERROR("Error reading from SLOW5 file %d", slow5_errno);
                 exit(EXIT_FAILURE);
             }
-            break;  // EOF
+            break;
         }
-
-        // Count the on-disk (compressed) size, like load_db does -- slow5_decode overwrites
-        // `bytes` with the decompressed size.
-        ctx->total_bytes += bytes;
-
-        auto rs = std::make_shared<read_state_t>();
-        // slow5_decode may realloc *mem; it does not free it.
-        if (slow5_decode(&mem, &bytes, &rs->rec, core->sp) < 0) {
-            ERROR("%s", "Error decoding a SLOW5 record");
-            exit(EXIT_FAILURE);
-        }
-        free(mem);
-        ctx->read_q->push(std::move(rs));
+        ctx->total_bytes += raw.bytes;
+        ctx->read_q->push(raw);
     }
 
     ctx->read_q->close();
 }
 
-// Stage 2: scale signal and split into overlapping chunks; emit one item per chunk.
+// Stage 2: decode the record, then scale the signal and split it into overlapping chunks
 static void preprocess_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
-    std::shared_ptr<read_state_t> rs;
+    raw_rec_t raw;
 
-    while (ctx->read_q->pop(rs)) {
+    while (ctx->read_q->pop(raw)) {
+        auto rs = std::make_shared<read_state_t>();
+        // slow5_decode may realloc raw.mem (and overwrite raw.bytes); it does not free it.
+        if (slow5_decode(&raw.mem, &raw.bytes, &rs->rec, core->sp) < 0) {
+            ERROR("%s", "Error decoding a SLOW5 record");
+            exit(EXIT_FAILURE);
+        }
+        free(raw.mem);
+
         if (read_has_signal(rs)) {
             rs->read_dat = new read_dat_t;
             preprocess_signal(core, rs->rec, rs->read_dat, rs->chunks);
@@ -383,12 +385,14 @@ void run_pipeline(core_t *core) {
     const size_t mod_gpu_batch = (size_t)core->opt.mod_gpu_batch_size;
     const size_t chunk_cap = std::max<size_t>(gpu_batch * 4 * n_runners, gpu_batch * 4);
     const size_t mod_chunk_cap = std::max<size_t>(mod_gpu_batch * 4 * std::max(n_mod_runners, 1), mod_gpu_batch * 4);
-    const size_t read_cap = std::max<size_t>(64, (size_t)n_pre * 4);
+    // read_q holds undecoded records, so it is cheap; keep it deep enough that the single reader
+    // thread can run ahead of the decoders through any I/O hiccup.
+    const size_t read_cap = std::max<size_t>(256, (size_t)n_pre * 8);
     const size_t stitch_cap = 256;
     const size_t out_cap = 256;
 
     // Queues and counters are owned here; the context just points at them.
-    BoundedQueue<std::shared_ptr<read_state_t>> read_q(read_cap);
+    BoundedQueue<raw_rec_t> read_q(read_cap);
     BoundedQueue<chunk_item_t> chunk_q(chunk_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> stitch_q(stitch_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> mod_pre_q(stitch_cap);
