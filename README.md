@@ -191,8 +191,9 @@ All options supported by slorado basecaller are detailed below:
 | -h                | shows help message and exits                          | -              |
 | --verbose INT     | verbosity level                                       | 4              |
 | --version         | print version                                         |                |
-| --flash yes|no    | enable flash attention (from v0.4.0-beta)             | No             |
+| --flash yes\|no   | enable flash attention (from v0.4.0-beta)             | No             |
 | --mod STR         | add modification detection (from v0.5.0-beta)         | NULL           |
+| --async yes\|no   | overlap I/O, CPU and GPU work                         | No             |
 
 ## Batchsizes
 

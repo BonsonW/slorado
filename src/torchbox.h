@@ -42,4 +42,14 @@ struct runner {
     at::Tensor input_seqs;
 };
 
+void preprocess_signal(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::vector<basecall_chunk_t> &chunks);
+void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, const char *seq, std::vector<uint8_t> &moves, std::vector<mod_chunk_t> &mod_chunks);
+void postprocess_modbase(core_t *core, read_dat_t *read_dat, std::string &mod_string_out, std::vector<uint8_t> &mod_prob_out);
+
+void preprocess_signal_db(core_t *core, db_t *db, int32_t i);
+void preprocess_modbase_db(core_t *core, db_t *db, int32_t i);
+void postprocess_modbase_db(core_t *core, db_t *db, int32_t i);
+
+void free_read_dat(read_dat_t *read_dat);
+
 #endif

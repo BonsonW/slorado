@@ -53,6 +53,7 @@ SOFTWARE.
 #define SLORADO_ACC         0x002 // accelerator enable
 #define SLORADO_SAM         0x004 // emit sam enable
 #define SLORADO_FLASH       0x008 // flash attention enable
+#define SLORADO_ASYNC       0x010 // async (pipelined) basecalling path enable
 
 #define WORK_STEAL 1 // simple work stealing enabled or not (no work stealing mean no load balancing)
 #define STEAL_THRESH 1 // stealing threshold
@@ -63,6 +64,7 @@ SOFTWARE.
 #define DEFAULT_OVERLAP (500)
 #define DEFAULT_BATCH_SIZE (4096)
 #define DEFAULT_GPU_BATCH_SIZE (512)
+#define MAX_AUTO_GPU_BATCH_SIZE (4096) // upper bound for the auto gpu batch-size search
 #define BATCH_SIZE_SAMPLE_READS (256)
 
 /* user specified options */
@@ -70,6 +72,7 @@ typedef struct {
     uint64_t flag;              // flags
     int32_t batch_size;         // max reads loaded at once: K
     int32_t gpu_batch_size;     // max chunks loaded at once: C
+    int32_t mod_gpu_batch_size; // max modbase chunks loaded at once (auto-detected separately)
     int64_t batch_size_bytes;   // max bytes loaded at once: B
 
     int32_t num_thread;         // number of threads used: t

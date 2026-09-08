@@ -62,6 +62,66 @@ void free_read_dat(read_dat_t *read_dat) {
     delete read_dat;
 }
 
+#ifdef USE_GPU
+static void gpu_mem_get_info(size_t *free_mem, size_t *total_mem) {
+    *free_mem = 0;
+    *total_mem = 0;
+#ifdef HAVE_CUDA
+    cudaMemGetInfo(free_mem, total_mem);
+#elif defined(HAVE_ROCM)
+    (void)hipMemGetInfo(free_mem, total_mem);
+#endif
+    // On multi-GCD ROCm setups (e.g. MI250X in unified partition mode) hipMemGetInfo reports the
+    // combined HBM pool across both GCDs, but each GCD can only reach half of it at local
+    // bandwidth; cap free at total/2 so we budget for one GCD's share. On CUDA free <= total by
+    // definition, so the guard is just a sanity check.
+#ifdef HAVE_ROCM
+    if (*free_mem > *total_mem / 2) *free_mem = *total_mem / 2;
+#else
+    if (*free_mem > *total_mem) *free_mem = *total_mem;
+#endif
+}
+
+// Probe whether a forward pass at batch size n fits in GPU memory.
+static bool trial_fits(runner_t *runner, core_t *core, int est_chunk_size, int n,
+                       size_t reserve_bytes, bool modbase) {
+    const auto device_idx = (c10::DeviceIndex)runner->device_idx;
+    bool ok = true;
+    CACHING_ALLOCATOR_NS::emptyCache();
+    try {
+        torch::InferenceMode no_grad;
+        at::Tensor reserve;
+        if (reserve_bytes > 0) {
+            reserve = torch::empty({(int64_t)reserve_bytes},
+                torch::TensorOptions().dtype(torch::kUInt8).device(runner->tensor_opts.device()));
+        }
+        if (modbase) {
+            const int channels = NUM_BASES * core->modbase_config->general.kmer_len;
+            const int64_t seq_chunk = (int64_t)est_chunk_size / core->modbase_config->general.stride_ratio();
+            auto sigs = torch::zeros({n, 1, (int64_t)est_chunk_size},
+                torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
+            auto seqs = torch::zeros({n, seq_chunk, channels},
+                torch::TensorOptions().dtype(torch::kInt8).device(torch::kCPU));
+            auto out = runner->module->forward(sigs.to(runner->tensor_opts.device()),
+                                               seqs.to(runner->tensor_opts.device()));
+            out.contiguous();
+        } else {
+            auto in = torch::zeros({n, 1, (int64_t)est_chunk_size},
+                torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
+            auto out = runner->module->forward(in.to(runner->tensor_opts.device()));
+            // Replicate call_chunks: transpose(0,1).contiguous() allocates a second T*N*C copy
+            // while the original scores tensor is still alive.
+            out.transpose(0, 1).contiguous();
+        }
+        torch::cuda::synchronize(device_idx);
+    } catch (const std::exception &) {
+        ok = false;
+    }
+    CACHING_ALLOCATOR_NS::emptyCache();
+    return ok;
+}
+#endif
+
 std::vector<std::string> parse_cuda_device_string(std::string device_arg) {
     std::vector<std::string> devices;
 
@@ -146,136 +206,63 @@ void init_runner(
 
     LOG_TRACE("%s", "model populated");
 
-    // Auto GPU batch size: run a dry N=1 forward pass and measure the actual peak activation
-    // memory via PyTorch's allocator stats, then scale to fit available GPU memory.
-    // This is more robust than hand-counting each model's layer activations.
+    // try powers of two descending from MAX_AUTO_GPU_BATCH_SIZE and stop at the first that fits
     if (device != "cpu" && batch_size == 0) {
 #ifdef USE_GPU
-        if (!modbase) {
-            c10::DeviceGuard device_guard(runner->tensor_opts.device());
-            const auto device_idx = (c10::DeviceIndex)runner->device_idx;
+        c10::DeviceGuard device_guard(runner->tensor_opts.device());
+        const int est_chunk_size = modbase
+            ? (int)core->modbase_config->context.chunk_size
+            : (int)core->chunk_size;
+        const int T = est_chunk_size / (modbase ? 1 : (int)core->model_stride);
 
-            // Two dry forward passes (N=1 then N=2) to isolate the truly linear-in-N activation
-            // cost via marginal difference. Fixed overhead (MIOpen workspace, first-call algorithm
-            // search, per-layer buffers) cancels out: per_chunk = peak_N2 - peak_N1.
-            auto run_trial = [&](int n) -> size_t {
-                CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
-                {
-                    torch::InferenceMode no_grad;
-                    auto trial = torch::zeros({n, 1, (int64_t)core->chunk_size},
-                        torch::TensorOptions().dtype(runner->tensor_opts.dtype()).device(torch::kCPU));
-                    auto out = runner->module->forward(trial.to(runner->tensor_opts.device()));
-                    // Replicate call_chunks: transpose(0,1).contiguous() allocates a second
-                    // N×T×C copy while the original scores tensor is still alive.
-                    // Without this the trial misses half the output tensor cost.
-                    out.transpose(0, 1).contiguous();
-                    torch::cuda::synchronize(device_idx);
-                }
-                return (size_t)CACHING_ALLOCATOR_NS::getDeviceStats(device_idx)
-                                   .allocated_bytes[0].peak;
-            };
-
-            size_t peak_n1 = 0, peak_n2 = 0;
-            bool trial_ok = true;
-            try {
-                peak_n1 = run_trial(1);
-                peak_n2 = run_trial(2);
-            } catch (const c10::Error &e) {
-                WARNING("auto GPU batch size: trial forward pass OOM on %s (%s), falling back to %d",
-                        device.c_str(), e.what(), DEFAULT_GPU_BATCH_SIZE);
-                trial_ok = false;
+        // upper bound on the search
+        int hi = MAX_AUTO_GPU_BATCH_SIZE;
+        const size_t max_input_len = 10000ULL * 6000ULL;
+        const int max_batch = (int)(max_input_len / est_chunk_size);
+        if (hi > max_batch) hi = max_batch;
+        const bool cudnn_rnn = modbase || (core->model_config->tx == NULL && core->model_config->lstm_inner_dim < 0);
+        if (cudnn_rnn) {
+            const int mstride = (modbase && core->modbase_config->general.stride > 0) ? core->modbase_config->general.stride : 1;
+            const int lstm_sz = modbase ? core->modbase_config->general.size : core->model_config->lstm_size;
+            const int Tb = modbase ? (int)(core->modbase_config->context.chunk_size / mstride) : T;
+            if (lstm_sz > 0 && Tb > 0) {
+                const int max_rnn = (int)(2147483647LL / ((int64_t)Tb * lstm_sz));
+                if (hi > max_rnn) hi = max_rnn;
             }
-
-            // Sanity check: if peak stats return 0, tracking is not working on this platform.
-            if (trial_ok && peak_n1 == 0 && peak_n2 == 0) {
-                WARNING("auto GPU batch size: allocator peak stats returned 0 on %s "
-                        "(HIP peak tracking may be unavailable), falling back to %d",
-                        device.c_str(), DEFAULT_GPU_BATCH_SIZE);
-                trial_ok = false;
-            }
-
-            if (trial_ok) {
-                CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
-                size_t free_mem, total_mem;
-#ifdef HAVE_CUDA
-                cudaMemGetInfo(&free_mem, &total_mem);
-#elif defined(HAVE_ROCM)
-                hipMemGetInfo(&free_mem, &total_mem);
-#endif
-                // On multi-GCD ROCm setups (e.g. MI250X in unified partition mode),
-                // hipMemGetInfo reports the combined HBM pool across both GCDs.  Each GCD
-                // can only access half of that pool at local bandwidth; cap free_mem at
-                // total_mem/2 so we budget for one GCD's share.  On CUDA, free <= total
-                // by definition so the guard is just a sanity check.
-#ifdef HAVE_ROCM
-                if (free_mem > total_mem / 2) free_mem = total_mem / 2;
-#else
-                if (free_mem > total_mem) free_mem = total_mem;
-#endif
-
-                // Marginal cost: the truly linear-in-N component only.
-                // Guard against measurement noise flipping the sign.
-                const size_t per_n_pytorch = (peak_n2 > peak_n1) ? (peak_n2 - peak_n1) : peak_n1;
-
-                // After the trials, activations are freed back to PyTorch's cache.
-                // Available = truly free CUDA memory + the cached (reusable) PyTorch memory.
-                auto stats_final = CACHING_ALLOCATOR_NS::getDeviceStats(device_idx);
-                const size_t pytorch_cache = (size_t)stats_final.reserved_bytes[0].current
-                                           - (size_t)stats_final.allocated_bytes[0].current;
-                const size_t available = free_mem + pytorch_cache;
-
-                // openfish gpubuf uses raw CUDA malloc, invisible to the PyTorch allocator
-                const int T = (int)(core->chunk_size / core->model_stride);
-                const size_t per_n_openfish = openfish_gpubuf_size(T, 1, core->model_config->state_len);
-                const size_t per_n_total = per_n_pytorch + per_n_openfish;
-
-                // peak_n1 = fixed overhead (algorithm search, per-layer buffers) regardless of N.
-                const size_t budget = (available > peak_n1) ? (size_t)((available - peak_n1) * 0.45) : 0;
-                batch_size = (per_n_total > 0) ? (int)(budget / per_n_total) : 1;
-
-                if (batch_size < 1) batch_size = 1;
-
-                const size_t max_input_len = 10000ULL * 6000ULL;
-                const int max_batch = (int)(max_input_len / core->chunk_size);
-                if (batch_size > max_batch) batch_size = max_batch;
-
-                // Guard against MIOpen/cuDNN RNN int32 overflow.  MIOpen computes
-                // sequence descriptor lengths as T × N × hidden_size using 32-bit
-                // integers.  When this product exceeds INT_MAX the value wraps negative
-                // and miopenRNN* throws "Lengths must be > 0".
-                // e.g. DNA fast v5.0 (T=2499, hidden=256): max safe N = INT_MAX/(2499×256) = 3356 → 2048
-                {
-                    const int lstm_sz = core->model_config->lstm_size;
-                    if (lstm_sz > 0 && T > 0) {
-                        const int max_rnn = (int)(2147483647LL / ((int64_t)T * lstm_sz));
-                        if (batch_size > max_rnn) batch_size = max_rnn;
-                    }
-                }
-
-                // Round down to nearest power of 2
-                if (batch_size > 1) {
-                    int p = 1;
-                    while (p * 2 <= batch_size) p *= 2;
-                    batch_size = p;
-                }
-
-                fprintf(stderr, "[%s] %.1f MB free + %.1f MB pytorch cache = %.1f MB available "
-                        "(%.1f MB fixed overhead) on %s, "
-                        "%zu bytes/chunk (pytorch:%zu openfish:%zu), auto GPU batch size: %d\n",
-                        __func__, free_mem / 1e6, pytorch_cache / 1e6, available / 1e6,
-                        peak_n1 / 1e6, device.c_str(),
-                        per_n_total, per_n_pytorch, per_n_openfish, batch_size);
-            } else {
-                batch_size = DEFAULT_GPU_BATCH_SIZE;
-            }
-        } else {
-            batch_size = DEFAULT_GPU_BATCH_SIZE;
         }
+        if (hi < 1) hi = 1;
+        { int p = 1; while (p * 2 <= hi) p *= 2; hi = p; } // round hi down to a power of two
+
+        // leave ~10% of total memory free for runtime fragmentation and other processes
+        size_t free_mem = 0, total_mem = 0;
+        gpu_mem_get_info(&free_mem, &total_mem);
+        const size_t headroom = total_mem / 10;
+
+        int chosen = 0;
+        for (int n = hi; n >= 1; n /= 2) {
+            const size_t gpubuf_bytes = modbase ? 0 : openfish_gpubuf_size(T, n, core->model_config->state_len);
+            if (trial_fits(runner, core, est_chunk_size, n, gpubuf_bytes + headroom, modbase)) {
+                chosen = n;
+                break;
+            }
+        }
+        if (chosen < 1) {
+            WARNING("auto GPU batch size: no batch size fit on %s, falling back to %d",
+                    device.c_str(), DEFAULT_GPU_BATCH_SIZE);
+            batch_size = DEFAULT_GPU_BATCH_SIZE;
+        } else {
+            batch_size = chosen;
+        }
+
+        fprintf(stderr, "[%s] %.1f MB free / %.1f MB total on %s, auto GPU batch size: %d%s\n",
+                __func__, free_mem / 1e6, total_mem / 1e6, device.c_str(),
+                batch_size, modbase ? " [modbase]" : "");
 #endif
     }
 
     // Allocate openfish GPU buffer and input tensor with the resolved batch size
-    if (device != "cpu") {
+    // (the decode buffer is basecall-only; the modbase path does not decode with openfish)
+    if (device != "cpu" && !modbase) {
 #ifdef USE_GPU
         c10::DeviceGuard device_guard(runner->tensor_opts.device());
         runner->gpubuf = openfish_gpubuf_init(core->chunk_size / core->model_stride, batch_size, core->model_config->state_len);
@@ -313,6 +300,9 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
         if (opt->gpu_batch_size == 0) {
             opt->gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
         }
+        if (opt->mod_gpu_batch_size == 0) {
+            opt->mod_gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
+        }
 
         std::string device = opt->device;
         core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
@@ -324,7 +314,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
         if (core->modbase_config != NULL) {
             LOG_DEBUG("adding mod_base runner for device %s", device.c_str());
             core->mod_runners->push_back(new runner_t());
-            init_runner(core, (*core->mod_runners).back(), model, device, opt->gpu_batch_size, torch::kF32, 0, true);
+            init_runner(core, (*core->mod_runners).back(), model, device, opt->mod_gpu_batch_size, torch::kF32, 0, true);
         }
     } else {
 #ifdef USE_GPU
@@ -349,7 +339,7 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
             if (core->modbase_config != NULL) {
                 LOG_DEBUG("adding mod_base runner for device %s", device.c_str());
                 core->mod_runners->push_back(new runner_t());
-                init_runner(core, (*core->mod_runners).back(), model, device, opt->gpu_batch_size, torch::kF16, mod_runner_idx++, true);
+                init_runner(core, (*core->mod_runners).back(), model, device, opt->mod_gpu_batch_size, torch::kF16, mod_runner_idx++, true);
             }
         }
 #else
@@ -416,18 +406,13 @@ size_t create_basecall_chunks(std::vector<basecall_chunk_t> &chunks, size_t num_
     return chunks.size();
 }
 
-void preprocess_signal(core_t *core, db_t *db, int32_t i) {
-    slow5_rec_t *rec = db->slow5_rec[i];
+// Per-read core, shared by the batch path (preprocess_signal_db) and the async pipeline.
+void preprocess_signal(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::vector<basecall_chunk_t> &chunks) {
     uint64_t len_raw_signal = rec->len_raw_signal;
     opt_t opt = core->opt;
 
-    (*db->basecall_chunks)[i].clear();
+    chunks.clear();
     if (len_raw_signal > 0) {
-        read_dat_t *read_dat = (*db->read_dats)[i];
-        if (read_dat == NULL) {
-            read_dat = new read_dat_t;
-            (*db->read_dats)[i] = read_dat;
-        }
         auto signal_norm_params = core->model_config->signal_norm_params;
 
         // if we are doing modbase calling, we need to keep the original signal for the modbase preproc,
@@ -446,8 +431,17 @@ void preprocess_signal(core_t *core, db_t *db, int32_t i) {
         // modbase path can trim the raw signal identically and stay aligned with the moves/sequence.
         read_dat->basecall_trim_start = (int64_t)len_raw_signal - read_dat->scaled_signal.size(0);
 
-        create_basecall_chunks((*db->basecall_chunks)[i], read_dat->scaled_signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
+        create_basecall_chunks(chunks, read_dat->scaled_signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
     }
+}
+
+void preprocess_signal_db(core_t *core, db_t *db, int32_t i) {
+    read_dat_t *read_dat = (*db->read_dats)[i];
+    if (read_dat == NULL && db->slow5_rec[i]->len_raw_signal > 0) {
+        read_dat = new read_dat_t;
+        (*db->read_dats)[i] = read_dat;
+    }
+    preprocess_signal(core, db->slow5_rec[i], read_dat, (*db->basecall_chunks)[i]);
 }
 
 // Reverse a seq_to_sig_map for RNA modbase models: reverse the order AND map each coord
@@ -464,15 +458,14 @@ static void reverse_seq_to_sig_map(std::vector<uint64_t>& m, size_t signal_len) 
     if (n % 2 != 0) m[n / 2] = signal_len - m[n / 2];
 }
 
-void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
-    slow5_rec_t *rec = db->slow5_rec[i];
+// Per-read core, shared by the batch path (preprocess_modbase_db) and the async pipeline.
+// seq is a borrowed pointer that must stay alive until postprocess_modbase has run.
+void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, const char *seq, std::vector<uint8_t> &moves, std::vector<mod_chunk_t> &mod_chunks) {
     uint64_t len_raw_signal = rec->len_raw_signal;
     // double a, b;
 
-    (*db->mod_chunks)[i].clear();
+    mod_chunks.clear();
     if (len_raw_signal > 0) {
-        read_dat_t *read_dat = (*db->read_dats)[i];
-
         // read_dat is persistent across batches, clear per-base hit caches to avoid stale work.
         for (auto& hits : read_dat->per_base_hits_seq) {
             hits.clear();
@@ -481,11 +474,8 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
             hits.clear();
         }
 
-        const char *seq = (*db->sequence)[i].c_str();
         char *seq_mut = const_cast<char*>(seq);
         read_dat->seq = seq;
-
-        std::vector<uint8_t> &moves = (*db->moves)[i];
 
         // RNA models process the signal 3'->5' (reverse_signal=true).
         const bool is_rna_mod = core->modbase_config->context.reverse;
@@ -601,10 +591,10 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
             }
         }
 
-        create_mod_chunks((*db->mod_chunks)[i], core, read_dat);
+        create_mod_chunks(mod_chunks, core, read_dat);
 
         // a = realtime();
-        const auto base_skips = get_minimal_encoding_skips(core, (*db->mod_chunks)[i], seq_to_sig_map, int_seq);
+        const auto base_skips = get_minimal_encoding_skips(core, mod_chunks, seq_to_sig_map, int_seq);
         // b = realtime();
         // if (core->opt.num_thread == 1) core->time_get_minimal_encoding_skips += (b-a);
 
@@ -625,18 +615,13 @@ void preprocess_modbase(core_t *core, db_t *db, int32_t i) {
     }
 }
 
-void postprocess_modbase(core_t *core, db_t *db, int32_t i) {
-    slow5_rec_t *rec = db->slow5_rec[i];
-    uint64_t len_raw_signal = rec->len_raw_signal;
-
-    if (len_raw_signal <= 0) { return; }
-
+// Per-read core, shared by the batch path (postprocess_modbase_db) and the async pipeline.
+void postprocess_modbase(core_t *core, read_dat_t *read_dat, std::string &mod_string_out, std::vector<uint8_t> &mod_prob_out) {
     const auto threshold_float = 0.05f;
     const auto threshold = static_cast<uint8_t>(std::min(threshold_float * 256.0f, 255.0f));
 
     const size_t num_channels = core->modbase_info->alphabet.size();
     const std::string cardinal_bases = "ACGT";
-    read_dat_t *read_dat = (*db->read_dats)[i];
     const char *seq = read_dat->seq;
     char *seq_mut = const_cast<char*>(seq);
     const auto seqlen = strlen(seq);
@@ -712,6 +697,15 @@ void postprocess_modbase(core_t *core, db_t *db, int32_t i) {
         }
     }
 
-    (*db->mod_string)[i] = std::move(modbase_string);
-    (*db->mod_prob)[i] = std::move(modbase_prob);
+    mod_string_out = std::move(modbase_string);
+    mod_prob_out = std::move(modbase_prob);
+}
+
+void preprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
+    preprocess_modbase(core, db->slow5_rec[i], (*db->read_dats)[i], (*db->sequence)[i].c_str(), (*db->moves)[i], (*db->mod_chunks)[i]);
+}
+
+void postprocess_modbase_db(core_t *core, db_t *db, int32_t i) {
+    if (db->slow5_rec[i]->len_raw_signal <= 0) { return; }
+    postprocess_modbase(core, (*db->read_dats)[i], (*db->mod_string)[i], (*db->mod_prob)[i]);
 }
