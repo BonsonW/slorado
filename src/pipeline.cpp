@@ -148,7 +148,7 @@ static inline bool read_has_signal(const std::shared_ptr<read_state_t> &rs) {
     return rs->rec->len_raw_signal > 0;
 }
 
-// Stage 1: pull raw (still compressed) records off the slow5 file.
+// read raw recs, single thread
 static void loader_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
 
@@ -168,7 +168,7 @@ static void loader_stage(pipeline_ctx_t *ctx) {
     ctx->read_q->close();
 }
 
-// Stage 2: decode the record, then scale the signal and split it into overlapping chunks
+// parse the record, then scale the signal and split it into overlapping chunks
 static void preprocess_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     raw_rec_t raw;
@@ -204,7 +204,8 @@ static void preprocess_stage(pipeline_ctx_t *ctx) {
     }
 }
 
-// Stage 3: pack chunks to gpu_batch_size across reads and run inference+decode.
+// pack chunks to gpu_batch_size across reads and run inference+decode
+// one thread per GPU
 static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
@@ -237,8 +238,7 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     flush();
 }
 
-// Stage 4: stitch a read's chunks back into a single sequence. Routes reads with signal to the
-// modbase stages when --mod, else straight to output.
+// stitch reads
 static void stitch_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     const bool rna = is_rna(core->model_config->sample_type);
@@ -249,13 +249,12 @@ static void stitch_stage(pipeline_ctx_t *ctx) {
             stitch_chunks_vec(rs->chunks, rs->sequence, rs->qstring, rs->moves,
                               rs->rec->len_raw_signal, (int)core->model_stride);
             if (rna) {
-                // Reverse seq + qstring to 5'->3'. Leave moves in signal (3'->5') order -- dorado
-                // never reverses the move table for RNA, and the only consumer,
-                // preprocess_modbase, needs signal-order moves to build the seq->sig map.
                 std::reverse(rs->sequence.begin(), rs->sequence.end());
                 std::reverse(rs->qstring.begin(), rs->qstring.end());
             }
         }
+
+        // queue mod or out
         if (ctx->mod && read_has_signal(rs)) {
             ctx->mod_pre_q->push(std::move(rs));
         } else {
@@ -264,7 +263,7 @@ static void stitch_stage(pipeline_ctx_t *ctx) {
     }
 }
 
-// Stage 4b (mod): build the seq->signal mapping and modbase chunks; emit one item per mod chunk.
+// mod preproccess: build the seq->signal mapping and modbase chunks; emit one item per mod chunk.
 static void mod_preprocess_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     std::shared_ptr<read_state_t> rs;
@@ -289,7 +288,7 @@ static void mod_preprocess_stage(pipeline_ctx_t *ctx) {
     }
 }
 
-// Stage 4c (mod): pack mod chunks to mod_gpu_batch_size across reads and run the modbase model.
+// mod runner: pack mod chunks to mod_gpu_batch_size across reads and run the modbase model
 static void mod_runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.mod_gpu_batch_size;
@@ -322,7 +321,7 @@ static void mod_runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
     flush();
 }
 
-// Stage 4d (mod): turn base_mod_probs into MM/ML tags.
+// mod postprocess: turn base_mod_probs into MM/ML tags
 static void mod_postprocess_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     std::shared_ptr<read_state_t> rs;
@@ -333,8 +332,7 @@ static void mod_postprocess_stage(pipeline_ctx_t *ctx) {
     }
 }
 
-// Stage 5: write output (FASTQ, or SAM with MM/ML under --mod) and free per-read resources.
-// Single thread keeps fprintf serialized; output order is not guaranteed to match the input file.
+// write output, single thread
 static void writer_stage(pipeline_ctx_t *ctx) {
     core_t *core = ctx->core;
     const bool sam = (core->opt.flag & SLORADO_SAM) != 0;
@@ -344,17 +342,14 @@ static void writer_stage(pipeline_ctx_t *ctx) {
     while (ctx->out_q->pop(rs)) {
         if (read_has_signal(rs)) {
             if (sam) {
-                write_to_file_sam(core->opt.out, rs->sequence.c_str(), rs->qstring.c_str(),
-                                  rs->rec->read_id, rs->mod_string.c_str(), rs->mod_prob);
+                write_to_file_sam(core->opt.out, rs->sequence.c_str(), rs->qstring.c_str(), rs->rec->read_id, rs->mod_string.c_str(), rs->mod_prob);
             } else {
-                write_to_file_fastq(core->opt.out, rs->sequence.c_str(), rs->qstring.c_str(),
-                                    rs->rec->read_id);
+                write_to_file_fastq(core->opt.out, rs->sequence.c_str(), rs->qstring.c_str(), rs->rec->read_id);
             }
         }
         ++n;
 
-        // read_dat->scaled_signal can be a view over rec->raw_signal (tensor_from_record does not
-        // copy), so the tensor must go before the record it aliases.
+        // free
         if (rs->read_dat) {
             free_read_dat(rs->read_dat);
             rs->read_dat = NULL;
@@ -375,8 +370,9 @@ void run_pipeline(core_t *core) {
     const bool mod = core->opt.mod != NULL;
     const int n_mod_runners = mod ? (int)core->mod_runners->size() : 0;
 
-    // Split the worker-thread budget between preprocess (heavier: signal scaling +
-    // tensor ops) and stitch, preprocess-weighted. Runner threads are separate (1/GPU).
+    // one thread for reading, one thread for writing
+    // split the worker-thread budget between preprocess and stitch (heavier for preprocess)
+    // single runner thread are per GPU
     const int workers = std::max(2, core->opt.num_thread);
     const int n_pre = std::max(1, (workers * 2) / 3);
     const int n_stitch = std::max(1, workers - n_pre);
@@ -385,13 +381,10 @@ void run_pipeline(core_t *core) {
     const size_t mod_gpu_batch = (size_t)core->opt.mod_gpu_batch_size;
     const size_t chunk_cap = std::max<size_t>(gpu_batch * 4 * n_runners, gpu_batch * 4);
     const size_t mod_chunk_cap = std::max<size_t>(mod_gpu_batch * 4 * std::max(n_mod_runners, 1), mod_gpu_batch * 4);
-    // read_q holds undecoded records, so it is cheap; keep it deep enough that the single reader
-    // thread can run ahead of the decoders through any I/O hiccup.
     const size_t read_cap = std::max<size_t>(256, (size_t)n_pre * 8);
     const size_t stitch_cap = 256;
     const size_t out_cap = 256;
 
-    // Queues and counters are owned here; the context just points at them.
     BoundedQueue<raw_rec_t> read_q(read_cap);
     BoundedQueue<chunk_item_t> chunk_q(chunk_cap);
     BoundedQueue<std::shared_ptr<read_state_t>> stitch_q(stitch_cap);
@@ -422,7 +415,6 @@ void run_pipeline(core_t *core) {
                 __func__, n_pre, n_runners, n_stitch);
     }
 
-    // Start downstream stages first so they are ready to consume.
     std::thread writer(writer_stage, &ctx);
 
     std::vector<std::thread> mod_postproc, mod_runners, mod_preproc;
@@ -443,9 +435,8 @@ void run_pipeline(core_t *core) {
 
     std::thread loader(loader_stage, &ctx);
 
-    // Drain in dependency order: closing each queue only after its producers are done
-    // preserves full pipeline overlap during steady state.
-    loader.join();                          // loader closed read_q at EOF
+    // closing each queue only after its producers are done preserves full pipeline overlap during steady state
+    loader.join();
     for (auto &t : preproc) t.join();
     chunk_q.close();
     for (auto &t : runners) t.join();
