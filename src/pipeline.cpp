@@ -8,7 +8,7 @@
 ** With --mod, three more stages are spliced in after stitch:
 **   ... -> stitch(S) -> mod_preprocess(P) -> mod_runners(R) -> mod_postprocess(S) -> writer(1)
 **
-** A read (read_state_t, shared_ptr) is decoded by the loader, scaled+chunked by a
+** A read (read_state_t) is decoded by the loader, scaled+chunked by a
 ** preprocess worker, and each of its chunks is pushed individually to a single global
 ** chunk queue. Runner threads pop chunks, pack them to gpu_batch_size across read
 ** boundaries and run inference+decode; when a read's last chunk is done it flows to
@@ -22,10 +22,9 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
-#include <memory>
 #include <mutex>
+#include <pthread.h>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "pipeline.h"
@@ -37,15 +36,16 @@
 
 #include "dorado/tensor_chunk_utils.h"
 
-// State for a single read as it flows through the stages. Held by std::shared_ptr so ownership is
-// shared between the in-flight chunk items and the stage currently working on the read; freed once
-// the writer is done. (make_shared value-initialises this, zeroing the scalar/atomic members.)
+// State for a single read as it flows through the stages. Owned by exactly one stage at a time and
+// passed down the queues as a plain pointer; the writer deletes it. During the chunk phase the N
+// in-flight chunk items all point at it, but none of them owns it -- chunks_remaining below is the
+// refcount that decides when the read moves on, so no extra ownership tracking is needed.
 typedef struct {
-    slow5_rec_t *rec;                // read_id, len_raw_signal; freed by writer
-    read_dat_t *read_dat;            // scaled_signal etc.; freed by writer
+    slow5_rec_t *rec = NULL;         // read_id, len_raw_signal; freed by writer
+    read_dat_t *read_dat = NULL;     // scaled_signal etc.; freed by writer
 
     std::vector<basecall_chunk_t> chunks;
-    std::atomic<int> chunks_remaining;
+    std::atomic<int> chunks_remaining{0};
 
     std::string sequence;
     std::string qstring;
@@ -53,7 +53,7 @@ typedef struct {
 
     // modbase
     std::vector<mod_chunk_t> mod_chunks;
-    std::atomic<int> mod_chunks_remaining;   // multi-writer: mod runners decrement
+    std::atomic<int> mod_chunks_remaining{0}; // multi-writer: mod runners decrement
     std::string mod_string;                  // MM tag
     std::vector<uint8_t> mod_prob;           // ML tag
 } read_state_t;
@@ -64,16 +64,16 @@ typedef struct {
     size_t bytes;
 } raw_rec_t;
 
-// One chunk of a read queued for the runner stage. Holds a shared_ptr so the
-// read (and its chunk vector) stays alive across the GPU forward pass.
+// One chunk of a read queued for the runner stage. Borrows the read; the read outlives every one
+// of its chunk items by construction (it only advances once chunks_remaining hits zero).
 typedef struct {
-    std::shared_ptr<read_state_t> read;
+    read_state_t *read;
     int chunk_idx;
 } chunk_item_t;
 
 // One modbase chunk of a read queued for the mod runner stage.
 typedef struct {
-    std::shared_ptr<read_state_t> read;
+    read_state_t *read;
     int chunk_idx;
 } mod_chunk_item_t;
 
@@ -131,25 +131,48 @@ typedef struct {
 
     BoundedQueue<raw_rec_t> *read_q;
     BoundedQueue<chunk_item_t> *chunk_q;
-    BoundedQueue<std::shared_ptr<read_state_t>> *stitch_q;
+    BoundedQueue<read_state_t *> *stitch_q;
 
     // modbase stages (only used when mod)
-    BoundedQueue<std::shared_ptr<read_state_t>> *mod_pre_q;
+    BoundedQueue<read_state_t *> *mod_pre_q;
     BoundedQueue<mod_chunk_item_t> *mod_chunk_q;
-    BoundedQueue<std::shared_ptr<read_state_t>> *mod_post_q;
-    BoundedQueue<std::shared_ptr<read_state_t>> *out_q;
+    BoundedQueue<read_state_t *> *mod_post_q;
+    BoundedQueue<read_state_t *> *out_q;
 
     uint64_t total_reads;
     uint64_t total_bytes;
 } pipeline_ctx_t;
 
+// pthread entry points take a single void*, so the two runner stages -- the only ones needing more
+// than the context -- get their device index through this.
+typedef struct {
+    pipeline_ctx_t *ctx;
+    int runner_idx;
+} runner_arg_t;
+
+// pthread_create returns an errno value directly rather than setting errno, so NEG_CHK cannot see it.
+static void spawn(pthread_t *tid, void *(*fn)(void *), void *arg) {
+    int ret = pthread_create(tid, NULL, fn, arg);
+    if (ret != 0) {
+        ERROR("Could not create pipeline thread: %s", strerror(ret));
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void join_all(std::vector<pthread_t> &tids) {
+    for (size_t i = 0; i < tids.size(); ++i) {
+        pthread_join(tids[i], NULL);
+    }
+}
+
 // The batch path processes (and emits) exactly the reads that carry signal.
-static inline bool read_has_signal(const std::shared_ptr<read_state_t> &rs) {
+static inline bool read_has_signal(const read_state_t *rs) {
     return rs->rec->len_raw_signal > 0;
 }
 
 // read raw recs, single thread
-static void loader_stage(pipeline_ctx_t *ctx) {
+static void *loader_stage(void *arg) {
+    pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
     core_t *core = ctx->core;
 
     while (true) {
@@ -166,15 +189,18 @@ static void loader_stage(pipeline_ctx_t *ctx) {
     }
 
     ctx->read_q->close();
+
+    return NULL;
 }
 
 // parse the record, then scale the signal and split it into overlapping chunks
-static void preprocess_stage(pipeline_ctx_t *ctx) {
+static void *preprocess_stage(void *arg) {
+    pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
     core_t *core = ctx->core;
     raw_rec_t raw;
 
     while (ctx->read_q->pop(raw)) {
-        auto rs = std::make_shared<read_state_t>();
+        read_state_t *rs = new read_state_t();
         // slow5_decode may realloc raw.mem (and overwrite raw.bytes); it does not free it.
         if (slow5_decode(&raw.mem, &raw.bytes, &rs->rec, core->sp) < 0) {
             ERROR("%s", "Error decoding a SLOW5 record");
@@ -189,7 +215,7 @@ static void preprocess_stage(pipeline_ctx_t *ctx) {
 
         if (rs->chunks.empty()) {
             // zero-length signal: nothing to basecall, straight to output (nothing emitted)
-            ctx->stitch_q->push(std::move(rs));
+            ctx->stitch_q->push(rs);
             continue;
         }
 
@@ -202,11 +228,15 @@ static void preprocess_stage(pipeline_ctx_t *ctx) {
             ctx->chunk_q->push(item);
         }
     }
+
+    return NULL;
 }
 
 // pack chunks to gpu_batch_size across reads and run inference+decode
 // one thread per GPU
-static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
+static void *runner_stage(void *arg) {
+    pipeline_ctx_t *ctx = ((runner_arg_t *)arg)->ctx;
+    const int runner_idx = ((runner_arg_t *)arg)->runner_idx;
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
 
@@ -236,13 +266,16 @@ static void runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
         if (buf.size() == gpu_batch) flush();
     }
     flush();
+
+    return NULL;
 }
 
 // stitch reads
-static void stitch_stage(pipeline_ctx_t *ctx) {
+static void *stitch_stage(void *arg) {
+    pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
     core_t *core = ctx->core;
     const bool rna = is_rna(core->model_config->sample_type);
-    std::shared_ptr<read_state_t> rs;
+    read_state_t *rs = NULL;
 
     while (ctx->stitch_q->pop(rs)) {
         if (!rs->chunks.empty()) {
@@ -256,24 +289,27 @@ static void stitch_stage(pipeline_ctx_t *ctx) {
 
         // queue mod or out
         if (ctx->mod && read_has_signal(rs)) {
-            ctx->mod_pre_q->push(std::move(rs));
+            ctx->mod_pre_q->push(rs);
         } else {
-            ctx->out_q->push(std::move(rs));
+            ctx->out_q->push(rs);
         }
     }
+
+    return NULL;
 }
 
 // mod preproccess: build the seq->signal mapping and modbase chunks; emit one item per mod chunk.
-static void mod_preprocess_stage(pipeline_ctx_t *ctx) {
+static void *mod_preprocess_stage(void *arg) {
+    pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
     core_t *core = ctx->core;
-    std::shared_ptr<read_state_t> rs;
+    read_state_t *rs = NULL;
 
     while (ctx->mod_pre_q->pop(rs)) {
         preprocess_modbase(core, rs->rec, rs->read_dat, rs->sequence.c_str(), rs->moves, rs->mod_chunks);
 
         if (rs->mod_chunks.empty()) {
             // no motif hits: still postprocess to emit (empty) MM/ML tags, matching the batch path
-            ctx->mod_post_q->push(std::move(rs));
+            ctx->mod_post_q->push(rs);
             continue;
         }
 
@@ -286,10 +322,14 @@ static void mod_preprocess_stage(pipeline_ctx_t *ctx) {
             ctx->mod_chunk_q->push(item);
         }
     }
+
+    return NULL;
 }
 
 // mod runner: pack mod chunks to mod_gpu_batch_size across reads and run the modbase model
-static void mod_runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
+static void *mod_runner_stage(void *arg) {
+    pipeline_ctx_t *ctx = ((runner_arg_t *)arg)->ctx;
+    const int runner_idx = ((runner_arg_t *)arg)->runner_idx;
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.mod_gpu_batch_size;
 
@@ -319,24 +359,30 @@ static void mod_runner_stage(pipeline_ctx_t *ctx, int runner_idx) {
         if (buf.size() == gpu_batch) flush();
     }
     flush();
+
+    return NULL;
 }
 
 // mod postprocess: turn base_mod_probs into MM/ML tags
-static void mod_postprocess_stage(pipeline_ctx_t *ctx) {
+static void *mod_postprocess_stage(void *arg) {
+    pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
     core_t *core = ctx->core;
-    std::shared_ptr<read_state_t> rs;
+    read_state_t *rs = NULL;
 
     while (ctx->mod_post_q->pop(rs)) {
         postprocess_modbase(core, rs->read_dat, rs->mod_string, rs->mod_prob);
-        ctx->out_q->push(std::move(rs));
+        ctx->out_q->push(rs);
     }
+
+    return NULL;
 }
 
 // write output, single thread
-static void writer_stage(pipeline_ctx_t *ctx) {
+static void *writer_stage(void *arg) {
+    pipeline_ctx_t *ctx = (pipeline_ctx_t *)arg;
     core_t *core = ctx->core;
     const bool sam = (core->opt.flag & SLORADO_SAM) != 0;
-    std::shared_ptr<read_state_t> rs;
+    read_state_t *rs = NULL;
     uint64_t n = 0;
 
     while (ctx->out_q->pop(rs)) {
@@ -356,9 +402,12 @@ static void writer_stage(pipeline_ctx_t *ctx) {
         }
         slow5_rec_free(rs->rec);
         rs->rec = NULL;
+        delete rs;
     }
 
     ctx->total_reads = n;
+
+    return NULL;
 }
 
 void run_pipeline(core_t *core) {
@@ -387,11 +436,11 @@ void run_pipeline(core_t *core) {
 
     BoundedQueue<raw_rec_t> read_q(read_cap);
     BoundedQueue<chunk_item_t> chunk_q(chunk_cap);
-    BoundedQueue<std::shared_ptr<read_state_t>> stitch_q(stitch_cap);
-    BoundedQueue<std::shared_ptr<read_state_t>> mod_pre_q(stitch_cap);
+    BoundedQueue<read_state_t *> stitch_q(stitch_cap);
+    BoundedQueue<read_state_t *> mod_pre_q(stitch_cap);
     BoundedQueue<mod_chunk_item_t> mod_chunk_q(mod_chunk_cap);
-    BoundedQueue<std::shared_ptr<read_state_t>> mod_post_q(out_cap);
-    BoundedQueue<std::shared_ptr<read_state_t>> out_q(out_cap);
+    BoundedQueue<read_state_t *> mod_post_q(out_cap);
+    BoundedQueue<read_state_t *> out_q(out_cap);
 
     pipeline_ctx_t ctx;
     ctx.core = core;
@@ -415,43 +464,49 @@ void run_pipeline(core_t *core) {
                 __func__, n_pre, n_runners, n_stitch);
     }
 
-    std::thread writer(writer_stage, &ctx);
+    // The runner args must outlive their threads; they are joined below, before this returns.
+    std::vector<runner_arg_t> runner_args(n_runners);
+    std::vector<runner_arg_t> mod_runner_args(n_mod_runners);
+    for (int i = 0; i < n_runners; ++i) { runner_args[i].ctx = &ctx; runner_args[i].runner_idx = i; }
+    for (int i = 0; i < n_mod_runners; ++i) { mod_runner_args[i].ctx = &ctx; mod_runner_args[i].runner_idx = i; }
 
-    std::vector<std::thread> mod_postproc, mod_runners, mod_preproc;
+    pthread_t loader, writer;
+    std::vector<pthread_t> preproc(n_pre), runners(n_runners), stitch(n_stitch);
+    std::vector<pthread_t> mod_preproc, mod_runners, mod_postproc;
+
+    spawn(&writer, writer_stage, &ctx);
+
     if (mod) {
-        for (int i = 0; i < n_stitch; ++i) mod_postproc.emplace_back(mod_postprocess_stage, &ctx);
-        for (int i = 0; i < n_mod_runners; ++i) mod_runners.emplace_back(mod_runner_stage, &ctx, i);
-        for (int i = 0; i < n_pre; ++i) mod_preproc.emplace_back(mod_preprocess_stage, &ctx);
+        mod_postproc.resize(n_stitch);
+        mod_runners.resize(n_mod_runners);
+        mod_preproc.resize(n_pre);
+        for (int i = 0; i < n_stitch; ++i) spawn(&mod_postproc[i], mod_postprocess_stage, &ctx);
+        for (int i = 0; i < n_mod_runners; ++i) spawn(&mod_runners[i], mod_runner_stage, &mod_runner_args[i]);
+        for (int i = 0; i < n_pre; ++i) spawn(&mod_preproc[i], mod_preprocess_stage, &ctx);
     }
 
-    std::vector<std::thread> stitch;
-    for (int i = 0; i < n_stitch; ++i) stitch.emplace_back(stitch_stage, &ctx);
-
-    std::vector<std::thread> runners;
-    for (int i = 0; i < n_runners; ++i) runners.emplace_back(runner_stage, &ctx, i);
-
-    std::vector<std::thread> preproc;
-    for (int i = 0; i < n_pre; ++i) preproc.emplace_back(preprocess_stage, &ctx);
-
-    std::thread loader(loader_stage, &ctx);
+    for (int i = 0; i < n_stitch; ++i) spawn(&stitch[i], stitch_stage, &ctx);
+    for (int i = 0; i < n_runners; ++i) spawn(&runners[i], runner_stage, &runner_args[i]);
+    for (int i = 0; i < n_pre; ++i) spawn(&preproc[i], preprocess_stage, &ctx);
+    spawn(&loader, loader_stage, &ctx);
 
     // closing each queue only after its producers are done preserves full pipeline overlap during steady state
-    loader.join();
-    for (auto &t : preproc) t.join();
+    pthread_join(loader, NULL);
+    join_all(preproc);
     chunk_q.close();
-    for (auto &t : runners) t.join();
+    join_all(runners);
     stitch_q.close();
-    for (auto &t : stitch) t.join();
+    join_all(stitch);
     if (mod) {
         mod_pre_q.close();
-        for (auto &t : mod_preproc) t.join();
+        join_all(mod_preproc);
         mod_chunk_q.close();
-        for (auto &t : mod_runners) t.join();
+        join_all(mod_runners);
         mod_post_q.close();
-        for (auto &t : mod_postproc) t.join();
+        join_all(mod_postproc);
     }
     out_q.close();
-    writer.join();
+    pthread_join(writer, NULL);
 
     core->total_reads = (int64_t)ctx.total_reads;
     core->sum_bytes = (int64_t)ctx.total_bytes;
