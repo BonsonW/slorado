@@ -64,18 +64,13 @@ typedef struct {
     size_t bytes;
 } raw_rec_t;
 
-// One chunk of a read queued for the runner stage. Borrows the read; the read outlives every one
-// of its chunk items by construction (it only advances once chunks_remaining hits zero).
+// One chunk of a read queued for a runner stage (basecall or modbase -- the payload is the same).
+// Borrows the read; the read outlives every one of its chunk items by construction (it only
+// advances once chunks_remaining hits zero).
 typedef struct {
     read_state_t *read;
     int chunk_idx;
 } chunk_item_t;
-
-// One modbase chunk of a read queued for the mod runner stage.
-typedef struct {
-    read_state_t *read;
-    int chunk_idx;
-} mod_chunk_item_t;
 
 // Thread-safe bounded blocking queue (MPMC). push() blocks while full; pop()
 // blocks while empty and returns false once the queue is drained AND closed.
@@ -88,7 +83,7 @@ public:
         std::unique_lock<std::mutex> lock(mtx_);
         not_full_.wait(lock, [this] { return q_.size() < capacity_ || closed_; });
         if (closed_) return;  // dropped on shutdown; upstream should not push after close
-        q_.push_back(std::move(item));
+        q_.push_back(item);
         lock.unlock();
         not_empty_.notify_one();
     }
@@ -98,7 +93,7 @@ public:
         std::unique_lock<std::mutex> lock(mtx_);
         not_empty_.wait(lock, [this] { return !q_.empty() || closed_; });
         if (q_.empty()) return false;  // closed and drained
-        out = std::move(q_.front());
+        out = q_.front();
         q_.pop_front();
         lock.unlock();
         not_full_.notify_one();
@@ -135,7 +130,7 @@ typedef struct {
 
     // modbase stages (only used when mod)
     BoundedQueue<read_state_t *> *mod_pre_q;
-    BoundedQueue<mod_chunk_item_t> *mod_chunk_q;
+    BoundedQueue<chunk_item_t> *mod_chunk_q;
     BoundedQueue<read_state_t *> *mod_post_q;
     BoundedQueue<read_state_t *> *out_q;
 
@@ -233,6 +228,25 @@ static void *preprocess_stage(void *arg) {
 }
 
 // pack chunks to gpu_batch_size across reads and run inference+decode
+// Run the packed batch, then release any read whose last chunk just completed. Empties buf.
+static void runner_flush(pipeline_ctx_t *ctx, std::vector<chunk_item_t> &buf, int runner_idx) {
+    if (buf.empty()) return;
+
+    std::vector<basecall_chunk_t *> ptrs;
+    ptrs.reserve(buf.size());
+    for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->chunks[buf[i].chunk_idx]);
+
+    basecall_chunks(ctx->core, runner_idx, ptrs);
+
+    for (size_t i = 0; i < buf.size(); ++i) {
+        // last chunk of this read done -> hand off to stitching
+        if (buf[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            ctx->stitch_q->push(buf[i].read);
+        }
+    }
+    buf.clear();
+}
+
 // one thread per GPU
 static void *runner_stage(void *arg) {
     pipeline_ctx_t *ctx = ((runner_arg_t *)arg)->ctx;
@@ -243,29 +257,12 @@ static void *runner_stage(void *arg) {
     std::vector<chunk_item_t> buf;
     buf.reserve(gpu_batch);
 
-    auto flush = [&]() {
-        if (buf.empty()) return;
-        std::vector<basecall_chunk_t *> ptrs;
-        ptrs.reserve(buf.size());
-        for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->chunks[buf[i].chunk_idx]);
-
-        basecall_chunks(core, runner_idx, ptrs);
-
-        for (size_t i = 0; i < buf.size(); ++i) {
-            // last chunk of this read done -> hand off to stitching
-            if (buf[i].read->chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                ctx->stitch_q->push(buf[i].read);
-            }
-        }
-        buf.clear();
-    };
-
     chunk_item_t item;
     while (ctx->chunk_q->pop(item)) {
-        buf.push_back(std::move(item));
-        if (buf.size() == gpu_batch) flush();
+        buf.push_back(item);
+        if (buf.size() == gpu_batch) runner_flush(ctx, buf, runner_idx);
     }
-    flush();
+    runner_flush(ctx, buf, runner_idx);
 
     return NULL;
 }
@@ -316,7 +313,7 @@ static void *mod_preprocess_stage(void *arg) {
         rs->mod_chunks_remaining.store((int)rs->mod_chunks.size(), std::memory_order_relaxed);
         int n = (int)rs->mod_chunks.size();
         for (int c = 0; c < n; ++c) {
-            mod_chunk_item_t item;
+            chunk_item_t item;
             item.read = rs;
             item.chunk_idx = c;
             ctx->mod_chunk_q->push(item);
@@ -327,38 +324,40 @@ static void *mod_preprocess_stage(void *arg) {
 }
 
 // mod runner: pack mod chunks to mod_gpu_batch_size across reads and run the modbase model
+// As runner_flush, but for the modbase model. Empties buf.
+static void mod_runner_flush(pipeline_ctx_t *ctx, std::vector<chunk_item_t> &buf, int runner_idx) {
+    if (buf.empty()) return;
+
+    std::vector<mod_chunk_t *> ptrs;
+    ptrs.reserve(buf.size());
+    for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->mod_chunks[buf[i].chunk_idx]);
+
+    mod_basecall_chunks(ctx->core, runner_idx, ptrs);
+
+    for (size_t i = 0; i < buf.size(); ++i) {
+        // last mod chunk of this read done -> hand off to mod postprocess
+        if (buf[i].read->mod_chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            ctx->mod_post_q->push(buf[i].read);
+        }
+    }
+    buf.clear();
+}
+
 static void *mod_runner_stage(void *arg) {
     pipeline_ctx_t *ctx = ((runner_arg_t *)arg)->ctx;
     const int runner_idx = ((runner_arg_t *)arg)->runner_idx;
     core_t *core = ctx->core;
     const size_t gpu_batch = (size_t)core->opt.mod_gpu_batch_size;
 
-    std::vector<mod_chunk_item_t> buf;
+    std::vector<chunk_item_t> buf;
     buf.reserve(gpu_batch);
 
-    auto flush = [&]() {
-        if (buf.empty()) return;
-        std::vector<mod_chunk_t *> ptrs;
-        ptrs.reserve(buf.size());
-        for (size_t i = 0; i < buf.size(); ++i) ptrs.push_back(&buf[i].read->mod_chunks[buf[i].chunk_idx]);
-
-        mod_basecall_chunks(core, runner_idx, ptrs);
-
-        for (size_t i = 0; i < buf.size(); ++i) {
-            // last mod chunk of this read done -> hand off to mod postprocess
-            if (buf[i].read->mod_chunks_remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                ctx->mod_post_q->push(buf[i].read);
-            }
-        }
-        buf.clear();
-    };
-
-    mod_chunk_item_t item;
+    chunk_item_t item;
     while (ctx->mod_chunk_q->pop(item)) {
-        buf.push_back(std::move(item));
-        if (buf.size() == gpu_batch) flush();
+        buf.push_back(item);
+        if (buf.size() == gpu_batch) mod_runner_flush(ctx, buf, runner_idx);
     }
-    flush();
+    mod_runner_flush(ctx, buf, runner_idx);
 
     return NULL;
 }
@@ -428,8 +427,9 @@ void run_pipeline(core_t *core) {
 
     const size_t gpu_batch = (size_t)core->opt.gpu_batch_size;
     const size_t mod_gpu_batch = (size_t)core->opt.mod_gpu_batch_size;
-    const size_t chunk_cap = std::max<size_t>(gpu_batch * 4 * n_runners, gpu_batch * 4);
-    const size_t mod_chunk_cap = std::max<size_t>(mod_gpu_batch * 4 * std::max(n_mod_runners, 1), mod_gpu_batch * 4);
+    // enough queued that every runner can fill a batch and still have slack for a slow producer
+    const size_t chunk_cap = gpu_batch * 4 * n_runners;
+    const size_t mod_chunk_cap = mod_gpu_batch * 4 * std::max(n_mod_runners, 1);
     const size_t read_cap = std::max<size_t>(256, (size_t)n_pre * 8);
     const size_t stitch_cap = 256;
     const size_t out_cap = 256;
@@ -438,7 +438,7 @@ void run_pipeline(core_t *core) {
     BoundedQueue<chunk_item_t> chunk_q(chunk_cap);
     BoundedQueue<read_state_t *> stitch_q(stitch_cap);
     BoundedQueue<read_state_t *> mod_pre_q(stitch_cap);
-    BoundedQueue<mod_chunk_item_t> mod_chunk_q(mod_chunk_cap);
+    BoundedQueue<chunk_item_t> mod_chunk_q(mod_chunk_cap);
     BoundedQueue<read_state_t *> mod_post_q(out_cap);
     BoundedQueue<read_state_t *> out_q(out_cap);
 
