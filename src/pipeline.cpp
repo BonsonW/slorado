@@ -119,7 +119,7 @@ private:
     bool closed_ = false;
 };
 
-// Shared state passed to every stage.
+// shared context
 typedef struct {
     core_t *core;
     bool mod;
@@ -128,7 +128,7 @@ typedef struct {
     BoundedQueue<chunk_item_t> *chunk_q;
     BoundedQueue<read_state_t *> *stitch_q;
 
-    // modbase stages (only used when mod)
+    // modbase stages
     BoundedQueue<read_state_t *> *mod_pre_q;
     BoundedQueue<chunk_item_t> *mod_chunk_q;
     BoundedQueue<read_state_t *> *mod_post_q;
@@ -158,11 +158,6 @@ static void join_all(std::vector<pthread_t> &tids) {
     for (size_t i = 0; i < tids.size(); ++i) {
         pthread_join(tids[i], NULL);
     }
-}
-
-// The batch path processes (and emits) exactly the reads that carry signal.
-static inline bool read_has_signal(const read_state_t *rs) {
-    return rs->rec->len_raw_signal > 0;
 }
 
 // read raw recs, single thread
@@ -203,7 +198,7 @@ static void *preprocess_stage(void *arg) {
         }
         free(raw.mem);
 
-        if (read_has_signal(rs)) {
+        if (rs->rec->len_raw_signal > 0) {
             rs->read_dat = new read_dat_t;
             preprocess_signal(core, rs->rec, rs->read_dat, rs->chunks);
         }
@@ -228,7 +223,7 @@ static void *preprocess_stage(void *arg) {
 }
 
 // pack chunks to gpu_batch_size across reads and run inference+decode
-// Run the packed batch, then release any read whose last chunk just completed. Empties buf.
+// run the packed batch, then release any read whose last chunk just completed
 static void runner_flush(pipeline_ctx_t *ctx, std::vector<chunk_item_t> &buf, int runner_idx) {
     if (buf.empty()) return;
 
@@ -276,8 +271,7 @@ static void *stitch_stage(void *arg) {
 
     while (ctx->stitch_q->pop(rs)) {
         if (!rs->chunks.empty()) {
-            stitch_chunks_vec(rs->chunks, rs->sequence, rs->qstring, rs->moves,
-                              rs->rec->len_raw_signal, (int)core->model_stride);
+            stitch_chunks_vec(rs->chunks, rs->sequence, rs->qstring, rs->moves, rs->rec->len_raw_signal, (int)core->model_stride);
             if (rna) {
                 std::reverse(rs->sequence.begin(), rs->sequence.end());
                 std::reverse(rs->qstring.begin(), rs->qstring.end());
@@ -285,7 +279,7 @@ static void *stitch_stage(void *arg) {
         }
 
         // queue mod or out
-        if (ctx->mod && read_has_signal(rs)) {
+        if (ctx->mod && rs->rec->len_raw_signal > 0) {
             ctx->mod_pre_q->push(rs);
         } else {
             ctx->out_q->push(rs);
@@ -385,7 +379,7 @@ static void *writer_stage(void *arg) {
     uint64_t n = 0;
 
     while (ctx->out_q->pop(rs)) {
-        if (read_has_signal(rs)) {
+        if (rs->rec->len_raw_signal > 0) {
             if (sam) {
                 write_to_file_sam(core->opt.out, rs->sequence.c_str(), rs->qstring.c_str(), rs->rec->read_id, rs->mod_string.c_str(), rs->mod_prob);
             } else {
