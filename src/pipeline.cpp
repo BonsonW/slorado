@@ -471,9 +471,6 @@ void run_pipeline(core_t *core) {
     spawn(&writer, writer_stage, &ctx);
 
     if (mod) {
-        mod_postproc.resize(n_stitch);
-        mod_runners.resize(n_mod_runners);
-        mod_preproc.resize(n_pre);
         for (int i = 0; i < n_stitch; ++i) spawn(&mod_postproc[i], mod_postprocess_stage, &ctx);
         for (int i = 0; i < n_mod_runners; ++i) spawn(&mod_runners[i], mod_runner_stage, &mod_runner_args[i]);
         for (int i = 0; i < n_pre; ++i) spawn(&mod_preproc[i], mod_preprocess_stage, &ctx);
