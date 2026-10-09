@@ -89,8 +89,8 @@ CHR22="${DATA_DIR}/PGXXXX230339_reads_chr22.blow5"
 CHR22_METH_BED=test/bisulphite_chr22.tsv
 
 # dorado m6A outputs on SUBSUBSAMPLE_RNA, used as the truth set for RNA mod freq
-DORADO_HAC_RNA_V6_M6A="${DORADO_HAC_RNA_V6_M6A:-${DATA_DIR}/dorado_hac_v6_m6a.sam}"
-DORADO_SUP_RNA_V6_M6A="${DORADO_SUP_RNA_V6_M6A:-${DATA_DIR}/dorado_sup_v6_m6a.sam}"
+DORADO_HAC_RNA_V6_M6A="${DORADO_HAC_RNA_V6_M6A:-test/dorado_hac_v6_m6a.sam}"
+DORADO_SUP_RNA_V6_M6A="${DORADO_SUP_RNA_V6_M6A:-test/dorado_sup_v6_m6a.sam}"
 
 SINGLE_READ="test/PGXXXX230339/reads_1.blow5"
 
