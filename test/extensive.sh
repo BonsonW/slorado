@@ -48,9 +48,11 @@ SUP_RNA="rna004_130bps_sup@v5.1.0"
 
 HAC_V6="dna_r10.4.1_e8.2_400bps_hac@v6.0.0"
 HAC_RNA_V6="rna004_hac@v6.0.0"
+SUP_RNA_V6="rna004_sup@v6.0.0"
 
 # mod
 METH=5mCG_5hmCG@v3
+M6A=m6A_DRACH@v1
 
 RUN_500K=0 # run 500k DNA dataset for HAC
 SUBSAMPLE="/data/slow5-testdata/hg2_prom_lsk114_5khz_subsample/PGXXXX230339_reads_500k.blow5"
@@ -85,6 +87,10 @@ SUBSUBSAMPLE_RNA="${DATA_DIR}/PNXRXX240011_reads_20k.blow5"
 
 CHR22="${DATA_DIR}/PGXXXX230339_reads_chr22.blow5"
 CHR22_METH_BED=test/bisulphite_chr22.tsv
+
+# dorado m6A outputs on SUBSUBSAMPLE_RNA, used as the truth set for RNA mod freq
+DORADO_HAC_RNA_V6_M6A="${DORADO_HAC_RNA_V6_M6A:-${DATA_DIR}/dorado_hac_v6_m6a.sam}"
+DORADO_SUP_RNA_V6_M6A="${DORADO_SUP_RNA_V6_M6A:-${DATA_DIR}/dorado_sup_v6_m6a.sam}"
 
 SINGLE_READ="test/PGXXXX230339/reads_1.blow5"
 
@@ -149,6 +155,12 @@ check_accuracy() {
             return 0
         fi
         ;;
+    $SUP_RNA_V6 )
+        if (( $(echo "$2 >= 0.97" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
     *)
         die "Invalid model provided"
         ;;
@@ -167,6 +179,18 @@ check_corr() {
         ;;
     $SUP )
         if (( $(echo "$2 >= 0.91" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    $HAC_RNA_V6 )
+        if (( $(echo "$2 >= 0.95" | bc -l) ));
+        then
+            return 0
+        fi
+        ;;
+    $SUP_RNA_V6 )
+        if (( $(echo "$2 >= 0.95" | bc -l) ));
         then
             return 0
         fi
@@ -356,9 +380,20 @@ check_acc_rna() {
     check_accuracy $1 $MEDIAN
 }
 
+# usage: get_mod_freq <unmapped sam> <minimap2 ref> <fasta ref> <mod code> <out bedmethyl>
+get_mod_freq() {
+    $SAMTOOLS fastq -TMM,ML $1 | $MINIMAP2 -ax map-ont -y -Y --secondary=no -t $NTHREADS $2 - > tmp.mapped.sam || die "minimap2 failed"
+    $SAMTOOLS sort -@ $NTHREADS tmp.mapped.sam -o tmp.mapped.bam || die "samtools sort failed"
+    $SAMTOOLS index tmp.mapped.bam || die "samtools index failed"
+    $MINIMOD freq -t $NTHREADS $3 tmp.mapped.bam -b -c $4 > $5 || die "minimod freq failed"
+}
+
+# usage: check_corr_mod <model> <truth tsv/bedmethyl>
+# compares tmp.mods.bedmethyl against the truth set
 check_corr_mod() {
-    ./scripts/get_meth_freq.sh $REF_DNA_FA tmp.sam > tmp.mm.bedmethyl || die "Getting methylation frequency failed"
-    corr=$(python3 scripts/corr_meth.py $CHR22_METH_BED tmp.mm.bedmethyl)
+    python3 test/scripts/compare_methylation_ont.py tmp.mods.bedmethyl $2 > tmp.cmp.tsv || die "Comparing mod freq failed"
+    corr=$(tail -n +2 tmp.cmp.tsv | $DATAMASH ppearson 3:5)
+    echo "mod freq correlation: $corr"
     check_corr $1 $corr
 }
 
@@ -416,6 +451,8 @@ test -e $REF_RNA || die "missing RNA reference genome $REF_RNA"
 test -e $SUBSUBSAMPLE || die "missing DNA BLOW5 subsubsample $SUBSUBSAMPLE"
 test -e $SUBSUBSAMPLE_RNA || die "missing RNA BLOW5 subsubsample $SUBSUBSAMPLE_RNA"
 test -e $CHR22 || die "missing chr22 BLOW5 subsubsample $CHR22"
+test -e $DORADO_HAC_RNA_V6_M6A || die "missing dorado HAC RNA m6A output $DORADO_HAC_RNA_V6_M6A"
+test -e $DORADO_SUP_RNA_V6_M6A || die "missing dorado SUP RNA m6A output $DORADO_SUP_RNA_V6_M6A"
 
 if [ $RUN_500K -eq 1 ]; then
     test -e $SUBSAMPLE || die "missing DNA BLOW5 subsample"
@@ -435,6 +472,10 @@ test -d models/${SUP}_${METH} || download_model ${SUP}_${METH}
 
 test -d models/$HAC_V6 || download_model $HAC_V6
 test -d models/$HAC_RNA_V6 || download_model $HAC_RNA_V6
+test -d models/$SUP_RNA_V6 || download_model $SUP_RNA_V6
+
+test -d models/${HAC_RNA_V6}_${M6A} || download_model ${HAC_RNA_V6}_${M6A}
+test -d models/${SUP_RNA_V6}_${M6A} || download_model ${SUP_RNA_V6}_${M6A}
 
 # memory check with asan if building from source
 if [ "$SLORADO_MODE" = "build" ]; then
@@ -534,16 +575,41 @@ check_acc_rna $SUP_RNA
 echo ""
 echo "********************************************************************"
 
+echo "GPU - SUP RNA v6.0.0 model - 20k reads"
+ex $SLORADO basecaller models/$SUP_RNA_V6 $SUBSUBSAMPLE_RNA -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG -o tmp.fastq || die "Running the tool failed"
+check_acc_rna $SUP_RNA_V6
+echo ""
+echo "********************************************************************"
+
 # correlation check modified basecalling with 5mCG_5hmCG
 echo "GPU - HAC meth model - chr22"
 ex $SLORADO basecaller models/$HAC $CHR22 --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG -o tmp.sam || die "Running the tool failed"
-check_corr_mod $HAC
+get_mod_freq tmp.sam $REF_DNA $REF_DNA_FA m tmp.mods.bedmethyl
+check_corr_mod $HAC $CHR22_METH_BED
 echo ""
 echo "********************************************************************"
 
 echo "GPU - SUP meth model - chr22"
 ex $SLORADO basecaller models/$SUP $CHR22 --mod $METH -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG -o tmp.sam || die "Running the tool failed"
-check_corr_mod $SUP
+get_mod_freq tmp.sam $REF_DNA $REF_DNA_FA m tmp.mods.bedmethyl
+check_corr_mod $SUP $CHR22_METH_BED
+echo ""
+echo "********************************************************************"
+
+# correlation check modified basecalling with m6A_DRACH against dorado
+echo "GPU - HAC RNA v6.0.0 m6A model - 20k reads"
+ex $SLORADO basecaller models/$HAC_RNA_V6 $SUBSUBSAMPLE_RNA --mod $M6A -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $HAC_BATCH_ARG -o tmp.sam || die "Running the tool failed"
+get_mod_freq tmp.sam $REF_RNA $REF_RNA a tmp.mods.bedmethyl
+get_mod_freq $DORADO_HAC_RNA_V6_M6A $REF_RNA $REF_RNA a tmp.dorado.bedmethyl
+check_corr_mod $HAC_RNA_V6 tmp.dorado.bedmethyl
+echo ""
+echo "********************************************************************"
+
+echo "GPU - SUP RNA v6.0.0 m6A model - 20k reads"
+ex $SLORADO basecaller models/$SUP_RNA_V6 $SUBSUBSAMPLE_RNA --mod $M6A -xcuda:all -t $NTHREADS -B $READ_MEM $READ_BATCH_ARG $CHUNKSIZE_ARG $SUP_BATCH_ARG -o tmp.sam || die "Running the tool failed"
+get_mod_freq tmp.sam $REF_RNA $REF_RNA a tmp.mods.bedmethyl
+get_mod_freq $DORADO_SUP_RNA_V6_M6A $REF_RNA $REF_RNA a tmp.dorado.bedmethyl
+check_corr_mod $SUP_RNA_V6 tmp.dorado.bedmethyl
 echo ""
 echo "********************************************************************"
 
