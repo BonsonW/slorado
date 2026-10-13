@@ -95,6 +95,8 @@ static bool trial_fits(runner_t *runner, core_t *core, int est_chunk_size, int n
             reserve = torch::empty({(int64_t)reserve_bytes},
                 torch::TensorOptions().dtype(torch::kUInt8).device(runner->tensor_opts.device()));
         }
+        CACHING_ALLOCATOR_NS::resetPeakStats(device_idx);
+        const size_t base_bytes = (size_t)CACHING_ALLOCATOR_NS::getDeviceStats(device_idx).allocated_bytes[0].current;
         if (modbase) {
             const int channels = NUM_BASES * core->modbase_config->general.kmer_len;
             const int64_t seq_chunk = (int64_t)est_chunk_size / core->modbase_config->general.stride_ratio();
@@ -114,6 +116,7 @@ static bool trial_fits(runner_t *runner, core_t *core, int est_chunk_size, int n
             out.transpose(0, 1).contiguous();
         }
         torch::cuda::synchronize(device_idx);
+        runner->trial_peak_bytes = (size_t)CACHING_ALLOCATOR_NS::getDeviceStats(device_idx).allocated_bytes[0].peak - base_bytes;
     } catch (const std::exception &) {
         ok = false;
     }
@@ -189,7 +192,9 @@ void init_runner(
     // Load model first so we can query remaining GPU memory for auto batch size
     if (modbase == true) {
         LOG_TRACE("%s", "loading modbase model");
-        runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, batch_size);
+        // init_runners may have preloaded the modbase weights before the basecall batch search
+        if (runner->module.is_empty())
+            runner->module = load_modbase_model(*core->modbase_config, runner->tensor_opts, batch_size);
     } else {
         if (core->model_config->tx != NULL) {
             LOG_TRACE("%s", "loading tx model");
@@ -240,8 +245,12 @@ void init_runner(
 
         int chosen = 0;
         for (int n = hi; n >= 1; n /= 2) {
-            const size_t gpubuf_bytes = modbase ? 0 : openfish_gpubuf_size(T, n, core->model_config->state_len);
-            if (trial_fits(runner, core, est_chunk_size, n, gpubuf_bytes + headroom, modbase)) {
+            // basecall: the openfish decode buffer allocated below.
+            // modbase: in the async pipeline the basecall runner on this device runs concurrently,
+            // so leave room for its forward pass (its gpubuf is already allocated and counted).
+            const size_t extra_bytes = !modbase ? openfish_gpubuf_size(T, n, core->model_config->state_len)
+                : (core->opt.flag & SLORADO_ASYNC) ? (*core->runners)[runner_idx]->trial_peak_bytes : 0;
+            if (trial_fits(runner, core, est_chunk_size, n, extra_bytes + headroom, modbase)) {
                 chosen = n;
                 break;
             }
@@ -261,7 +270,8 @@ void init_runner(
     }
 
     // Allocate openfish GPU buffer and input tensor with the resolved batch size
-    // (the decode buffer is basecall-only; the modbase path does not decode with openfish)
+    // (only basecall runners decode with openfish; modbase runners consume the moves already
+    //  produced by the basecall runner, so they need no decode buffer)
     if (device != "cpu" && !modbase) {
 #ifdef USE_GPU
         c10::DeviceGuard device_guard(runner->tensor_opts.device());
@@ -329,6 +339,13 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
         int runner_idx = 0;
         int mod_runner_idx = 0;
         for (auto device: devices) {
+            // load the modbase weights first so the basecall batch search sees them resident
+            runner_t *mod_runner = NULL;
+            if (core->modbase_config != NULL) {
+                mod_runner = new runner_t();
+                mod_runner->module = load_modbase_model(*core->modbase_config, torch::TensorOptions().dtype(torch::kF16).device(c10::kCUDA, device[device.size()-1] - '0'), 0);
+            }
+
             core->runner_stats->push_back((runner_stat_t *)malloc(sizeof(runner_stat_t)));
             init_runner_stat((*core->runner_stats).back());
             core->runners->push_back(new runner_t());
@@ -338,8 +355,8 @@ void init_runners(core_t* core, opt_t *opt, char *model) {
 
             if (core->modbase_config != NULL) {
                 LOG_DEBUG("adding mod_base runner for device %s", device.c_str());
-                core->mod_runners->push_back(new runner_t());
-                init_runner(core, (*core->mod_runners).back(), model, device, opt->mod_gpu_batch_size, torch::kF16, mod_runner_idx++, true);
+                core->mod_runners->push_back(mod_runner);
+                init_runner(core, mod_runner, model, device, opt->mod_gpu_batch_size, torch::kF16, mod_runner_idx++, true);
             }
         }
 #else

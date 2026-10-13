@@ -35,6 +35,7 @@ struct runner {
 #ifdef USE_GPU
     int64_t device_idx;
     openfish_gpubuf_t *gpubuf;
+    size_t trial_peak_bytes = 0; // transient forward-pass memory at the auto-detected batch size
 #endif
 
     // modbase stuff
