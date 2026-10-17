@@ -21,7 +21,6 @@ download_model () {
 download_model dna_r10.4.1_e8.2_400bps_fast@v5.0.0
 download_model dna_r10.4.1_e8.2_400bps_hac@v5.0.0
 download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0
-download_model dna_r10.4.1_e8.2_400bps_hac@v6.0.0
 
 download_model dna_r10.4.1_e8.2_400bps_hac@v5.0.0_5mCG_5hmCG@v3
 download_model dna_r10.4.1_e8.2_400bps_sup@v5.0.0_5mCG_5hmCG@v3
@@ -30,7 +29,5 @@ download_model rna004_130bps_fast@v5.1.0
 download_model rna004_130bps_hac@v5.1.0
 download_model rna004_130bps_sup@v5.1.0
 
-download_model rna004_hac@v6.0.0
-download_model rna004_hac@v6.0.0_m6A_DRACH@v1
 download_model rna004_sup@v6.0.0
 download_model rna004_sup@v6.0.0_m6A_DRACH@v1
