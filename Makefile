@@ -175,4 +175,3 @@ test: $(BINARY)
 mem: $(BINARY)
 	./test/test.sh mem
 
--include $(OBJ:.o=.d)
