@@ -95,7 +95,7 @@ static inline void print_help_msg(FILE *fp_help, opt_t opt){
     fprintf(fp_help, "  -h                          shows help message and exits\n");
     fprintf(fp_help, "  --flash=yes|no              use flash attention for better performance [%s]\n", (opt.flag & SLORADO_FLASH) ? "yes" : "no");
     fprintf(fp_help, "  --mod STR                   detect modified bases (5mCG_5hmCG@v3) [%s]\n", opt.mod ? opt.mod : "NULL");
-    fprintf(fp_help, "  --async=yes|no              overlap I/O, CPU and GPU work; output is unordered [%s]\n", (opt.flag & SLORADO_ASYNC) ? "yes" : "no");
+    fprintf(fp_help, "  --async=yes|no              overlap I/O, CPU and GPU work for better performance [experimental]; output is unordered [%s]\n", (opt.flag & SLORADO_ASYNC) ? "yes" : "no");
     fprintf(fp_help, "  --verbose INT               verbosity level [%d]\n",(int)get_log_level());
     fprintf(fp_help, "  --version                   print version\n");
     fprintf(fp_help, "\ndebug options:\n");
@@ -260,6 +260,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n");
 
     if (opt.flag & SLORADO_ASYNC) {
+        WARNING("%s", "Async option is experimental. Output will be unordered.");
         // async (pipelined) path: overlaps I/O, preprocessing, inference and output.
         core->time_process_db -= realtime();
         run_pipeline(core);

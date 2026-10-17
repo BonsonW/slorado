@@ -223,7 +223,7 @@ Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v
 
 Please cite the following in your publications when using Slorado:
 
-> Wong, B., Singh, G., Javaid, H., Denolf, K., Liyanage, K., Samarakoon, H., Deveson, I.W. and Gamaarachchi, H., 2026. Open-source, Hardware-Independent GPU Acceleration for Scalable Nanopore Basecalling with Slorado and Openfish. bioRxiv, pp.2026-03.
+> Wong, B., Singh, G., Javaid, H., Denolf, K., Liyanage, K., Samarakoon, H., Deveson, I.W. and Gamaarachchi, H., 2026. Open-source, Hardware-Independent GPU Acceleration for Scalable Nanopore Basecalling with Slorado and Openfish. bioRxiv, pp.2026-03. https://doi.org/10.64898/2026.03.25.714356.
 
 ```
 @article{wong2026open,
