@@ -509,6 +509,10 @@ void preprocess_modbase(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, co
         read_dat->scaled_signal = (trim > 0 && trim < raw_full.size(0))
             ? raw_full.slice(0, trim, raw_full.size(0)).contiguous()
             : raw_full;
+        const int64_t sig_len = read_dat->basecall_signal_len;
+        if (sig_len > 0 && sig_len < read_dat->scaled_signal.size(0)) {
+            read_dat->scaled_signal = read_dat->scaled_signal.slice(0, 0, sig_len).contiguous();
+        }
         // b = realtime();
         // if (core->opt.num_thread == 1) core->time_tens_from_rec += (b-a);
 

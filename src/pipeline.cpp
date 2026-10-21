@@ -272,6 +272,8 @@ static void *stitch_stage(void *arg) {
     while (ctx->stitch_q->pop(rs)) {
         if (!rs->chunks.empty()) {
             stitch_chunks_vec(rs->chunks, rs->sequence, rs->qstring, rs->moves, rs->rec->len_raw_signal, (int)core->model_stride);
+            // trim degraded ends of mux_change reads in signal order, before the RNA reverse
+            mux_change_trim_read(core, rs->rec, rs->read_dat, rs->sequence, rs->qstring, rs->moves, (int)core->model_stride);
             if (rna) {
                 std::reverse(rs->sequence.begin(), rs->sequence.end());
                 std::reverse(rs->qstring.begin(), rs->qstring.end());
