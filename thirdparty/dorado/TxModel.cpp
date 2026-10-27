@@ -11,11 +11,102 @@
 #include <cmath>
 #include <ATen/ops/scaled_dot_product_attention.h>
 
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <fnmatch.h>
 #include <stdexcept>
 #include <string>
 
 using namespace torch::nn;
 using Slice = torch::indexing::Slice;
+
+// Fake (simulated) post-training dynamic quantisation of linear layer inputs and weights.
+// Configured by env vars, read once:
+//   FQ_FORMAT  none (default) | int8 | int4 | fp8_e4m3 | fp8_e5m2 |
+//              mxint8 | mxfp8_e4m3 | mxfp8_e5m2 | mxfp6_e2m3 | mxfp6_e3m2 | mxfp4
+//   FQ_LAYERS  comma-separated glob patterns matched against layer names (default "*"), e.g. "tx*.fc1,crf".
+//              Layer names: tx<i>.wqkv, tx<i>.out_proj, tx<i>.fc1, tx<i>.fc2 (i = 0..depth-1), upsample, crf
+//   FQ_TARGET  wa (default) | w | a  -- quantise weights and/or activations
+// int/fp8 formats use one absmax scale per row (per-token for activations, per-output-channel for
+// weights). MX formats follow OCP MX v1.0: blocks of 32 along the reduction dim, shared E8M0 scale.
+struct fq_cfg_t {
+    std::string format = "none";
+    std::vector<std::string> layers{"*"};
+    bool w = true, a = true;
+};
+
+static const fq_cfg_t &fq_cfg() {
+    static const fq_cfg_t cfg = [] {
+        static const char *formats[] = {"none", "int8", "int4", "fp8_e4m3", "fp8_e5m2", "mxint8",
+                                        "mxfp8_e4m3", "mxfp8_e5m2", "mxfp6_e2m3", "mxfp6_e3m2", "mxfp4"};
+        fq_cfg_t c;
+        const char *f = getenv("FQ_FORMAT"), *l = getenv("FQ_LAYERS"), *t = getenv("FQ_TARGET");
+        if (f) c.format = f;
+        if (l) {
+            c.layers.clear();
+            for (const char *p = l; ; p = strchr(p, ',') + 1) {
+                c.layers.emplace_back(p, strcspn(p, ","));
+                if (!strchr(p, ',')) break;
+            }
+        }
+        if (t) { c.w = strchr(t, 'w'); c.a = strchr(t, 'a'); }
+        if (std::find(std::begin(formats), std::end(formats), c.format) == std::end(formats)) {
+            ERROR("unknown FQ_FORMAT '%s'", c.format.c_str());
+            exit(EXIT_FAILURE);
+        }
+        if (c.format != "none") INFO("fake quant: format=%s layers=%s target=%s", c.format.c_str(), l ? l : "*", t ? t : "wa");
+        return c;
+    }();
+    return cfg;
+}
+
+// Round to a sign-magnitude minifloat grid (RNE, saturating, with subnormals).
+static at::Tensor round_minifloat(const at::Tensor &x, int emin, int mbits, float max) {
+    auto step = at::exp2(at::floor(at::log2(x.abs())).clamp_min_(emin).sub_(mbits));
+    return at::round(x / step).mul_(step).clamp_(-max, max);
+}
+
+static at::Tensor fake_quant(const at::Tensor &x, const std::string &f) {
+    const int64_t K = x.size(-1);
+    auto x2 = x.reshape({-1, K}).to(at::kFloat);
+    at::Tensor y;
+    if (f == "int8" || f == "int4") {
+        const int qmax = f == "int8" ? 127 : 7;
+        auto scale = std::get<0>(x2.abs().max(1)).div_(qmax).clamp_min_(1e-12f);
+        auto zp = at::zeros(scale.sizes(), scale.options().dtype(at::kInt));
+        y = at::fake_quantize_per_channel_affine(x2, scale, zp, 0, -qmax, qmax);
+    } else if (f == "fp8_e4m3" || f == "fp8_e5m2") {
+        const bool e4m3 = f == "fp8_e4m3";
+        auto scale = std::get<0>(x2.abs().max(1, true)).div_(e4m3 ? 448.f : 57344.f).clamp_min_(1e-12f);
+        y = (x2 / scale).to(e4m3 ? at::kFloat8_e4m3fn : at::kFloat8_e5m2).to(at::kFloat).mul_(scale);
+    } else {
+        TORCH_CHECK(K % 32 == 0, "MX fake quant needs reduction dim divisible by 32, got ", K);
+        // emax of the element format; shared scale = 2^(floor(log2(block absmax)) - emax)
+        const int emax = f == "mxint8" ? 0 : f == "mxfp8_e4m3" ? 8 : f == "mxfp8_e5m2" ? 15 : f == "mxfp6_e3m2" ? 4 : 2;
+        auto xb = x2.view({-1, K / 32, 32});
+        auto amax = std::get<0>(xb.abs().max(-1, true));
+        auto scale = at::exp2(at::floor(at::log2(amax)).sub_(emax).clamp_(-127, 127));
+        auto v = xb / scale;
+        if (f == "mxint8")          v = v.mul_(64).round_().clamp_(-128, 127).div_(64);  // 1.6 fixed point
+        else if (f == "mxfp8_e4m3") v = v.clamp_(-448, 448).to(at::kFloat8_e4m3fn).to(at::kFloat);
+        else if (f == "mxfp8_e5m2") v = v.clamp_(-57344, 57344).to(at::kFloat8_e5m2).to(at::kFloat);
+        else if (f == "mxfp6_e2m3") v = round_minifloat(v, 0, 3, 7.5f);
+        else if (f == "mxfp6_e3m2") v = round_minifloat(v, -2, 2, 28.f);
+        else                        v = round_minifloat(v, 0, 1, 6.f);  // mxfp4 (e2m1)
+        y = v.mul_(scale).view({-1, K});
+    }
+    return y.view(x.sizes()).to(x.dtype());
+}
+
+// Returns t fake-quantised if layer `name` is selected for this tensor kind, else t unchanged.
+static at::Tensor fq(const std::string &name, const at::Tensor &t, bool is_weight) {
+    const fq_cfg_t &c = fq_cfg();
+    if (c.format == "none" || !(is_weight ? c.w : c.a)) return t;
+    for (const auto &pat : c.layers)
+        if (fnmatch(pat.c_str(), name.c_str(), 0) == 0) return fake_quant(t, c.format);
+    return t;
+}
 
 void apply_rounding(torch::Tensor &t, int remove_bits) {
     // Round Float16 tensor elements such that the last `remove_bits` of the mantissa are 0s.
@@ -62,7 +153,8 @@ GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_)
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
-    t = at::linear(x, fc1->weight, fc1->bias);
+    const auto n1 = fq_name + ".fc1", n2 = fq_name + ".fc2";
+    t = at::linear(fq(n1, x, false), fq(n1, fc1->weight, true), fc1->bias);
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -75,7 +167,7 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     const auto &gate = chunks[1];
     t = functional::silu(gate).mul_(y);
 #endif
-    return at::linear(t, fc2->weight, fc2->bias);
+    return at::linear(fq(n2, t, false), fq(n2, fc2->weight, true), fc2->bias);
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -254,7 +346,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     double a, b;
     
     a = realtime();
-    auto qkv = at::linear(x, wqkv->weight, wqkv->bias)
+    const auto nqkv = fq_name + ".wqkv";
+    auto qkv = at::linear(fq(nqkv, x, false), fq(nqkv, wqkv->weight, true), wqkv->bias)
                    .view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
@@ -329,7 +422,8 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     model_stats->time_sdp_attn += b-a;
 
     a = realtime();
-    x = at::linear(attn_output_ntc, out_proj->weight, out_proj->bias);
+    const auto nout = fq_name + ".out_proj";
+    x = at::linear(fq(nout, attn_output_ntc, false), fq(nout, out_proj->weight, true), out_proj->bias);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
     model_stats->time_out_proj += b-a;
@@ -408,6 +502,7 @@ TxEncoderStackImpl::TxEncoderStackImpl(const TxEncoderParams &params, const torc
     stack = Sequential();
     for (int i = 0; i < params.depth; ++i) {
         TxEncoder encoder(params, options, model_stats);
+        encoder->self_attn->fq_name = encoder->ff->fq_name = "tx" + std::to_string(i);
         stack->push_back(register_module("transformer_encoder" + std::to_string(i), encoder));
     }
 };
@@ -424,7 +519,8 @@ torch::Tensor LinearUpsampleImpl::forward(const torch::Tensor &x) {
     const int64_t N = x.size(0);
     const int64_t T = x.size(1);
     const int64_t C = x.size(2);
-    torch::Tensor out = linear(x).reshape({N, scale_factor * T, C});
+    torch::Tensor out = functional::linear(fq("upsample", x, false), fq("upsample", linear->weight, true), linear->bias)
+                            .reshape({N, scale_factor * T, C});
     return out;
 };
 
@@ -438,7 +534,7 @@ torch::Tensor LinearScaledCRFImpl::forward(const torch::Tensor &x) {
         linear->weight *= m_params.scale;
         scale_applied = true;
     }
-    return linear(x);
+    return functional::linear(fq("crf", x, false), fq("crf", linear->weight, true), linear->bias);
 }
 
 TxModelImpl::TxModelImpl(const CRFModelConfig &config, const torch::TensorOptions &options, tx_stats_t *_model_stats) : m_options(options) {

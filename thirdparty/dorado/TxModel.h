@@ -46,6 +46,7 @@ struct GatedMLPImpl : torch::nn::Module {
     int in_features;
     int hidden_features;
     torch::nn::Linear fc1{nullptr}, fc2{nullptr};
+    std::string fq_name;  // fake-quant layer name prefix, e.g. "tx3"
 };
 
 TORCH_MODULE(GatedMLP);
@@ -109,6 +110,7 @@ struct MultiHeadAttentionImpl : torch::nn::Module {
 
     torch::nn::Linear wqkv{nullptr}, out_proj{nullptr};
     RotaryEmbedding rotary_emb{nullptr};
+    std::string fq_name;  // fake-quant layer name prefix, e.g. "tx3"
 
     tx_stats_t *model_stats;
 };
