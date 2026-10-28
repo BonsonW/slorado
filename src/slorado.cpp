@@ -52,11 +52,11 @@ SOFTWARE.
 
 void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
-void preprocess_signal(core_t* core, db_t* db, int32_t i);
+void preprocess_signal_db(core_t* core, db_t* db, int32_t i);
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
 void free_read_dat(read_dat_t *read_dat);
-void preprocess_modbase(core_t *core, db_t *db, int32_t i);
-void postprocess_modbase(core_t *core, db_t *db, int32_t i);
+void preprocess_modbase_db(core_t *core, db_t *db, int32_t i);
+void postprocess_modbase_db(core_t *core, db_t *db, int32_t i);
 
 static size_t estimate_bytes_per_read(const char *slow5file) {
     slow5_file_t *sp = slow5_open(slow5file, "r");
@@ -155,6 +155,7 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     core->time_init_runners -= realtime();
     init_runners(core, &opt, model);
     core->opt.gpu_batch_size = opt.gpu_batch_size; // sync auto-detected value back to core
+    core->opt.mod_gpu_batch_size = opt.mod_gpu_batch_size; // sync auto-detected modbase value back
     core->time_init_runners += realtime();
     LOG_DEBUG("%s", "successfully initialized runners");
 
@@ -303,7 +304,7 @@ void process_db(core_t* core, db_t* db) {
     LOG_DEBUG("%s", "parsed reads");
 
     a = realtime();
-    work_db(core, db, preprocess_signal);
+    work_db(core, db, preprocess_signal_db);
     b = realtime();
     core->time_preproc += (b-a);
     LOG_DEBUG("%s", "preprocessed reads");
@@ -322,7 +323,7 @@ void process_db(core_t* core, db_t* db) {
 
     if (core->opt.mod != NULL) {
         a = realtime();
-        work_db(core, db, preprocess_modbase);
+        work_db(core, db, preprocess_modbase_db);
         b = realtime();
         core->time_preproc_mod += (b-a);
         LOG_DEBUG("%s", "mod preprocessed reads");
@@ -334,7 +335,7 @@ void process_db(core_t* core, db_t* db) {
         LOG_DEBUG("%s", "mod basecalled reads");
 
         a = realtime();
-        work_db(core, db, postprocess_modbase);
+        work_db(core, db, postprocess_modbase_db);
         b = realtime();
         core->time_postproc_mod += (b-a);
         LOG_DEBUG("%s", "mod postprocessed reads");
@@ -403,6 +404,7 @@ void free_db(db_t* db) {
 void init_opt(opt_t* opt) {
     memset(opt, 0, sizeof(opt_t));
     opt->gpu_batch_size = 0; // 0 = auto
+    opt->mod_gpu_batch_size = 0; // 0 = auto
     opt->batch_size_bytes = 512*1000*1000;
     opt->num_thread = 8;
 

@@ -389,7 +389,7 @@ static void mod_call_chunks(
 //     int nthreads = core->opt.num_thread / core->runners->size();
 }
 
-static void basecall_chunks(
+void basecall_chunks(
     const core_t* core,
     const int runner_idx,
     const std::vector<basecall_chunk_t *> &chunks
@@ -443,7 +443,7 @@ static void* pthread_single_basecall(void* voidargs) {
     pthread_exit(0);
 }
 
-static void mod_basecall_chunks(
+void mod_basecall_chunks(
     const core_t* core,
     const int runner_idx,
     const std::vector<mod_chunk_t *> &results
@@ -519,7 +519,7 @@ static void* pthread_single_mod_basecall(void* voidargs) {
         for (size_t chunk_idx = 0; chunk_idx < chunks.size(); ++chunk_idx) {
             results.push_back(&chunks[chunk_idx]);
 
-            if (results.size() == (size_t)opt.gpu_batch_size) {
+            if (results.size() == (size_t)opt.mod_gpu_batch_size) {
                 mod_basecall_chunks(core, runner_idx, results);
                 results.clear();
             }

@@ -191,7 +191,10 @@ int div_round_closest(const int n, const int d) {
 
 
 void stitch_chunks(db_t *db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride) {
-    std::vector<basecall_chunk_t> &chunks = (*db->basecall_chunks)[i];
+    stitch_chunks_vec((*db->basecall_chunks)[i], sequence, qstring, moves, len_raw_signal, model_stride);
+}
+
+void stitch_chunks_vec(std::vector<basecall_chunk_t> &chunks, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride) {
     assert(static_cast<int>(div_round_closest(chunks[0].raw_chunk_size, chunks[0].moves.size())) == model_stride);
 
 

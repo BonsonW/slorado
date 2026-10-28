@@ -24,6 +24,7 @@ void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offs
 // The single-chunk stitch is bounded by the basecalled (front-trimmed) signal length taken from
 // read_dat->basecall_trim_start (matching dorado get_raw_data_samples()) for both DNA and RNA.
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
+void stitch_chunks_vec(std::vector<basecall_chunk_t> &chunks, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
 
 // Load serialised tensor from disk.
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors);

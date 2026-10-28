@@ -49,6 +49,7 @@ OBJ = $(BUILD_DIR)/main.o \
 	  $(BUILD_DIR)/writer.o \
 	  $(BUILD_DIR)/torchbox.o \
 	  $(BUILD_DIR)/basecall.o \
+	  $(BUILD_DIR)/pipeline.o \
 	  $(BUILD_DIR)/tensor_chunk_utils.o \
 	  $(BUILD_DIR)/modbase.o \
 	  $(BUILD_DIR)/CRFModel.o \
@@ -124,6 +125,9 @@ $(BUILD_DIR)/torchbox.o: src/torchbox.cpp
 $(BUILD_DIR)/basecall.o: src/basecall.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
 
+$(BUILD_DIR)/pipeline.o: src/pipeline.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
+
 # dorado
 $(BUILD_DIR)/tensor_chunk_utils.o: thirdparty/dorado/tensor_chunk_utils.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -c -o $@
@@ -171,4 +175,3 @@ test: $(BINARY)
 mem: $(BINARY)
 	./test/test.sh mem
 
--include $(OBJ:.o=.d)
