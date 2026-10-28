@@ -193,7 +193,7 @@ All options supported by slorado basecaller are detailed below:
 | --version         | print version                                         |                |
 | --flash yes\|no   | enable flash attention (from v0.4.0-beta)             | No             |
 | --mod STR         | add modification detection (from v0.5.0-beta)         | NULL           |
-| --async yes\|no   | overlap I/O, CPU and GPU work                         | No             |
+| --async yes\|no   | overlap I/O, CPU and GPU work (experimental; from v0.7.0)                         | No             |
 
 ## Batchsizes
 
@@ -213,6 +213,8 @@ Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v
 | 0.4.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; rna004_130bps v5.1.0 |
 | 0.3.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 and v5.0.0 |
 | 0.2.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 |
+
+Slorado also has experimental support for models available in [download-models-dev.sh](https://github.com/BonsonW/slorado/blob/dev/scripts/download-models-dev.sh). These have not been as thoroughly tested as those included for release, and we recommended testing it on your own system before usage.
 
 ## Acknowledgement
 
