@@ -1,4 +1,5 @@
 #include "TxModel.h"
+#include "fake_quant.h"
 
 #include <ATen/Functions.h>
 #include <ATen/TensorIndexing.h>
@@ -59,44 +60,6 @@ static const fq_cfg_t &fq_cfg() {
         return c;
     }();
     return cfg;
-}
-
-// Round to a sign-magnitude minifloat grid (RNE, saturating, with subnormals).
-static at::Tensor round_minifloat(const at::Tensor &x, int emin, int mbits, float max) {
-    auto step = at::exp2(at::floor(at::log2(x.abs())).clamp_min_(emin).sub_(mbits));
-    return at::round(x / step).mul_(step).clamp_(-max, max);
-}
-
-static at::Tensor fake_quant(const at::Tensor &x, const std::string &f) {
-    const int64_t K = x.size(-1);
-    auto x2 = x.reshape({-1, K}).to(at::kFloat);
-    at::Tensor y;
-    if (f == "int8" || f == "int4") {
-        const int qmax = f == "int8" ? 127 : 7;
-        auto scale = std::get<0>(x2.abs().max(1)).div_(qmax).clamp_min_(1e-12f);
-        auto zp = at::zeros(scale.sizes(), scale.options().dtype(at::kInt));
-        y = at::fake_quantize_per_channel_affine(x2, scale, zp, 0, -qmax, qmax);
-    } else if (f == "fp8_e4m3" || f == "fp8_e5m2") {
-        const bool e4m3 = f == "fp8_e4m3";
-        auto scale = std::get<0>(x2.abs().max(1, true)).div_(e4m3 ? 448.f : 57344.f).clamp_min_(1e-12f);
-        y = (x2 / scale).to(e4m3 ? at::kFloat8_e4m3fn : at::kFloat8_e5m2).to(at::kFloat).mul_(scale);
-    } else {
-        TORCH_CHECK(K % 32 == 0, "MX fake quant needs reduction dim divisible by 32, got ", K);
-        // emax of the element format; shared scale = 2^(floor(log2(block absmax)) - emax)
-        const int emax = f == "mxint8" ? 0 : f == "mxfp8_e4m3" ? 8 : f == "mxfp8_e5m2" ? 15 : f == "mxfp6_e3m2" ? 4 : 2;
-        auto xb = x2.view({-1, K / 32, 32});
-        auto amax = std::get<0>(xb.abs().max(-1, true));
-        auto scale = at::exp2(at::floor(at::log2(amax)).sub_(emax).clamp_(-127, 127));
-        auto v = xb / scale;
-        if (f == "mxint8")          v = v.mul_(64).round_().clamp_(-128, 127).div_(64);  // 1.6 fixed point
-        else if (f == "mxfp8_e4m3") v = v.clamp_(-448, 448).to(at::kFloat8_e4m3fn).to(at::kFloat);
-        else if (f == "mxfp8_e5m2") v = v.clamp_(-57344, 57344).to(at::kFloat8_e5m2).to(at::kFloat);
-        else if (f == "mxfp6_e2m3") v = round_minifloat(v, 0, 3, 7.5f);
-        else if (f == "mxfp6_e3m2") v = round_minifloat(v, -2, 2, 28.f);
-        else                        v = round_minifloat(v, 0, 1, 6.f);  // mxfp4 (e2m1)
-        y = v.mul_(scale).view({-1, K});
-    }
-    return y.view(x.sizes()).to(x.dtype());
 }
 
 // Returns t fake-quantised if layer `name` is selected for this tensor kind, else t unchanged.
