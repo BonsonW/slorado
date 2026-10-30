@@ -54,6 +54,7 @@ void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
 void preprocess_signal_db(core_t* core, db_t* db, int32_t i);
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
+void mux_change_trim_read(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, int model_stride);
 void free_read_dat(read_dat_t *read_dat);
 void preprocess_modbase_db(core_t *core, db_t *db, int32_t i);
 void postprocess_modbase_db(core_t *core, db_t *db, int32_t i);
@@ -99,6 +100,18 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     if (core->sp == NULL) {
         VERBOSE("Error opening SLOW5 file %s\n", slow5file);
         exit(EXIT_FAILURE);
+    }
+
+    // look up the end_reason enum labels that dorado's mux_change_trim_read applies to
+    uint8_t n_labels = 0;
+    char **labels = slow5_get_aux_enum_labels(core->sp->header, "end_reason", &n_labels);
+    if (labels) {
+        for (uint8_t i = 0; i < n_labels; i++) {
+            if (strcmp(labels[i], "mux_change") == 0) core->er_mux_change = i;
+            if (strcmp(labels[i], "unblock_mux_change") == 0) core->er_unblock_mux_change = i;
+        }
+    } else {
+        WARNING("%s", "end_reason not found in SLOW5 file, mux_change read end trimming disabled");
     }
 
     // modbase stuff
@@ -281,6 +294,8 @@ void postprocess_signal(core_t* core, db_t* db, int32_t i) {
         // doesn't emit spurious trailing bases from the chunk-padding region -- these desync the
         // modbase signal from the sequence (see preprocess_modbase). DNA and RNA, matching dorado.
         stitch_chunks(db, i, sequence, qstring, moves, len_raw_signal, core->model_stride);
+        // trim degraded ends of mux_change reads in signal order, before the RNA reverse
+        mux_change_trim_read(core, rec, (*db->read_dats)[i], sequence, qstring, moves, core->model_stride);
 
         if (is_rna(core->model_config->sample_type)) {
             // Reverse seq + qstring to 5'->3'. Leave moves in signal (3'->5') order -- dorado never

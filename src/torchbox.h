@@ -15,6 +15,11 @@ struct read_dat {
     // the trimmed basecall signal). Set in preprocess_signal, consumed in preprocess_modbase.
     int64_t basecall_trim_start = 0;
 
+    // Basecalled signal length after mux_change end trimming (dorado trims raw_data to the trimmed
+    // moves), or -1 if the read end was not trimmed. Set in mux_change_trim_read, consumed in
+    // preprocess_modbase.
+    int64_t basecall_signal_len = -1;
+
     // mod data
     const char *seq;
 
