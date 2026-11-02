@@ -1,7 +1,7 @@
 #pragma once
 
-// Fake (simulated) quantisation of a tensor along its last (reduction) dim. Formats are listed in
-// TxModel.cpp; also used standalone by scripts/fq_check.cpp (driven by scripts/fq_check.py).
+// Fake (simulated) quantisation of a tensor along its last (reduction) dim. Formats and scale
+// granularities are listed in TxModel.cpp; also used standalone by scripts/fq_check.cpp (driven by scripts/fq_check.py).
 //
 // The libraries below are Python-only, so this is a libtorch port of the same arithmetic. scripts/fq_check.py
 // verifies it matches them bit-for-bit (round half to even) at the commits linked here.
@@ -35,9 +35,26 @@ static at::Tensor round_minifloat(const at::Tensor &x, int emin, int mbits, floa
     return at::round(x / step).mul_(step).clamp_(-max, max);
 }
 
-static at::Tensor fake_quant(const at::Tensor &x, const std::string &f) {
+// Element max of each MX element format.
+static float mx_elem_max(const std::string &f) {
+    return f == "mxint8" ? 127.f / 64 : f == "mxfp8_e4m3" ? 448.f : f == "mxfp8_e5m2" ? 57344.f :
+           f == "mxfp6_e2m3" ? 7.5f : f == "mxfp6_e3m2" ? 28.f : 6.f;
+}
+
+// gran: scale granularity of the int/fp8 formats: 0 one scale per row, -1 one per tensor, g > 0 one per
+// group of g along the reduction dim. MX formats always use blocks of 32; gran -1 adds a per-tensor fp32
+// scale on top (two-level, as in NVFP4) that maps the tensor absmax onto the element max, gran 0 does not.
+static at::Tensor fake_quant(const at::Tensor &x, const std::string &f, int64_t gran = 0) {
     const int64_t K = x.size(-1);
     auto x2 = x.reshape({-1, K}).to(at::kFloat);
+    const bool mx = f.rfind("mx", 0) == 0;
+    TORCH_CHECK(!mx || gran <= 0, "MX formats have a fixed block size of 32, got group size ", gran);
+    if (!mx && gran > 0) {
+        TORCH_CHECK(K % gran == 0, "group size ", gran, " does not divide reduction dim ", K);
+        x2 = x2.reshape({-1, gran});  // each group is a row
+    } else if (!mx && gran < 0) {
+        x2 = x2.reshape({1, -1});  // the whole tensor is one row
+    }
     at::Tensor y;
     if (f == "int8" || f == "int4") {
         const int qmax = f == "int8" ? 127 : 7;
@@ -50,6 +67,11 @@ static at::Tensor fake_quant(const at::Tensor &x, const std::string &f) {
         y = (x2 / scale).to(e4m3 ? at::kFloat8_e4m3fn : at::kFloat8_e5m2).to(at::kFloat).mul_(scale);
     } else {
         TORCH_CHECK(K % 32 == 0, "MX fake quant needs reduction dim divisible by 32, got ", K);
+        at::Tensor ts;  // per-tensor scale
+        if (gran < 0) {
+            ts = x2.abs().max().div_(mx_elem_max(f)).clamp_min_(1e-12f);
+            x2 = x2 / ts;
+        }
         // emax of the element format; shared scale = 2^(floor(log2(block absmax)) - emax)
         const int emax = f == "mxint8" ? 0 : f == "mxfp8_e4m3" ? 8 : f == "mxfp8_e5m2" ? 15 : f == "mxfp6_e3m2" ? 4 : 2;
         auto xb = x2.view({-1, K / 32, 32});
@@ -63,6 +85,7 @@ static at::Tensor fake_quant(const at::Tensor &x, const std::string &f) {
         else if (f == "mxfp6_e3m2") v = round_minifloat(v, -2, 2, 28.f);
         else                        v = round_minifloat(v, 0, 1, 6.f);  // mxfp4 (e2m1)
         y = v.mul_(scale).view({-1, K});
+        if (gran < 0) y.mul_(ts);
     }
-    return y.view(x.sizes()).to(x.dtype());
+    return y.reshape(x.sizes()).to(x.dtype());
 }

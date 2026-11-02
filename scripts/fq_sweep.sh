@@ -11,6 +11,8 @@
 #                  e.g. per block:      LAYERS="$(seq -f 'tx%g.*' 0 17)"
 #                  e.g. per layer:      LAYERS="$(for i in $(seq 0 17); do echo tx$i.{wqkv,out_proj,fc1,fc2}; done) upsample crf"
 #        TARGET    FQ_TARGET: wa (default) | w | a
+#        GRANS     space-separated FQ_GRAN values, one run each (default: row): row | tensor | g<N>.
+#                  g<N> runs skip MX formats (fixed block of 32), e.g. GRANS='row tensor g128'
 #        SLORADO_ARGS extra slorado args (default: -x cuda:0)
 
 set -e
@@ -26,29 +28,35 @@ NTHREADS=${NTHREADS:-16}
 FORMATS=${FORMATS:-"int8 int4 fp8_e4m3 fp8_e5m2 mxint8 mxfp8_e4m3 mxfp8_e5m2 mxfp6_e2m3 mxfp6_e3m2 mxfp4"}
 LAYERS=${LAYERS:-"*"}
 TARGET=${TARGET:-wa}
+GRANS=${GRANS:-row}
 SLORADO_ARGS=${SLORADO_ARGS:-"-x cuda:0"}
 
 $MINIMAP2 --version > /dev/null || die "minimap2 not found, set MINIMAP2"
 
-run() { # <format> <layer globs> <run dir>
-    local dir=$3
+run() { # <format> <layer globs> <gran> <run dir>
+    local dir=$4
     [ -s $dir/identity.tsv ] && { echo "skip $dir"; return; }
     mkdir -p $dir
     echo "run $dir"
-    FQ_FORMAT=$1 FQ_LAYERS=$2 FQ_TARGET=$TARGET $SLORADO basecaller $SLORADO_ARGS -o $dir/reads.fastq $MODEL $READS 2> $dir/slorado.log || die "slorado failed, see $dir/slorado.log"
+    FQ_FORMAT=$1 FQ_LAYERS=$2 FQ_GRAN=$3 FQ_TARGET=$TARGET $SLORADO basecaller $SLORADO_ARGS -o $dir/reads.fastq $MODEL $READS 2> $dir/slorado.log || die "slorado failed, see $dir/slorado.log"
     $MINIMAP2 -cx map-ont --secondary=no -t $NTHREADS $REF $dir/reads.fastq > $dir/reads.paf 2> $dir/minimap2.log || die "minimap2 failed"
     # longest primary alignment per read; identity = col10 / col11
     awk -v OFS='\t' '/tp:A:P/ && $11 > len[$1] { len[$1] = $11; id[$1] = $10 / $11 }
         END { print "read_id", "identity"; for (r in id) print r, id[r] }' $dir/reads.paf > $dir/identity.tsv.tmp
-    printf "format\tlayers\ttarget\tn_reads\n%s\t%s\t%s\t%s\n" $1 "$2" $TARGET $(( $(wc -l < $dir/reads.fastq) / 4 )) > $dir/info.tsv
+    printf "format\tlayers\tgran\ttarget\tn_reads\n%s\t%s\t%s\t%s\t%s\n" $1 "$2" $3 $TARGET $(( $(wc -l < $dir/reads.fastq) / 4 )) > $dir/info.tsv
     mv $dir/identity.tsv.tmp $dir/identity.tsv
 }
 
-run none "*" $OUT/none
+run none "*" row $OUT/none
 for layers in $LAYERS; do
     tag=$(echo "$layers" | sed 's/^\*$/all/; s/[^A-Za-z0-9]\+/_/g; s/^_//; s/_$//')
-    for f in $FORMATS; do
-        run $f "$layers" $OUT/${f}__${tag}_${TARGET}
+    for gran in $GRANS; do
+        for f in $FORMATS; do
+            case $gran:$f in g*:mx*) continue ;; esac
+            # row-granularity runs keep the old dir names so existing sweeps are reused
+            gtag=$([ $gran = row ] && echo "" || echo "_$gran")
+            run $f "$layers" $gran $OUT/${f}${gtag}__${tag}_${TARGET}
+        done
     done
 done
 echo "done. plot with: pyvenv/bin/python scripts/fq_plot.py $OUT"

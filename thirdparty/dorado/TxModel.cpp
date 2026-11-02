@@ -29,12 +29,16 @@ using Slice = torch::indexing::Slice;
 //   FQ_LAYERS  comma-separated glob patterns matched against layer names (default "*"), e.g. "tx*.fc1,crf".
 //              Layer names: tx<i>.wqkv, tx<i>.out_proj, tx<i>.fc1, tx<i>.fc2 (i = 0..depth-1), upsample, crf
 //   FQ_TARGET  wa (default) | w | a  -- quantise weights and/or activations
+//   FQ_GRAN    row (default) | tensor | g<N>  -- scale granularity, e.g. g128
 // int/fp8 formats use one absmax scale per row (per-token for activations, per-output-channel for
-// weights). MX formats follow OCP MX v1.0: blocks of 32 along the reduction dim, shared E8M0 scale.
+// weights), per tensor (dynamic, so activation scales depend on the whole batch), or per group of N
+// along the reduction dim. MX formats follow OCP MX v1.0: blocks of 32 along the reduction dim, shared
+// E8M0 scale; "tensor" adds a per-tensor fp32 scale on top, g<N> is not allowed.
 struct fq_cfg_t {
     std::string format = "none";
     std::vector<std::string> layers{"*"};
     bool w = true, a = true;
+    int64_t gran = 0;  // 0 per row, -1 per tensor, N > 0 per group of N
 };
 
 static const fq_cfg_t &fq_cfg() {
@@ -42,7 +46,7 @@ static const fq_cfg_t &fq_cfg() {
         static const char *formats[] = {"none", "int8", "int4", "fp8_e4m3", "fp8_e5m2", "mxint8",
                                         "mxfp8_e4m3", "mxfp8_e5m2", "mxfp6_e2m3", "mxfp6_e3m2", "mxfp4"};
         fq_cfg_t c;
-        const char *f = getenv("FQ_FORMAT"), *l = getenv("FQ_LAYERS"), *t = getenv("FQ_TARGET");
+        const char *f = getenv("FQ_FORMAT"), *l = getenv("FQ_LAYERS"), *t = getenv("FQ_TARGET"), *g = getenv("FQ_GRAN");
         if (f) c.format = f;
         if (l) {
             c.layers.clear();
@@ -56,7 +60,16 @@ static const fq_cfg_t &fq_cfg() {
             ERROR("unknown FQ_FORMAT '%s'", c.format.c_str());
             exit(EXIT_FAILURE);
         }
-        if (c.format != "none") INFO("fake quant: format=%s layers=%s target=%s", c.format.c_str(), l ? l : "*", t ? t : "wa");
+        if (g && strcmp(g, "row") != 0) {
+            char *end = nullptr;
+            if (strcmp(g, "tensor") == 0) c.gran = -1;
+            else if (g[0] == 'g') c.gran = strtol(g + 1, &end, 10);
+            if (c.gran == 0 || (end && (*end || c.gran < 0)) || (c.gran > 0 && c.format.rfind("mx", 0) == 0)) {
+                ERROR("bad FQ_GRAN '%s' for format '%s' (row | tensor | g<N>, g<N> not for MX formats)", g, c.format.c_str());
+                exit(EXIT_FAILURE);
+            }
+        }
+        if (c.format != "none") INFO("fake quant: format=%s layers=%s target=%s gran=%s", c.format.c_str(), l ? l : "*", t ? t : "wa", g ? g : "row");
         return c;
     }();
     return cfg;
@@ -67,7 +80,7 @@ static at::Tensor fq(const std::string &name, const at::Tensor &t, bool is_weigh
     const fq_cfg_t &c = fq_cfg();
     if (c.format == "none" || !(is_weight ? c.w : c.a)) return t;
     for (const auto &pat : c.layers)
-        if (fnmatch(pat.c_str(), name.c_str(), 0) == 0) return fake_quant(t, c.format);
+        if (fnmatch(pat.c_str(), name.c_str(), 0) == 0) return fake_quant(t, c.format, c.gran);
     return t;
 }
 

@@ -16,6 +16,7 @@ from scipy.stats import gaussian_kde
 
 FORMAT_ORDER = ["int8", "mxint8", "fp8_e4m3", "mxfp8_e4m3", "fp8_e5m2", "mxfp8_e5m2",
                 "mxfp6_e2m3", "mxfp6_e3m2", "int4", "mxfp4"]
+GRAN_ORDER = lambda g: (0, 0) if g == "row" else (1, 0) if g == "tensor" else (2, int(g[1:]))
 INK, MUTED, GRID, SERIES, BASE = "#1a1a19", "#6b6a63", "#e6e5e0", "#2a78d6", "#a3a29a"
 
 
@@ -31,14 +32,16 @@ def main():
     runs = {d: load(os.path.join(outdir, d)) for d in sorted(os.listdir(outdir))
             if os.path.isfile(os.path.join(outdir, d, "identity.tsv"))}
     base, base_info = runs.pop("none")
-    order = lambda d: (runs[d][1]["layers"], FORMAT_ORDER.index(runs[d][1]["format"])
+    for _, info in list(runs.values()) + [(base, base_info)]:
+        info.setdefault("gran", "row")  # runs from before FQ_GRAN
+    order = lambda d: (runs[d][1]["layers"], GRAN_ORDER(runs[d][1]["gran"]), FORMAT_ORDER.index(runs[d][1]["format"])
                        if runs[d][1]["format"] in FORMAT_ORDER else 99)
     names = sorted(runs, key=order)
 
     with open(os.path.join(outdir, "summary.tsv"), "w") as f:
-        f.write("run\tformat\tlayers\ttarget\tn_reads\tn_mapped\tmean\tmedian\tdelta_median_vs_fp16\n")
+        f.write("run\tformat\tlayers\tgran\ttarget\tn_reads\tn_mapped\tmean\tmedian\tdelta_median_vs_fp16\n")
         for d, (x, info) in [("none", (base, base_info))] + [(d, runs[d]) for d in names]:
-            f.write(f"{d}\t{info['format']}\t{info['layers']}\t{info['target']}\t{info['n_reads']}\t{len(x)}\t"
+            f.write(f"{d}\t{info['format']}\t{info['layers']}\t{info['gran']}\t{info['target']}\t{info['n_reads']}\t{len(x)}\t"
                     f"{x.mean():.5f}\t{np.median(x):.5f}\t{np.median(x) - np.median(base):+.5f}\n")
 
     lo = np.percentile(np.concatenate([base] + [runs[d][0] for d in names]), 1)
@@ -54,7 +57,8 @@ def main():
         ax.set_facecolor("#fcfcfb")
         ax.plot(grid, base_kde, color=BASE, lw=1.5, label="fp16")
         ax.plot(grid, gaussian_kde(x)(grid), color=SERIES, lw=2, label=info["format"])
-        title = info["format"] if info["layers"] == "*" else f"{info['format']}  [{info['layers']}]"
+        title = info["format"] + ("" if info["gran"] == "row" else f" {info['gran']}")
+        title += "" if info["layers"] == "*" else f"  [{info['layers']}]"
         ax.set_title(title, fontsize=9, color=INK, loc="left")
         ax.text(0.03, 0.95, f"median {np.median(x):.4f}\nΔ {np.median(x) - np.median(base):+.4f}\nmapped {len(x)}",
                 transform=ax.transAxes, va="top", fontsize=7, color=MUTED)
