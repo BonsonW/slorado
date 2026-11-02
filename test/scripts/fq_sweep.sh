@@ -3,7 +3,7 @@
 # write per-read identity (matches / alignment block length of the longest primary alignment).
 # Results: <outdir>/<format>__<layer tag>/{reads.fastq,reads.paf,identity.tsv}. Finished runs are skipped.
 #
-# usage: scripts/fq_sweep.sh <model> <reads.blow5> <ref.idx|fa> <outdir>
+# usage: test/scripts/fq_sweep.sh <model> <reads.blow5> <ref.idx|fa> <outdir>
 # env:   FORMATS   formats to test (default: all)
 #        LAYERS    space-separated FQ_LAYERS values, one run each (default: "*"). Each value is a
 #                  comma-separated list of globs over tx<i>.{wqkv,out_proj,fc1,fc2}, upsample, crf
@@ -14,6 +14,7 @@
 #        GRANS     space-separated FQ_GRAN values, one run each (default: row): row | tensor | g<N>.
 #                  g<N> runs skip MX formats (fixed block of 32), e.g. GRANS='row tensor g128'
 #        SLORADO_ARGS extra slorado args (default: -x cuda:0)
+#        MINIMAP2  minimap2 binary (default: test/tools/bin/minimap2, installed by test/extensive.sh)
 
 set -e
 set -f  # LAYERS globs are for slorado, not the shell
@@ -23,7 +24,8 @@ die() { echo "Error: $*" >&2; exit 1; }
 
 MODEL=$1; READS=$2; REF=$3; OUT=$4
 SLORADO=${SLORADO:-./slorado}
-MINIMAP2=${MINIMAP2:-minimap2}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MINIMAP2=${MINIMAP2:-${SCRIPT_DIR}/../tools/bin/minimap2}
 NTHREADS=${NTHREADS:-16}
 FORMATS=${FORMATS:-"int8 int4 fp8_e4m3 fp8_e5m2 mxint8 mxfp8_e4m3 mxfp8_e5m2 mxfp6_e2m3 mxfp6_e3m2 mxfp4"}
 LAYERS=${LAYERS:-"*"}
@@ -31,7 +33,7 @@ TARGET=${TARGET:-wa}
 GRANS=${GRANS:-row}
 SLORADO_ARGS=${SLORADO_ARGS:-"-x cuda:0"}
 
-$MINIMAP2 --version > /dev/null || die "minimap2 not found, set MINIMAP2"
+$MINIMAP2 --version > /dev/null || die "minimap2 not found, run test/extensive.sh once to install it or set MINIMAP2"
 
 run() { # <format> <layer globs> <gran> <run dir>
     local dir=$4
@@ -59,4 +61,4 @@ for layers in $LAYERS; do
         done
     done
 done
-echo "done. plot with: pyvenv/bin/python scripts/fq_plot.py $OUT"
+echo "done. plot with: pyvenv/bin/python test/scripts/fq_plot.py $OUT"
