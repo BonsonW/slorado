@@ -447,6 +447,9 @@ void preprocess_signal(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std
         // scale_signal front-trims the signal (RNA adapter / DNA pore-open). Record how much so the
         // modbase path can trim the raw signal identically and stay aligned with the moves/sequence.
         read_dat->basecall_trim_start = (int64_t)len_raw_signal - read_dat->scaled_signal.size(0);
+        // read_dat is reused across batches (batch path); reset so a previous read's mux_change
+        // trim length does not leak into this read.
+        read_dat->basecall_signal_len = -1;
 
         create_basecall_chunks(chunks, read_dat->scaled_signal.size(0), core->chunk_size, opt.overlap, core->model_stride, read_dat);
     }
