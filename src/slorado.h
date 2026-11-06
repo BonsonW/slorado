@@ -202,6 +202,10 @@ typedef struct runner runner_t;
 typedef struct {
     // slow5
     slow5_file_t *sp;
+    // end_reason enum values (mux_change / unblock_mux_change) whose degraded read ends are trimmed
+    // as in dorado mux_change_trim_read; SLOW5_ENUM_NULL if absent from the file
+    uint8_t er_mux_change = SLOW5_ENUM_NULL;
+    uint8_t er_unblock_mux_change = SLOW5_ENUM_NULL;
 
     // options
     opt_t opt;
