@@ -398,6 +398,11 @@ void free_db_tmp(db_t* db) {
     for (i = 0; i < db->n_rec; ++i) {
         free(db->mem_records[i]);
         db->mem_records[i] = NULL;
+        // per-read working data (signal, modbase encodings, chunks) is not needed after output
+        free_read_dat((*db->read_dats)[i]);
+        (*db->read_dats)[i] = NULL;
+        (*db->basecall_chunks)[i] = {};
+        (*db->mod_chunks)[i] = {};
     }
 }
 
