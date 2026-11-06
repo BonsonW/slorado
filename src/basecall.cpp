@@ -299,7 +299,7 @@ static void mod_call_chunks(
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
     
-    auto scores_f16 = scores.cpu().contiguous();
+    auto scores_f16 = scores.cpu().to(at::ScalarType::Half).contiguous();
     assert(scores_f16.is_contiguous());
     assert(scores_f16.dtype() == at::ScalarType::Half);
 
