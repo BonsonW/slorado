@@ -381,6 +381,9 @@ static bool mux_change_trim_seq(std::string &sequence, std::string &qstring, std
 }
 
 void mux_change_trim_read(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, int model_stride) {
+    if (core->er_mux_change == SLOW5_ENUM_NULL && core->er_unblock_mux_change == SLOW5_ENUM_NULL) {
+        return;
+    }
     int err = 0;
     const uint8_t end_reason = slow5_aux_get_enum(rec, "end_reason", &err);
     if (err < 0 || end_reason == SLOW5_ENUM_NULL ||
