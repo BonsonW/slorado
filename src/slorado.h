@@ -169,15 +169,19 @@ typedef struct {
     double time_tx_decoder;
     double time_crf;
 
-    double time_self_attn;
-    double time_norm1;
-    double time_ff;
-    double time_norm2;
+    double time_attn;
+    double time_attn_norm;
+    double time_mlp;
+    double time_mlp_norm;
 
-    double time_mm;
-    double time_rotary_emb;
-    double time_sdp_attn;
+    double time_qkv_proj;
+    double time_rotary;
+    double time_attn_core;
     double time_out_proj;
+
+    double time_up_proj;
+    double time_swiglu;
+    double time_down_proj;
 
     bool use_flash = false;
     int nthreads = 1;

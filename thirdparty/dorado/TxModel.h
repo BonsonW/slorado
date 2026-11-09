@@ -38,7 +38,7 @@ struct RMSNormImpl : torch::nn::Module {
 TORCH_MODULE(RMSNorm);
 
 struct GatedMLPImpl : torch::nn::Module {
-    GatedMLPImpl(int in_features, int hidden_features);
+    GatedMLPImpl(int in_features, int hidden_features, tx_stats_t *model_stats);
 
     torch::Tensor forward(const torch::Tensor &x);
 
@@ -47,6 +47,8 @@ struct GatedMLPImpl : torch::nn::Module {
     int hidden_features;
     torch::nn::Linear fc1{nullptr}, fc2{nullptr};
     std::string fq_name;  // fake-quant layer name prefix, e.g. "tx3"
+
+    tx_stats_t *model_stats;
 };
 
 TORCH_MODULE(GatedMLP);

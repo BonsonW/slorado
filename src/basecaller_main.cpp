@@ -340,14 +340,17 @@ int basecaller_main(int argc, char* argv[]) {
                 tx_stats_t *model_stats = (tx_stats_t *)runner_stats[i]->model_stats;
                 fprintf(stderr, "\n[%s]                     - conv_stack: %.3f sec", __func__, model_stats->time_conv_stack);
                 fprintf(stderr, "\n[%s]                     - tx_encoder: %.3f sec", __func__, model_stats->time_tx_encoder);
-                fprintf(stderr, "\n[%s]                         - self_attn: %.3f sec", __func__, model_stats->time_self_attn);
-                fprintf(stderr, "\n[%s]                             - mm: %.3f sec", __func__, model_stats->time_mm);
-                fprintf(stderr, "\n[%s]                             - rotary_emb: %.3f sec", __func__, model_stats->time_rotary_emb);
-                fprintf(stderr, "\n[%s]                             - sdp_attn: %.3f sec", __func__, model_stats->time_sdp_attn);
+                fprintf(stderr, "\n[%s]                         - attention: %.3f sec", __func__, model_stats->time_attn);
+                fprintf(stderr, "\n[%s]                             - qkv_proj: %.3f sec", __func__, model_stats->time_qkv_proj);
+                fprintf(stderr, "\n[%s]                             - rotary: %.3f sec", __func__, model_stats->time_rotary);
+                fprintf(stderr, "\n[%s]                             - attn_core: %.3f sec", __func__, model_stats->time_attn_core);
                 fprintf(stderr, "\n[%s]                             - out_proj: %.3f sec", __func__, model_stats->time_out_proj);
-                fprintf(stderr, "\n[%s]                         - norm1: %.3f sec", __func__, model_stats->time_norm1);
-                fprintf(stderr, "\n[%s]                         - ff: %.3f sec", __func__, model_stats->time_ff);
-                fprintf(stderr, "\n[%s]                         - norm2: %.3f sec", __func__, model_stats->time_norm2);
+                fprintf(stderr, "\n[%s]                         - attn_norm: %.3f sec", __func__, model_stats->time_attn_norm);
+                fprintf(stderr, "\n[%s]                         - mlp: %.3f sec", __func__, model_stats->time_mlp);
+                fprintf(stderr, "\n[%s]                             - up_proj: %.3f sec", __func__, model_stats->time_up_proj);
+                fprintf(stderr, "\n[%s]                             - swiglu: %.3f sec", __func__, model_stats->time_swiglu);
+                fprintf(stderr, "\n[%s]                             - down_proj: %.3f sec", __func__, model_stats->time_down_proj);
+                fprintf(stderr, "\n[%s]                         - mlp_norm: %.3f sec", __func__, model_stats->time_mlp_norm);
                 fprintf(stderr, "\n[%s]                     - tx_decoder: %.3f sec", __func__, model_stats->time_tx_decoder);
                 fprintf(stderr, "\n[%s]                     - crf: %.3f sec", __func__, model_stats->time_crf);
             } else { // lstm

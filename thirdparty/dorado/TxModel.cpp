@@ -26,8 +26,9 @@ using Slice = torch::indexing::Slice;
 // Configured by env vars, read once:
 //   FQ_FORMAT  none (default) | int8 | int4 | fp8_e4m3 | fp8_e5m2 |
 //              mxint8 | mxfp8_e4m3 | mxfp8_e5m2 | mxfp6_e2m3 | mxfp6_e3m2 | mxfp4
-//   FQ_LAYERS  comma-separated glob patterns matched against layer names (default "*"), e.g. "tx*.fc1,crf".
-//              Layer names: tx<i>.wqkv, tx<i>.out_proj, tx<i>.fc1, tx<i>.fc2 (i = 0..depth-1), upsample, crf
+//   FQ_LAYERS  comma-separated glob patterns matched against layer names (default "*"), e.g. "tx*.up_proj,crf".
+//              Layer names (same as the timing breakdown): tx<i>.qkv_proj, tx<i>.out_proj, tx<i>.up_proj,
+//              tx<i>.down_proj (i = 0..depth-1), tx_decoder (the linear upsample), crf
 //   FQ_TARGET  wa (default) | w | a  -- quantise weights and/or activations
 //   FQ_GRAN    row (default) | tensor | g<N>  -- scale granularity, e.g. g128
 // int/fp8 formats use one absmax scale per row (per-token for activations, per-output-channel for
@@ -121,16 +122,24 @@ torch::Tensor RMSNormImpl::forward(torch::Tensor x) {
     return x;
 }
 
-GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_)
-    : in_features(in_features_), hidden_features(hidden_features_) {
+GatedMLPImpl::GatedMLPImpl(int in_features_, int hidden_features_, tx_stats_t *_model_stats)
+    : in_features(in_features_), hidden_features(hidden_features_), model_stats(_model_stats) {
     fc1 = register_module("fc1", Linear(LinearOptions(in_features, 2 * hidden_features).bias(false)));
     fc2 = register_module("fc2", Linear(LinearOptions(hidden_features, in_features).bias(false)));
 };
 
 torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     torch::Tensor t;
-    const auto n1 = fq_name + ".fc1", n2 = fq_name + ".fc2";
+    double a, b;
+    const auto n1 = fq_name + ".up_proj", n2 = fq_name + ".down_proj";
+
+    a = realtime();
     t = at::linear(fq(n1, x, false), fq(n1, fc1->weight, true), fc1->bias);
+    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    b = realtime();
+    model_stats->time_up_proj += b-a;
+
+    a = realtime();
 #ifdef USE_GPU
     auto M = t.size(0) * t.size(1);
     auto K = t.size(2) / 2;
@@ -143,7 +152,17 @@ torch::Tensor GatedMLPImpl::forward(const torch::Tensor &x) {
     const auto &gate = chunks[1];
     t = functional::silu(gate).mul_(y);
 #endif
-    return at::linear(fq(n2, t, false), fq(n2, fc2->weight, true), fc2->bias);
+    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    b = realtime();
+    model_stats->time_swiglu += b-a;
+
+    a = realtime();
+    t = at::linear(fq(n2, t, false), fq(n2, fc2->weight, true), fc2->bias);
+    if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
+    b = realtime();
+    model_stats->time_down_proj += b-a;
+
+    return t;
 }
 
 RotaryEmbeddingImpl::RotaryEmbeddingImpl(
@@ -322,18 +341,18 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
     double a, b;
     
     a = realtime();
-    const auto nqkv = fq_name + ".wqkv";
+    const auto nqkv = fq_name + ".qkv_proj";
     auto qkv = at::linear(fq(nqkv, x, false), fq(nqkv, wqkv->weight, true), wqkv->bias)
                    .view({N, T, 3, nhead, head_dim});
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
-    model_stats->time_mm += b-a;
+    model_stats->time_qkv_proj += b-a;
 
     a = realtime();
     qkv = rotary_emb(qkv);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
-    model_stats->time_rotary_emb += b-a;
+    model_stats->time_rotary += b-a;
 
     a = realtime();
     const auto win_upper = std::get<0>(attn_window);
@@ -395,7 +414,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
-    model_stats->time_sdp_attn += b-a;
+    model_stats->time_attn_core += b-a;
 
     a = realtime();
     const auto nout = fq_name + ".out_proj";
@@ -409,7 +428,7 @@ torch::Tensor MultiHeadAttentionImpl::forward(torch::Tensor x) {
 
 TxEncoderImpl::TxEncoderImpl(const TxEncoderParams &params_, const torch::TensorOptions &options, tx_stats_t *_model_stats) : params(params_) {
     self_attn = register_module("self_attn", MultiHeadAttention(params.d_model, params.nhead, false, true, params.attn_window, options, _model_stats));
-    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward));
+    ff = register_module("ff", GatedMLP(params.d_model, params.dim_feedforward, _model_stats));
     norm1 = register_module("norm1", RMSNorm(params.d_model));
     norm2 = register_module("norm2", RMSNorm(params.d_model));
     model_stats = _model_stats;
@@ -451,25 +470,25 @@ torch::Tensor TxEncoderImpl::forward(torch::Tensor x) {
     attn = self_attn(x);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
-    model_stats->time_self_attn += b-a;
+    model_stats->time_attn += b-a;
 
     a = realtime();
     run_norm(norm1, attn, norm1->weight);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
-    model_stats->time_norm1 += b-a;
+    model_stats->time_attn_norm += b-a;
 
     a = realtime();
     f = ff(x);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
-    model_stats->time_ff += b-a;
+    model_stats->time_mlp += b-a;
 
     a = realtime();
     run_norm(norm2, f, norm2->weight);
     if (!x.device().is_cpu()) torch::cuda::synchronize(x.device().index());
     b = realtime();
-    model_stats->time_norm2 += b-a;
+    model_stats->time_mlp_norm += b-a;
     
     return x;
 }
@@ -495,7 +514,7 @@ torch::Tensor LinearUpsampleImpl::forward(const torch::Tensor &x) {
     const int64_t N = x.size(0);
     const int64_t T = x.size(1);
     const int64_t C = x.size(2);
-    torch::Tensor out = functional::linear(fq("upsample", x, false), fq("upsample", linear->weight, true), linear->bias)
+    torch::Tensor out = functional::linear(fq("tx_decoder", x, false), fq("tx_decoder", linear->weight, true), linear->bias)
                             .reshape({N, scale_factor * T, C});
     return out;
 };
