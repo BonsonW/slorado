@@ -54,11 +54,8 @@ run() {
         > $dir/reads.paf 2> $dir/minimap2.log || die "minimap2 failed, see $dir/minimap2.log"
 
     # 3. identity = matches / alignment block length (PAF columns 10 and 11) for every alignment,
-    #    as in scripts/calculate_basecalling_accuracy.sh. A read split into several alignments has one row each.
-    awk -v OFS='\t' '
-        BEGIN { print "read_id", "identity" }
-        { print $1, $10 / $11 }
-    ' $dir/reads.paf > $dir/identity.tsv.tmp
+    #    as in scripts/calculate_basecalling_accuracy.sh: one score per line, under an "identity" header
+    awk 'BEGIN { print "identity" } { print $10 / $11 }' $dir/reads.paf > $dir/identity.tsv.tmp
 
     # 4. run settings
     local n_reads=$(( $(wc -l < $dir/reads.fastq) / 4 ))

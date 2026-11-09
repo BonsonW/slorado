@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Per-read identity density for each fake-quant run in a fq_sweep.sh output dir.
+"""Per-alignment identity density for each fake-quant run in a fq_sweep.sh output dir.
 
 usage: fq_plot.py <sweep outdir> [out.png]
 One panel per run (format x layers), fp16 baseline ("none") in grey on every panel.
-Also writes <outdir>/summary.tsv (mapped reads, mean/median identity, median delta vs fp16).
+Also writes <outdir>/summary.tsv (alignments, mean/median identity, median delta vs fp16).
 """
 import os
 import sys
@@ -21,7 +21,7 @@ INK, MUTED, GRID, SERIES, BASE = "#1a1a19", "#6b6a63", "#e6e5e0", "#2a78d6", "#a
 
 
 def load(d):
-    ident = np.loadtxt(os.path.join(d, "identity.tsv"), skiprows=1, usecols=1, ndmin=1)
+    ident = np.loadtxt(os.path.join(d, "identity.tsv"), skiprows=1, ndmin=1)
     info = dict(zip(*[l.rstrip("\n").split("\t") for l in open(os.path.join(d, "info.tsv"))]))
     return ident, info
 
@@ -39,7 +39,7 @@ def main():
     names = sorted(runs, key=order)
 
     with open(os.path.join(outdir, "summary.tsv"), "w") as f:
-        f.write("run\tformat\tlayers\tgran\ttarget\tn_reads\tn_mapped\tmean\tmedian\tdelta_median_vs_fp16\n")
+        f.write("run\tformat\tlayers\tgran\ttarget\tn_reads\tn_alignments\tmean\tmedian\tdelta_median_vs_fp16\n")
         for d, (x, info) in [("none", (base, base_info))] + [(d, runs[d]) for d in names]:
             f.write(f"{d}\t{info['format']}\t{info['layers']}\t{info['gran']}\t{info['target']}\t{info['n_reads']}\t{len(x)}\t"
                     f"{x.mean():.5f}\t{np.median(x):.5f}\t{np.median(x) - np.median(base):+.5f}\n")
@@ -60,7 +60,7 @@ def main():
         title = info["format"] + ("" if info["gran"] == "row" else f" {info['gran']}")
         title += "" if info["layers"] == "*" else f"  [{info['layers']}]"
         ax.set_title(title, fontsize=9, color=INK, loc="left")
-        ax.text(0.03, 0.95, f"median {np.median(x):.4f}\nΔ {np.median(x) - np.median(base):+.4f}\nmapped {len(x)}",
+        ax.text(0.03, 0.95, f"median {np.median(x):.4f}\nΔ {np.median(x) - np.median(base):+.4f}\nalignments {len(x)}",
                 transform=ax.transAxes, va="top", fontsize=7, color=MUTED)
         ax.grid(color=GRID, lw=0.6)
         for s in ("top", "right"):
@@ -71,13 +71,13 @@ def main():
     for ax in axes.flat[len(names):]:
         ax.set_visible(False)
     for ax in axes[-1]:
-        ax.set_xlabel("per-read identity", fontsize=8, color=INK)
+        ax.set_xlabel("per-alignment identity", fontsize=8, color=INK)
     for ax in axes[:, 0]:
         ax.set_ylabel("density", fontsize=8, color=INK)
     handles = [plt.Line2D([], [], color=SERIES, lw=2), plt.Line2D([], [], color=BASE, lw=1.5)]
-    fig.legend(handles, ["fake-quant format (panel title)", f"fp16 baseline (median {np.median(base):.4f}, mapped {len(base)})"],
+    fig.legend(handles, ["fake-quant format (panel title)", f"fp16 baseline (median {np.median(base):.4f}, alignments {len(base)})"],
                loc="upper right", fontsize=8, frameon=False, labelcolor=INK)
-    fig.suptitle(f"Per-read identity, target={runs[names[0]][1]['target']}", x=0.01, ha="left", fontsize=11, color=INK)
+    fig.suptitle(f"Per-alignment identity, target={runs[names[0]][1]['target']}", x=0.01, ha="left", fontsize=11, color=INK)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(png, dpi=150)
     print(f"wrote {png} and {os.path.join(outdir, 'summary.tsv')}")
