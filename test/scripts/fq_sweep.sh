@@ -1,6 +1,6 @@
 #!/bin/bash
-# Fake-quant sweep: basecall with each fake-quant setting, align with minimap2, and write per-read identity
-# (matches / alignment block length of the longest primary alignment).
+# Fake-quant sweep: basecall with each fake-quant setting, align with minimap2, and write the identity
+# (matches / alignment block length) of every alignment, as scripts/calculate_basecalling_accuracy.sh does.
 #
 # usage: test/scripts/fq_sweep.sh <all|layer> <model> <reads.blow5> <ref.idx|fa> <outdir> [gpu] [n_gpus]
 #   all    quantise tx*.qkv_proj, tx*.up_proj and tx*.down_proj together in every run
@@ -32,22 +32,40 @@ NTHREADS=$(( $(nproc) / N_GPUS ))
 [ -x $SLORADO ] || die "$SLORADO not found, run from the slorado directory"
 [ -x $MINIMAP2 ] || die "$MINIMAP2 not found, run test/extensive.sh once to install it"
 
-# run <run name> <FQ_FORMAT> <FQ_GRAN> <FQ_TARGET> <FQ_LAYERS>
+# run <name> <format> <gran> <target> <layers>: basecall, align and score one fake-quant setting
 run() {
-    local dir=$OUT/$1
-    [ -s $dir/identity.tsv ] && { echo "skip $1"; return; }
+    local name=$1 format=$2 gran=$3 target=$4 layers=$5
+    local dir=$OUT/$name
+
+    if [ -s $dir/identity.tsv ]; then
+        echo "skip $name"
+        return
+    fi
+    echo "[cuda:$GPU] $(date '+%F %T') run $name"
     mkdir -p $dir
-    echo "[cuda:$GPU] $(date '+%F %T') run $1"
-    FQ_FORMAT=$2 FQ_GRAN=$3 FQ_TARGET=$4 FQ_LAYERS=$5 \
-        $SLORADO basecaller -x cuda:$GPU -o $dir/reads.fastq $MODEL $READS < /dev/null 2> $dir/slorado.log ||
-        die "slorado failed, see $dir/slorado.log"
-    $MINIMAP2 -cx map-ont --secondary=no -t $NTHREADS $REF $dir/reads.fastq > $dir/reads.paf 2> $dir/minimap2.log ||
-        die "minimap2 failed, see $dir/minimap2.log"
-    # longest primary alignment per read; identity = col10 / col11
-    awk -v OFS='\t' '/tp:A:P/ && $11 > len[$1] { len[$1] = $11; id[$1] = $10 / $11 }
-        END { print "read_id", "identity"; for (r in id) print r, id[r] }' $dir/reads.paf > $dir/identity.tsv.tmp
-    printf "format\tlayers\tgran\ttarget\tn_reads\n%s\t%s\t%s\t%s\t%s\n" $2 "$5" $3 $4 \
-        $(( $(wc -l < $dir/reads.fastq) / 4 )) > $dir/info.tsv
+
+    # 1. basecall
+    export FQ_FORMAT=$format FQ_GRAN=$gran FQ_TARGET=$target FQ_LAYERS=$layers
+    $SLORADO basecaller -x cuda:$GPU -o $dir/reads.fastq $MODEL $READS \
+        < /dev/null 2> $dir/slorado.log || die "slorado failed, see $dir/slorado.log"
+
+    # 2. align
+    $MINIMAP2 -cx map-ont --secondary=no -t $NTHREADS $REF $dir/reads.fastq \
+        > $dir/reads.paf 2> $dir/minimap2.log || die "minimap2 failed, see $dir/minimap2.log"
+
+    # 3. identity = matches / alignment block length (PAF columns 10 and 11) for every alignment,
+    #    as in scripts/calculate_basecalling_accuracy.sh. A read split into several alignments has one row each.
+    awk -v OFS='\t' '
+        BEGIN { print "read_id", "identity" }
+        { print $1, $10 / $11 }
+    ' $dir/reads.paf > $dir/identity.tsv.tmp
+
+    # 4. run settings
+    local n_reads=$(( $(wc -l < $dir/reads.fastq) / 4 ))
+    printf "format\tlayers\tgran\ttarget\tn_reads\n" > $dir/info.tsv
+    printf "%s\t%s\t%s\t%s\t%s\n" $format "$layers" $gran $target $n_reads >> $dir/info.tsv
+
+    # identity.tsv is written last, so a run that was cut off is redone next time
     mv $dir/identity.tsv.tmp $dir/identity.tsv
 }
 
