@@ -450,7 +450,55 @@ void slorado_free_db(slorado_db_t* db) {
 }
 
 void slorado_process_db(slorado_core_t *core, slorado_opt_t opt) {
+    double proc_start = realtime();
+    double a, b;
+
+    // record parse disabled
+    // a = realtime();
+    // work_db(core, db, parse_single_db);
+    // b = realtime();
+    // core->time_parse += (b - a);
+    // LOG_DEBUG("%s", "parsed reads");
+
+    a = realtime();
     work_db(core, db, preprocess_signal_db);
+    b = realtime();
+    core->time_preproc += (b-a);
+    LOG_DEBUG("%s", "preprocessed reads");
+
+    a = realtime();
     basecall_db(core, db);
+    b = realtime();
+    core->time_runners += (b-a);
+    LOG_DEBUG("%s", "basecalled reads");
+
+    a = realtime();
     work_db(core, db, postprocess_signal_db);
+    b = realtime();
+    core->time_postproc += (b-a);
+    LOG_DEBUG("%s", "postprocessed reads");
+
+    // mod calling disabled
+    // if (core->opt.mod != NULL) {
+    //     a = realtime();
+    //     work_db(core, db, preprocess_modbase_db);
+    //     b = realtime();
+    //     core->time_preproc_mod += (b-a);
+    //     LOG_DEBUG("%s", "mod preprocessed reads");
+
+    //     a = realtime();
+    //     mod_basecall_db(core, db);
+    //     b = realtime();
+    //     core->time_runners += (b-a);
+    //     LOG_DEBUG("%s", "mod basecalled reads");
+
+    //     a = realtime();
+    //     work_db(core, db, postprocess_modbase_db);
+    //     b = realtime();
+    //     core->time_postproc_mod += (b-a);
+    //     LOG_DEBUG("%s", "mod postprocessed reads");
+    // }
+
+    double proc_end = realtime();
+    core->time_process_db += (proc_end-proc_start);
 }
