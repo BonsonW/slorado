@@ -85,6 +85,8 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     MALLOC_CHK(core);
     core->opt = opt;
 
+    core->realtime0 = realtime0;
+
     if (slow5file != NULL) {
         core->sp = slow5_open(slow5file, "r");
         if (core->sp == NULL) {
@@ -103,8 +105,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     } else {
         INFO("%s", "no slow5 file provided");
     }
-
-    core->realtime0 = realtime0;
 
     // modbase stuff
     if (opt.mod != NULL) {
