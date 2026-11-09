@@ -316,9 +316,9 @@ void free_db(db_t* db);
 void free_core(core_t* core,opt_t opt);
 
 // public api
-typedef struct core_t slorado_core_t;
-typedef struct opt_t slorado_core_t;
-typedef struct db_t slorado_db_t;
+typedef core_t slorado_core_t;
+typedef opt_t slorado_opt_t;
+typedef db_t slorado_db_t;
 
 slorado_core_t *slorado_init_core(slorado_opt_t opt, char *model, char *slow5file);
 
@@ -330,6 +330,6 @@ slorado_db_t* slorado_init_db(slorado_core_t* core);
 
 void slorado_free_db(slorado_db_t* db);
 
-void slorado_process_db(slorado_core_t *core, slorado_opt_t opt);
+void slorado_process_db(slorado_core_t *core, slorado_db_t *db);
 
 #endif

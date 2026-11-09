@@ -449,7 +449,7 @@ void slorado_free_db(slorado_db_t* db) {
     free_db(db);
 }
 
-void slorado_process_db(slorado_core_t *core, slorado_opt_t opt) {
+void slorado_process_db(slorado_core_t *core, slorado_db_t *db) {
     double proc_start = realtime();
     double a, b;
 
