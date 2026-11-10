@@ -189,7 +189,12 @@ static void call_chunks(
     torch::InferenceMode guard;
 
     LOG_DEBUG("%s", "basecalling chunks");
+    ts->time_h2d_transfer -= realtime();
     auto input = runner->input_tensor.to(runner->tensor_opts.device());
+#ifdef USE_GPU
+    if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
+#endif
+    ts->time_h2d_transfer += realtime();
 
     ts->time_infer -= realtime();
     auto scores = runner->module->forward(input);
@@ -200,10 +205,12 @@ static void call_chunks(
 
     auto scores_TNC = scores;
     // scores_TNC = scores_TNC.to(torch::kCPU).to(torch::kF32).transpose(0, 1).contiguous();
+    ts->time_transpose -= realtime();
     scores_TNC = scores_TNC.transpose(0, 1).contiguous();
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
+    ts->time_transpose += realtime();
 
     const int T = scores_TNC.size(0);
     const int N = scores_TNC.size(1);
