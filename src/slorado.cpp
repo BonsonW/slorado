@@ -86,20 +86,25 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     MALLOC_CHK(core);
     core->opt = opt;
 
-    if (opt.batch_size == 0) {
-        size_t avg_bytes = estimate_bytes_per_read(slow5file);
-        core->opt.batch_size = avg_bytes > 0
-            ? (int32_t)(opt.batch_size_bytes / avg_bytes)
-            : DEFAULT_BATCH_SIZE;
-        if (core->opt.batch_size < 1) core->opt.batch_size = 1;
-    }
-
     core->realtime0 = realtime0;
 
-    core->sp = slow5_open(slow5file, "r");
-    if (core->sp == NULL) {
-        VERBOSE("Error opening SLOW5 file %s\n", slow5file);
-        exit(EXIT_FAILURE);
+    if (slow5file != NULL) {
+        core->sp = slow5_open(slow5file, "r");
+        if (core->sp == NULL) {
+            VERBOSE("Error opening SLOW5 file %s\n", slow5file);
+            exit(EXIT_FAILURE);
+        }
+
+        // auto set max reads per batch
+        if (opt.batch_size == 0) {
+            size_t avg_bytes = estimate_bytes_per_read(slow5file);
+            core->opt.batch_size = avg_bytes > 0
+                ? (int32_t)(opt.batch_size_bytes / avg_bytes)
+                : DEFAULT_BATCH_SIZE;
+            if (core->opt.batch_size < 1) core->opt.batch_size = 1;
+        }
+    } else {
+        INFO("%s", "no slow5 file provided");
     }
 
     // look up the end_reason enum labels that dorado's mux_change_trim_read applies to
@@ -177,7 +182,6 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
 
     return core;
 }
-
 
 /* free the core data structure */
 void free_core(core_t* core, opt_t opt) {
@@ -267,7 +271,7 @@ ret_status_t load_db(core_t* core, db_t* db) {
     return status;
 }
 
-void parse_single(core_t* core,db_t* db, int32_t i) {
+void parse_single_db(core_t* core, db_t* db, int32_t i) {
     assert(db->mem_bytes[i] > 0);
     assert(db->mem_records[i] != NULL);
 
@@ -278,7 +282,7 @@ void parse_single(core_t* core,db_t* db, int32_t i) {
     }
 }
 
-void postprocess_signal(core_t* core, db_t* db, int32_t i) {
+void postprocess_signal_db(core_t* core, db_t* db, int32_t i) {
     slow5_rec_t* rec = db->slow5_rec[i];
     uint64_t len_raw_signal = rec->len_raw_signal;
 
@@ -313,7 +317,7 @@ void process_db(core_t* core, db_t* db) {
     double a, b;
 
     a = realtime();
-    work_db(core, db, parse_single);
+    work_db(core, db, parse_single_db);
     b = realtime();
     core->time_parse += (b - a);
     LOG_DEBUG("%s", "parsed reads");
@@ -331,7 +335,7 @@ void process_db(core_t* core, db_t* db) {
     LOG_DEBUG("%s", "basecalled reads");
 
     a = realtime();
-    work_db(core, db, postprocess_signal);
+    work_db(core, db, postprocess_signal_db);
     b = realtime();
     core->time_postproc += (b-a);
     LOG_DEBUG("%s", "postprocessed reads");
@@ -441,4 +445,80 @@ void init_opt(opt_t* opt) {
     opt->mod = NULL;
 
     // opt->flag |= SLORADO_SAM;
+}
+
+// public api
+slorado_core_t *slorado_init_core(slorado_opt_t opt, char *model, char *slow5file) {
+    double realtime0 = realtime();
+    return init_core(slow5file, opt, model, realtime0);
+}
+
+void slorado_free_core(slorado_core_t *core, slorado_opt_t opt) {
+    free_core(core, opt);
+}
+
+void slorado_init_opt(slorado_opt_t* opt) {
+    init_opt(opt);
+}
+
+slorado_db_t* slorado_init_db(slorado_core_t* core) {
+    return init_db(core);
+}
+
+void slorado_free_db(slorado_db_t* db) {
+    free_db(db);
+}
+
+void slorado_process_db(slorado_core_t *core, slorado_db_t *db) {
+    double proc_start = realtime();
+    double a, b;
+
+    // record parse disabled
+    // a = realtime();
+    // work_db(core, db, parse_single_db);
+    // b = realtime();
+    // core->time_parse += (b - a);
+    // LOG_DEBUG("%s", "parsed reads");
+
+    a = realtime();
+    work_db(core, db, preprocess_signal_db);
+    b = realtime();
+    core->time_preproc += (b-a);
+    LOG_DEBUG("%s", "preprocessed reads");
+
+    a = realtime();
+    basecall_db(core, db);
+    b = realtime();
+    core->time_runners += (b-a);
+    LOG_DEBUG("%s", "basecalled reads");
+
+    a = realtime();
+    work_db(core, db, postprocess_signal_db);
+    b = realtime();
+    core->time_postproc += (b-a);
+    LOG_DEBUG("%s", "postprocessed reads");
+
+    // mod calling disabled
+    // if (core->opt.mod != NULL) {
+    //     a = realtime();
+    //     work_db(core, db, preprocess_modbase_db);
+    //     b = realtime();
+    //     core->time_preproc_mod += (b-a);
+    //     LOG_DEBUG("%s", "mod preprocessed reads");
+
+    //     a = realtime();
+    //     mod_basecall_db(core, db);
+    //     b = realtime();
+    //     core->time_runners += (b-a);
+    //     LOG_DEBUG("%s", "mod basecalled reads");
+
+    //     a = realtime();
+    //     work_db(core, db, postprocess_modbase_db);
+    //     b = realtime();
+    //     core->time_postproc_mod += (b-a);
+    //     LOG_DEBUG("%s", "mod postprocessed reads");
+    // }
+
+    double proc_end = realtime();
+    core->time_process_db += (proc_end-proc_start);
 }

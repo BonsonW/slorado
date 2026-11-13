@@ -190,6 +190,9 @@ typedef struct {
     double time_infer;
     double time_decode;
     double time_modcall;
+    double time_transpose;
+    double time_h2d_transfer;
+    double time_d2h_transfer;
 
     void *model_stats;
 
@@ -315,5 +318,22 @@ void free_db(db_t* db);
 
 /* free the core data structure */
 void free_core(core_t* core,opt_t opt);
+
+// public api
+typedef core_t slorado_core_t;
+typedef opt_t slorado_opt_t;
+typedef db_t slorado_db_t;
+
+slorado_core_t *slorado_init_core(slorado_opt_t opt, char *model, char *slow5file);
+
+void slorado_free_core(slorado_core_t *core, slorado_opt_t opt);
+
+void slorado_init_opt(slorado_opt_t* opt);
+
+slorado_db_t* slorado_init_db(slorado_core_t* core);
+
+void slorado_free_db(slorado_db_t* db);
+
+void slorado_process_db(slorado_core_t *core, slorado_db_t *db);
 
 #endif
