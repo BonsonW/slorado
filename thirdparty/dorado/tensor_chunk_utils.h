@@ -26,6 +26,11 @@ void scale_signal(core_t *core, torch::Tensor &signal, float scaling, float offs
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
 void stitch_chunks_vec(std::vector<basecall_chunk_t> &chunks, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
 
+// dorado utils::mux_change_trim_read: reads with end_reason mux_change / unblock_mux_change have a
+// degraded low-qscore tail; trim it from the stitched sequence, qstring and moves (signal order,
+// i.e. before any RNA reversal). No-op for other end reasons or if the file has no end_reason.
+void mux_change_trim_read(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, int model_stride);
+
 // Load serialised tensor from disk.
 std::vector<torch::Tensor> load_tensors(const std::string& dir, const std::vector<std::string>& tensors);
 
