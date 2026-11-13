@@ -86,6 +86,9 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     MALLOC_CHK(core);
     core->opt = opt;
 
+    core->er_mux_change = SLOW5_ENUM_NULL;
+    core->er_unblock_mux_change = SLOW5_ENUM_NULL;
+
     core->realtime0 = realtime0;
 
     if (slow5file != NULL) {
@@ -103,20 +106,20 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
                 : DEFAULT_BATCH_SIZE;
             if (core->opt.batch_size < 1) core->opt.batch_size = 1;
         }
-    } else {
-        INFO("%s", "no slow5 file provided");
-    }
 
-    // look up the end_reason enum labels that dorado's mux_change_trim_read applies to
-    uint8_t n_labels = 0;
-    char **labels = slow5_get_aux_enum_labels(core->sp->header, "end_reason", &n_labels);
-    if (labels) {
-        for (uint8_t i = 0; i < n_labels; i++) {
-            if (strcmp(labels[i], "mux_change") == 0) core->er_mux_change = i;
-            if (strcmp(labels[i], "unblock_mux_change") == 0) core->er_unblock_mux_change = i;
+        // look up the end_reason enum labels that dorado's mux_change_trim_read applies to
+        uint8_t n_labels = 0;
+        char **labels = slow5_get_aux_enum_labels(core->sp->header, "end_reason", &n_labels);
+        if (labels) {
+            for (uint8_t i = 0; i < n_labels; i++) {
+                if (strcmp(labels[i], "mux_change") == 0) core->er_mux_change = i;
+                if (strcmp(labels[i], "unblock_mux_change") == 0) core->er_unblock_mux_change = i;
+            }
+        } else {
+            WARNING("%s", "end_reason not found in SLOW5 file, mux_change read end trimming disabled");
         }
     } else {
-        WARNING("%s", "end_reason not found in SLOW5 file, mux_change read end trimming disabled");
+        INFO("%s", "no slow5 file provided");
     }
 
     // modbase stuff
