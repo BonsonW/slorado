@@ -260,7 +260,7 @@ int basecaller_main(int argc, char* argv[]) {
     fprintf(stderr, "\n");
 
     if (opt.flag & SLORADO_ASYNC) {
-        WARNING("%s", "Async option is experimental. Output will be unordered.");
+        WARNING("%s", "Async option is experimental. Reads will be unordered in the output.");
         // async (pipelined) path: overlaps I/O, preprocessing, inference and output.
         core->time_process_db -= realtime();
         run_pipeline(core);

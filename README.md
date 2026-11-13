@@ -11,7 +11,7 @@ Slorado is mainly for our research and educational purposes. Thus, only a minima
 We provide compiled binaries for [NVIDIA (cuda)](https://docs.nvidia.com/cuda) and [AMD (rocm)](https://rocm.docs.amd.com/en/latest) GPU accelerators on x86_64 CPUs for Linux. You can download the latest relevant binary release that includes the most recent supported basecalling models from [releases](https://github.com/BonsonW/slorado/releases) as below:
 
 ```
-VERSION=v0.6.0
+VERSION=v0.7.0
 GPU=cuda   # GPU=rocm for AMD GPUs
 wget "https://cdn.bioinf.science/slorado/slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz"
 tar xvf slorado-$VERSION-x86_64-$GPU-linux-binaries.tar.xz
@@ -166,7 +166,7 @@ Slorado does not currently support demultiplexing. You can demultiplex reads gen
 
 ## Modification Detection (experimental)
 
-Slorado (from v0.5.0-beta) supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Slorado (from v0.6.0) supports m6A_DRACH for RNA HAC v6.0.0, which can be specified as `--mod m6A_DRACH@v1`.
+Slorado (from v0.5.0-beta) supports methylation detection for GPU basecalling for HAC v5.0.0 and SUP v5.0.0 DNA basecalling models. Enable methylation detection by appending `--mod 5mCG_5hmCG@v3` when running slorado. Slorado (from v0.7.0) supports m6A_DRACH for RNA SUP v6.0.0, which can be specified as `--mod m6A_DRACH@v1`.
 Adding modification detection will automatically output in [SAM](https://samtools.github.io/hts-specs/SAMv1.pdf) format.
 
 ```
@@ -193,7 +193,7 @@ All options supported by slorado basecaller are detailed below:
 | --version         | print version                                         |                |
 | --flash yes\|no   | enable flash attention (from v0.4.0-beta)             | No             |
 | --mod STR         | add modification detection (from v0.5.0-beta)         | NULL           |
-| --async yes\|no   | overlap I/O, CPU and GPU work                         | No             |
+| --async yes\|no   | overlap I/O, CPU and GPU work (experimental; unordered output; from v0.7.0)                         | No             |
 
 ## Batchsizes
 
@@ -207,11 +207,14 @@ Slorado v0.4.0-beta now supports Flash Attention for SUP basecalling models >= v
 
 | slorado version | Tested models |
 | ---             | ---           |
+| 0.7.0           | dna_r10.4.1_e8.2_400bps v5.0.0 (5mCG_5hmCG@v3); rna004_130bps v5.1.0; rna004_sup v6.0.0 (m6A_DRACH@v1) |
 | 0.6.0           | dna_r10.4.1_e8.2_400bps v5.0.0 (5mCG_5hmCG@v3); rna004_130bps v5.1.0; rna004_hac v6.0.0 (m6A_DRACH@v1) |
 | 0.5.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0 (5mCG_5hmCG@v3); rna004_130bps v5.1.0 |
 | 0.4.0-beta           | dna_r10.4.1_e8.2_400bps v5.0.0; rna004_130bps v5.1.0 |
 | 0.3.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 and v5.0.0 |
 | 0.2.0-beta           | dna_r10.4.1_e8.2_400bps v4.2.0 |
+
+Slorado also has experimental support for models available in [download-models-dev.sh](https://github.com/BonsonW/slorado/blob/dev/scripts/download-models-dev.sh). These have not been as thoroughly tested as those included for release, and we recommended testing it on your own system before usage.
 
 ## Acknowledgement
 
