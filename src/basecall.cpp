@@ -190,7 +190,9 @@ static void call_chunks(
 
     LOG_DEBUG("%s", "basecalling chunks");
     ts->time_h2d_transfer -= realtime();
-    auto input = runner->input_tensor.to(runner->tensor_opts.device());
+    // shrink to fit
+    const int64_t active_chunks = static_cast<int64_t>(chunks.size());
+    auto input = runner->input_tensor.narrow(0, 0, active_chunks).to(runner->tensor_opts.device());
 #ifdef USE_GPU
     if (runner->device != "cpu") torch::cuda::synchronize(runner->device_idx);
 #endif
