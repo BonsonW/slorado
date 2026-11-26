@@ -1,4 +1,5 @@
 
+#include <cmath>
 #include <cstdint>
 #include <stdlib.h>
 #include <vector>
@@ -290,6 +291,108 @@ void stitch_chunks_vec(std::vector<basecall_chunk_t> &chunks, std::string &seque
         }
         moves.pop_back();
         assert(size_t(std::accumulate(moves.begin(), moves.end(), 0)) == sequence.size());
+    }
+}
+
+// dorado utils::find_mux_change_trim_seq_index (read_utils.cpp)
+static int64_t find_mux_change_trim_seq_index(const std::string &qstring) {
+    const int64_t size = static_cast<int64_t>(qstring.size());
+    // thresholds low:[0, 7], mid:(7, 12], high:(12, 50]; +33 to compare against the raw qstring chars
+    const int kLowThreshold = 7 + 33;
+    const int kHighThreshold = 12 + 33;
+    const int kLowScore = -1;  // early exit below assumes kLowScore == -1
+    const int kMidScore = 1;
+    const int kHighScore = 10;
+
+    int64_t trim_index = size - 1;  // index of minimum cumulative sum
+    int cum_sum = 0;
+    int cum_sum_min = -1;
+
+    for (int64_t i = size - 1; i >= 0; --i) {
+        const int qs = static_cast<int>(qstring[i]);
+        if (qs <= kLowThreshold) {
+            cum_sum += kLowScore;
+        } else if (qs <= kHighThreshold) {
+            cum_sum += kMidScore;
+        } else {
+            cum_sum += kHighScore;
+        }
+        if (cum_sum <= cum_sum_min) {
+            cum_sum_min = cum_sum;
+            trim_index = i - 1;
+        }
+        if (cum_sum > i) {
+            break;
+        }
+    }
+    return trim_index;
+}
+
+// dorado utils::sequence_to_move_table_index (sequence_utils.cpp)
+static int64_t sequence_to_move_table_index(const std::vector<uint8_t> &moves, int64_t sequence_index, int64_t sequence_size) {
+    const int64_t moves_sz = static_cast<int64_t>(moves.size());
+    if (moves.empty() || sequence_index >= moves_sz || sequence_index >= sequence_size || sequence_size > moves_sz) {
+        return -1;
+    }
+    if (sequence_index <= sequence_size / 2) {
+        int64_t seq_base_pos = -1;
+        for (int64_t i = 0; i < moves_sz; i++) {
+            if (moves[i] == 1 && ++seq_base_pos == sequence_index) return i;
+        }
+    } else {
+        int64_t seq_base_pos = sequence_size;
+        for (int64_t i = moves_sz - 1; i >= 0; --i) {
+            if (moves[i] == 1 && --seq_base_pos == sequence_index) return i;
+        }
+    }
+    return -1;
+}
+
+static bool mux_change_trim_seq(std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves) {
+    const int64_t sequence_size = static_cast<int64_t>(qstring.size());
+
+    // skip zero or very short sequences
+    if (sequence_size < 100) {
+        return false;
+    }
+
+    const int64_t trim_seq_idx = find_mux_change_trim_seq_index(qstring);
+
+    // excessive trimming - do nothing
+    if (trim_seq_idx < std::floor(sequence_size * 0.3f)) {
+        return false;
+    }
+
+    // nothing to do
+    const int kMinMuxChangeTrim = 5;
+    if (trim_seq_idx >= sequence_size - kMinMuxChangeTrim) {
+        return false;
+    }
+
+    // trim the move table - only trimming from the back
+    const int64_t trim_moves_idx = sequence_to_move_table_index(moves, trim_seq_idx, sequence_size);
+    if (trim_moves_idx < 0) {
+        return false;
+    }
+    moves.resize(trim_moves_idx);
+    sequence.resize(trim_seq_idx);
+    qstring.resize(trim_seq_idx);
+    return true;
+}
+
+void mux_change_trim_read(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, int model_stride) {
+    if (core->er_mux_change == SLOW5_ENUM_NULL && core->er_unblock_mux_change == SLOW5_ENUM_NULL) {
+        return;
+    }
+    int err = 0;
+    const uint8_t end_reason = slow5_aux_get_enum(rec, "end_reason", &err);
+    if (err < 0 || end_reason == SLOW5_ENUM_NULL ||
+        (end_reason != core->er_mux_change && end_reason != core->er_unblock_mux_change)) {
+        return;
+    }
+    if (mux_change_trim_seq(sequence, qstring, moves) && read_dat) {
+        // also trim raw_data to the remaining moves; the modbase path slices to this
+        read_dat->basecall_signal_len = (int64_t)moves.size() * model_stride;
     }
 }
 

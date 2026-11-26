@@ -54,6 +54,7 @@ void init_runners(core_t* core, opt_t *opt, char *model);
 void free_runners(core_t *core);
 void preprocess_signal_db(core_t* core, db_t* db, int32_t i);
 void stitch_chunks(db_t *basecall_db, size_t i, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, size_t len_raw_signal, int model_stride);
+void mux_change_trim_read(core_t *core, slow5_rec_t *rec, read_dat_t *read_dat, std::string &sequence, std::string &qstring, std::vector<uint8_t> &moves, int model_stride);
 void free_read_dat(read_dat_t *read_dat);
 void preprocess_modbase_db(core_t *core, db_t *db, int32_t i);
 void postprocess_modbase_db(core_t *core, db_t *db, int32_t i);
@@ -85,6 +86,9 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
     MALLOC_CHK(core);
     core->opt = opt;
 
+    core->er_mux_change = SLOW5_ENUM_NULL;
+    core->er_unblock_mux_change = SLOW5_ENUM_NULL;
+
     core->realtime0 = realtime0;
 
     if (slow5file != NULL) {
@@ -101,6 +105,18 @@ core_t* init_core(char *slow5file, opt_t opt, char *model, double realtime0) {
                 ? (int32_t)(opt.batch_size_bytes / avg_bytes)
                 : DEFAULT_BATCH_SIZE;
             if (core->opt.batch_size < 1) core->opt.batch_size = 1;
+        }
+
+        // look up the end_reason enum labels that dorado's mux_change_trim_read applies to
+        uint8_t n_labels = 0;
+        char **labels = slow5_get_aux_enum_labels(core->sp->header, "end_reason", &n_labels);
+        if (labels) {
+            for (uint8_t i = 0; i < n_labels; i++) {
+                if (strcmp(labels[i], "mux_change") == 0) core->er_mux_change = i;
+                if (strcmp(labels[i], "unblock_mux_change") == 0) core->er_unblock_mux_change = i;
+            }
+        } else {
+            WARNING("%s", "end_reason not found in SLOW5 file, mux_change read end trimming disabled");
         }
     } else {
         INFO("%s", "no slow5 file provided");
@@ -285,6 +301,8 @@ void postprocess_signal_db(core_t* core, db_t* db, int32_t i) {
         // doesn't emit spurious trailing bases from the chunk-padding region -- these desync the
         // modbase signal from the sequence (see preprocess_modbase). DNA and RNA, matching dorado.
         stitch_chunks(db, i, sequence, qstring, moves, len_raw_signal, core->model_stride);
+        // trim degraded ends of mux_change reads in signal order, before the RNA reverse
+        mux_change_trim_read(core, rec, (*db->read_dats)[i], sequence, qstring, moves, core->model_stride);
 
         if (is_rna(core->model_config->sample_type)) {
             // Reverse seq + qstring to 5'->3'. Leave moves in signal (3'->5') order -- dorado never
@@ -378,6 +396,11 @@ void free_db_tmp(db_t* db) {
     for (i = 0; i < db->n_rec; ++i) {
         free(db->mem_records[i]);
         db->mem_records[i] = NULL;
+        // per-read working data (signal, modbase encodings, chunks) is not needed after output
+        free_read_dat((*db->read_dats)[i]);
+        (*db->read_dats)[i] = NULL;
+        (*db->basecall_chunks)[i] = {};
+        (*db->mod_chunks)[i] = {};
     }
 }
 

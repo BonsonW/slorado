@@ -503,12 +503,12 @@ if [ "$SLORADO_MODE" = "build" ]; then
     echo "Memory Check - CPU - FAST model - incomplete batch 3 thread"
     ex $SLORADO basecaller models/$FAST $SINGLE_READ -xcpu -c200 -K6 -t3 > test/tmp.fastq  || die "Running the tool failed"
 
-    # modcalling, todo: currently reuiqres f16 output from CPU, need to fix this to run the test
-    # echo "Memory Check - CPU - HAC model - $MOD - 1 5khz reads"
-    # ex $SLORADO basecaller models/$HAC $SINGLE_READ --mod $METH -xcpu -c200 -K10 > test/tmp.fastq  || die "Running the tool failed"
+    # modcalling
+    echo "Memory Check - CPU - HAC model - $METH - 1 5khz reads"
+    ex $SLORADO basecaller models/$HAC $SINGLE_READ --mod $METH -xcpu -c200 -K10 > test/tmp.sam  || die "Running the tool failed"
 
-    # echo "Memory Check - CPU - HAC model - $MOD - 2 batch 2 thread"
-    # ex $SLORADO basecaller models/$HAC $SINGLE_READ --mod $METH -xcpu -c200 -K5 -t2 > test/tmp.fastq  || die "Running the tool failed"
+    echo "Memory Check - CPU - HAC model - $METH - 2 batch 2 thread"
+    ex $SLORADO basecaller models/$HAC $SINGLE_READ --mod $METH -xcpu -c200 -K5 -t2 > test/tmp.sam  || die "Running the tool failed"
 fi
 
 # GPU tests
